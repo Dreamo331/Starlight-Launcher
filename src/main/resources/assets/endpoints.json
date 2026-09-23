@@ -16,16 +16,16 @@
       "smtp.password": "FeedbackEmailSender.java:29（139 邮箱 SMTP 授权码）",
       "smtp.to": "FeedbackEmailSender.java:30"
     },
-    "curseforgeApiKey": "",
-    "nvidiaNimApiKey": "",
-    "communityApiKey": "",
-    "microsoftClientId": "",
+    "curseforgeApiKey": "REPLACE_WITH_YOUR_CURSEFORGE_API_KEY",
+    "nvidiaNimApiKey": "REPLACE_WITH_YOUR_NVIDIA_NIM_API_KEY",
+    "communityApiKey": "REPLACE_WITH_YOUR_COMMUNITY_API_KEY",
+    "microsoftClientId": "REPLACE_WITH_YOUR_AZURE_CLIENT_ID",
     "smtp": {
       "host": "smtp.139.com",
       "port": "465",
-      "user": "",
-      "password": "",
-      "to": ""
+      "user": "REPLACE_WITH_YOUR_EMAIL@example.com",
+      "password": "REPLACE_WITH_YOUR_SMTP_AUTH_CODE",
+      "to": "REPLACE_WITH_YOUR_EMAIL@example.com"
     }
   },
 
