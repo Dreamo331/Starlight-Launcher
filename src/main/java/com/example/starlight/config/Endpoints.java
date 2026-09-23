@@ -1,5 +1,6 @@
 package com.example.starlight.config;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -7,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 /**
  * 端点与密钥集中配置：从 classpath 资源 {@code /assets/endpoints.json} 读取。
@@ -14,10 +16,17 @@ import java.nio.charset.StandardCharsets;
  * <p>密钥与自家服务地址不再以字面量硬编码在各业务类中，统一收口到 assets/endpoints.json
  * 的 {@code keys} 与 {@code services} 两节（{@code reference} 节为归档备查，本类不读取）。
  * 改动配置后需重新打包；文件缺失或键缺失会以明确异常快速失败，避免静默产出空地址。
+ *
+ * <p><b>本地覆盖</b>：仓库里那份 endpoints.json 只放占位符（公开仓库不能出现真实密钥）。
+ * 真实密钥写在 {@code /assets/endpoints.local.json}（已加入 .gitignore，不会入库）里，
+ * 存在时按 key 覆盖前者——本地开发照常用真值，不必改代码，也不会误把密钥提交上去。
  */
 public final class Endpoints {
 
     private static final String RESOURCE = "/assets/endpoints.json";
+
+    /** 本地专用覆盖文件（不入库）；缺失时静默跳过，仅用 {@link #RESOURCE} */
+    private static final String LOCAL_RESOURCE = "/assets/endpoints.local.json";
 
     /** 懒加载持有者：引用 Endpoints 类本身不触发 IO，首次取值才解析 JSON */
     private static final class Holder {
@@ -28,14 +37,45 @@ public final class Endpoints {
     }
 
     private static JsonObject load() {
-        try (InputStream in = Endpoints.class.getResourceAsStream(RESOURCE)) {
+        JsonObject base = read(RESOURCE, true);
+        JsonObject local = read(LOCAL_RESOURCE, false);
+        if (local != null) {
+            merge(base, local);
+        }
+        return base;
+    }
+
+    /**
+     * 读 classpath 上的 JSON 资源。
+     *
+     * @param required true=文件必须存在，缺失即快速失败；false=可选，缺失返回 null
+     */
+    private static JsonObject read(String resource, boolean required) {
+        try (InputStream in = Endpoints.class.getResourceAsStream(resource)) {
             if (in == null) {
-                throw new IllegalStateException("缺少内置资源 " + RESOURCE + "（打包配置遗漏？）");
+                if (required) {
+                    throw new IllegalStateException("缺少内置资源 " + resource + "（打包配置遗漏？）");
+                }
+                return null;
             }
             return JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8))
                     .getAsJsonObject();
         } catch (IOException e) {
-            throw new IllegalStateException("读取 " + RESOURCE + " 失败", e);
+            throw new IllegalStateException("读取 " + resource + " 失败", e);
+        }
+    }
+
+    /** 递归合并：override 里出现的键覆盖 base 的同名键，未出现的保持 base 原值 */
+    private static void merge(JsonObject base, JsonObject override) {
+        for (Map.Entry<String, JsonElement> entry : override.entrySet()) {
+            String key = entry.getKey();
+            JsonElement value = entry.getValue();
+            if (value != null && value.isJsonObject()
+                    && base.has(key) && base.get(key).isJsonObject()) {
+                merge(base.getAsJsonObject(key), value.getAsJsonObject());
+            } else {
+                base.add(key, value);
+            }
         }
     }
 
