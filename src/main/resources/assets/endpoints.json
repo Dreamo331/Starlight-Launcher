@@ -16,16 +16,16 @@
       "smtp.password": "FeedbackEmailSender.java:29（139 邮箱 SMTP 授权码）",
       "smtp.to": "FeedbackEmailSender.java:30"
     },
-    "curseforgeApiKey": "$2a$10$M4rv7dbTdjKRIzU51gTdIu.HrzLmK2u3DeqFZtEsmEyObg9XTcLUe",
-    "nvidiaNimApiKey": "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",
-    "communityApiKey": "api-2c1b4ae36240c25d1e6e01c9eeacf728bd197c3c8610d8c0",
-    "microsoftClientId": "5ef82875-f627-46ad-8350-fd5073d8b7c1",
+    "curseforgeApiKey": "",
+    "nvidiaNimApiKey": "",
+    "communityApiKey": "",
+    "microsoftClientId": "",
     "smtp": {
       "host": "smtp.139.com",
       "port": "465",
-      "user": "13278050205@139.com",
-      "password": "8bd4dfd233f424c04d00",
-      "to": "13278050205@139.com"
+      "user": "",
+      "password": "",
+      "to": ""
     }
   },
 
@@ -41,7 +41,7 @@
     },
     "communityApiUrl": "https://slmc.cc.cd/auth.php",
     "communitySiteUrl": "https://slmc.cc.cd",
-    "logUploadUrl": "http://121.196.173.18:19000/api/logs",
+    "logUploadUrl": "",
     "frpControlHost": "wfrp.starlightmc.top",
     "frpControlPort": 11400,
     "sponsorUrl": "https://ifdian.net/order/create?plan_id=953af8c4b33b11f0adc85254001e7c00&product_type=0&remark=&affiliate_code=&fr=afcom",
