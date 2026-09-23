@@ -1,0 +1,98 @@
+/* =========================================================
+ *  Starlight Launcher · 启动闪屏样式
+ * ========================================================= */
+
+/* ---------- 根容器 ---------- */
+.splash-root {
+    -fx-background-color: #070a16;
+    -fx-background-radius: 14;
+}
+
+/* ---------- 暗角遮罩 ---------- */
+.mask-vignette {
+    -fx-background-color:
+        radial-gradient(center 50% 36%, radius 78%,
+            transparent 0%,
+            rgba(3, 5, 12, 0.12) 48%,
+            rgba(2, 3, 9, 0.44) 78%,
+            rgba(1, 2, 6, 0.72) 100%);
+}
+
+/* ---------- 边缘压暗 ---------- */
+.mask-edge {
+    -fx-background-color:
+        linear-gradient(to bottom,
+            rgba(4, 6, 14, 0.42) 0%,
+            rgba(4, 6, 14, 0.06) 16%,
+            rgba(4, 6, 14, 0.00) 38%,
+            rgba(4, 6, 14, 0.00) 52%,
+            rgba(4, 6, 14, 0.30) 82%,
+            rgba(4, 6, 14, 0.66) 100%);
+}
+
+/* ---------- 标题 ---------- */
+.title-char {
+    -fx-font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    -fx-font-size: 19px;
+    -fx-font-weight: 300;
+    -fx-fill: linear-gradient(to bottom,
+        #ffffff 0%,
+        #c8dcff 58%,
+        #8fb4ff 100%);
+}
+
+.title-box {
+    -fx-opacity: 0;
+}
+
+/* ---------- 副标题 ---------- */
+.sub-char {
+    -fx-font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    -fx-font-size: 9px;
+    -fx-font-weight: 400;
+    -fx-fill: rgba(150, 185, 245, 0.60);
+}
+
+.sub-box {
+    -fx-opacity: 0;
+}
+
+/* ---------- 进度条 ---------- */
+.progress-track {
+    -fx-background-color: rgba(130, 170, 255, 0.12);
+    -fx-background-radius: 2;
+}
+
+.progress-fill {
+    -fx-fill: linear-gradient(to right,
+        #3b6fd4 0%,
+        #86b8ff 60%,
+        #dceeff 100%);
+    -fx-effect: dropshadow(gaussian, rgba(120, 170, 255, 0.75), 10, 0.5, 0, 0);
+}
+
+/* ---------- 加载区容器 ---------- */
+.loader {
+    -fx-opacity: 0;
+}
+
+/* ---------- 状态文字 ---------- */
+.status-text {
+    -fx-font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    -fx-font-size: 10px;
+    -fx-fill: rgba(155, 190, 245, 0.60);
+}
+
+/* ---------- 版权文字 ---------- */
+.footer-text {
+    -fx-font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    -fx-font-size: 9px;
+    -fx-fill: rgba(140, 170, 220, 0.36);
+    -fx-opacity: 0;
+}
+
+/* ---------- 噪点层 ---------- */
+.noise-layer {
+    -fx-opacity: 0.04;
+    -fx-blend-mode: soft-light;
+}

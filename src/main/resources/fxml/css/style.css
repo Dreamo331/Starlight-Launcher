@@ -1,0 +1,4319 @@
+/* ===== 全局变量与基础 ===== */
+.root {
+    -fx-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -fx-background-color: #bfdbfe;
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(0,0,0,0.15);
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 20, 0, 0, 4);
+}
+
+/* 默认浅色主题 */
+.root,
+.root.light {
+    -fx-background-color: linear-gradient(to bottom right, #bfdbfe 0%, #dbeafe 50%, #e0f2fe 100%);
+    -fx-background-radius: 12;
+}
+
+/* ===== 下载页：游戏版本可滚动列表 =====
+ * ListView 自带底色与蓝色选中高亮，会和卡片的主题色打架，这里统一改成透明，
+ * 卡片自身的 settings-card 负责背景与 hover 反馈。 */
+.version-list {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+.version-list > .virtual-flow > .clipped-container > .sheet > .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 3 2;
+}
+.version-list .list-cell:filled:selected,
+.version-list .list-cell:filled:selected:hover {
+    -fx-background-color: transparent;
+}
+.version-list .scroll-bar:vertical {
+    -fx-pref-width: 8;
+}
+
+/* ===================================================================
+ * 次级文字色（looked-up colors）
+ * 以前大量用内联 `-fx-opacity: 0.6` 把次要文字压灰，结果在浅色背景上糊成一片、
+ * 几乎看不清。这里定义两个跟随主题变化的色值，内联样式可以直接引用：
+ *     label.setStyle("-fx-text-fill: -sl-text-dim;");
+ * 因为它们定义在 .root / .root.dark 上，切换主题时会自动跟着变。
+ * =================================================================== */
+.root {
+    -sl-text-dim: #4b5563;    /* 次要说明文字 */
+    -sl-text-faint: #6b7280;  /* 更弱的提示文字 */
+    -sl-text: #1f2937;        /* 正文默认色 */
+    -sl-ok: #16a34a;          /* 正常 / 已启用 */
+    -sl-idle: #6b7280;        /* 未启用 / 待机 */
+    -sl-track: rgba(0,0,0,0.10);  /* 进度条轨道底色（跟随主题，深色下自动换成浅色） */
+}
+
+.root.light {
+    -sl-text-dim: #4b5563;
+    -sl-text-faint: #6b7280;
+    -sl-text: #1f2937;
+    -sl-ok: #16a34a;
+    -sl-idle: #6b7280;
+    -sl-track: rgba(0,0,0,0.10);
+}
+
+.root.dark {
+    -sl-text-dim: #cbd5e1;
+    -sl-text-faint: #94a3b8;
+    -sl-text: #e5e7eb;
+    -sl-ok: #4ade80;
+    -sl-idle: #64748b;
+    -sl-track: rgba(255,255,255,0.14);
+}
+
+/* ===================================================================
+ * 骨架屏微光（Shimmer）：内容未加载完成时的灰色占位块 + 一道柔光匀速扫过
+ * 只表示「还在加载」，不改变尺寸、不加边框/阴影/旋转。
+ * 微光条本身是 .shimmer-sweep，由 Java 侧用 TranslateTransition 从左到右扫过。
+ * =================================================================== */
+.shimmer-block {
+    -fx-background-color: #e9ebf0;
+    -fx-background-radius: 6;
+}
+
+.shimmer-sweep {
+    -fx-background-color: linear-gradient(to right,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,0.78) 50%,
+        rgba(255,255,255,0) 100%);
+}
+
+.root.dark .shimmer-block {
+    -fx-background-color: #22303f;
+}
+
+.root.dark .shimmer-sweep {
+    -fx-background-color: linear-gradient(to right,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,0.14) 50%,
+        rgba(255,255,255,0) 100%);
+}
+
+/* 兜底：所有没显式指定颜色的文字都用主题正文色。 *
+ * 为什么需要这条：modena 的 `.label { -fx-text-fill: -fx-text-background-color; }`
+ * 是一个基于 `-fx-background` 亮度的「配色阶梯」——只要某个容器把 `-fx-background`
+ * 设成了透明（`-fx-background: transparent`），阶梯就会判定背景很暗，
+ * 于是整棵子树里的文字全变成白色，在浅色界面上几乎看不见。
+ * 这里显式接管默认文字色，不再依赖那个阶梯。
+ *
+ * 位置很关键：放在文件靠前处，后面 `.settings-card-title`、`.content-title` 等
+ * 更明确的规则（同为单类选择器、靠后出现）依旧会覆盖它。
+ */
+.label {
+    -fx-text-fill: -sl-text;
+}
+
+/* 同一阶梯的其它受害者：RadioButton / CheckBox / Hyperlink 的文字取自 modena 的
+ * `-fx-text-background-color`，在 `.scroll-pane`（-fx-background: transparent）里
+ * 同样被算成白色 —— 设置页的单选项实测只剩圆点、文字整行看不见。
+ * `.modal-checkbox` 等更明确的规则在文件后面出现，仍会正常覆盖本规则。 */
+.radio-button,
+.check-box,
+.hyperlink {
+    -fx-text-fill: -sl-text;
+}
+
+/* ===================================================================
+ * 自定义表单控件（规格）
+ *   单选：20px 圆环 / 2px 灰边 / 9px 蓝点；选中时边框变蓝 + 外发光，蓝点由代码从 scale(0) 弹到 1
+ *   复选：20px 圆角 6 方块 / 2px 灰边；选中时底色 #3b82f6 + 外发光，白色勾由代码用描边虚线画出
+ * 注意：这两个控件的 scale 一律不写进样式表 —— 作者样式表优先级高于代码，
+ *      写了 -fx-scale-x/y 之后每次样式重算（悬停/选中都会触发）都会把动画中的值打回，动效会失效。
+ * =================================================================== */
+.radio-button .radio {
+    -fx-min-width: 20;
+    -fx-pref-width: 20;
+    -fx-max-width: 20;
+    -fx-min-height: 20;
+    -fx-pref-height: 20;
+    -fx-max-height: 20;
+    -fx-background-color: transparent;
+    -fx-border-color: rgba(0,0,0,0.2);
+    -fx-border-width: 2;
+    -fx-border-radius: 999;
+    -fx-background-radius: 999;
+    -fx-padding: 3.5;          /* border 2 + padding 3.5 → 内区正好 9px，蓝点铺满 */
+}
+
+.radio-button:hover .radio {
+    -fx-border-color: rgba(59,130,246,0.5);      /* 悬停：淡蓝描边（基准 hover） */
+}
+
+/* 选中：边框变蓝 + 外发光 0 0 0 3px rgba(59,130,246,.15)（用向外 3px 的第二层背景画） */
+.radio-button:selected .radio {
+    -fx-border-color: #3b82f6;
+    -fx-background-color: rgba(59,130,246,0.15), transparent;
+    -fx-background-insets: -3, 0;
+    -fx-background-radius: 999, 999;
+}
+
+.radio-button:selected:hover .radio {
+    -fx-border-color: rgba(59,130,246,0.5);      /* 基准 252 行 hover 覆盖 checked，选中项悬停同为淡蓝描边 */
+}
+
+/* 蓝点：未选中时底色透明（不靠 scale 隐藏，避免样式表把代码的缩放动画打回）。
+ * 同心度三层保证：
+ *   ① -fx-shape: null —— modena 给 .dot 的默认 SVG shape 会接管填充区域，圆点因此偏下；
+ *   ② -fx-background-insets: 0 —— 清掉残留 insets，填充铺满整个内区；
+ *   ③ 9×9 尺寸锁 —— dot 在 .radio（StackPane）里自动居中，同心不依赖 padding 精确性。 */
+.radio-button .dot {
+    -fx-shape: null;
+    -fx-background-insets: 0;
+    -fx-background-color: transparent;
+    -fx-background-radius: 999;
+    -fx-padding: 0;
+    -fx-min-width: 9;
+    -fx-pref-width: 9;
+    -fx-max-width: 9;
+    -fx-min-height: 9;
+    -fx-pref-height: 9;
+    -fx-max-height: 9;
+}
+
+.radio-button:selected .dot {
+    -fx-background-color: #3b82f6;
+}
+
+.check-box .box {
+    -fx-min-width: 20;
+    -fx-pref-width: 20;
+    -fx-max-width: 20;
+    -fx-min-height: 20;
+    -fx-pref-height: 20;
+    -fx-max-height: 20;
+    -fx-background-color: transparent;
+    -fx-border-color: #9ca3af;
+    -fx-border-width: 2;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 0;
+    -fx-background-insets: 0;
+}
+
+.check-box:hover .box {
+    -fx-border-color: #6b7280;
+}
+
+.check-box:selected .box {
+    -fx-border-color: #3b82f6;
+    -fx-background-color: rgba(59,130,246,0.15), #3b82f6;
+    -fx-background-insets: -3, 0;
+    -fx-background-radius: 9, 6;
+}
+
+/* 白色勾由代码用描边虚线画出（stroke-dashoffset 20 → 0），所以隐藏默认的对勾形状；
+ * 半选态仍沿用默认短横，保持「全选」这类用法可读。 */
+.check-box:selected .mark {
+    -fx-background-color: transparent;
+}
+
+.check-box:indeterminate .mark {
+    -fx-background-color: white;
+}
+
+/* ===== 自定义滑块（5px 轨道 / 18px 白底蓝边滑块）=====
+ * 宽度锁死：设置卡片里控件会被拉到整卡宽，滑道因此长得离谱。
+ * 轨道外观不在这里画：Slider 皮肤算出的轨道是 6px 高，要的是 5px，
+ * 所以皮肤那条置空、由 FormControls.SliderTrack 在滑块所在容器上叠一条 5px 的自绘轨道。
+ * 注意：**不要**再给 .slider .track 写 -fx-min/pref/max-width|height ——
+ * 实测那会让皮肤的轨道布局彻底算错（宽度算成 2220px、以自身中心摆放，横穿整张卡片）。 */
+.slider {
+    -fx-min-width: 240;
+    -fx-pref-width: 240;
+    -fx-max-width: 240;
+}
+
+.slider .track {
+    -fx-background-color: transparent;
+}
+
+/* 自绘滑道（FormControls 叠在滑块所在容器上）：5px、圆角、rgba(0,0,0,.1) */
+.slider-track-custom {
+    -fx-background-color: rgba(0,0,0,0.1);
+    -fx-background-radius: 999;
+}
+
+.root.dark .slider-track-custom {
+    -fx-background-color: rgba(255,255,255,0.16);
+}
+
+.slider:vertical .track {
+    -fx-background-color: transparent;
+}
+
+.slider .thumb {
+    -fx-background-color: white;
+    -fx-background-radius: 999;
+    -fx-background-insets: 0;
+    -fx-border-color: #3b82f6;
+    -fx-border-width: 3;
+    -fx-border-radius: 999;
+    -fx-min-width: 18;
+    -fx-pref-width: 18;
+    -fx-max-width: 18;
+    -fx-min-height: 18;
+    -fx-pref-height: 18;
+    -fx-max-height: 18;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.35), 6, 0, 0, 2);
+    -fx-cursor: hand;
+}
+
+/* 悬停：更重的阴影（基准 0 3px 10px rgba(59,130,246,.5)；放大 1.18 由代码做） */
+.slider .thumb:hover {
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.5), 10, 0, 0, 3);
+}
+
+/* 拖动中：8px 光晕 0 0 0 8px rgba(59,130,246,.18)（1.35 倍由代码做） */
+.slider .thumb.dragging {
+    -fx-background-color: rgba(59,130,246,0.18), white;
+    -fx-background-insets: -8, 0;
+    -fx-background-radius: 999, 999;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.55), 12, 0, 0, 3);
+}
+
+.root.dark .slider .track {
+    -fx-background-color: rgba(255,255,255,0.16);
+}
+
+.root.dark .radio-button .radio,
+.root.dark .check-box .box {
+    -fx-border-color: rgba(255,255,255,0.45);
+}
+
+.root.dark .radio-button:selected .radio,
+.root.dark .check-box:selected .box {
+    -fx-border-color: #60a5fa;
+}
+
+.root.dark .check-box:selected .box {
+    -fx-background-color: rgba(96,165,250,0.22), #3b82f6;
+}
+
+.root.dark .radio-button:hover .radio,
+.root.dark .check-box:hover .box {
+    -fx-border-color: rgba(255,255,255,0.7);
+}
+
+/* ===== 窗口控制 ===== */
+.top-container {
+    -fx-background-color: transparent;
+}
+.window-controls {
+    -fx-padding: 8 14 0 0;
+    -fx-spacing: 8;
+}
+
+.window-btn {
+    -fx-min-width: 12px;
+    -fx-min-height: 12px;
+    -fx-max-width: 12px;
+    -fx-max-height: 12px;
+    -fx-background-radius: 50%;
+    -fx-border-width: 0;
+    -fx-cursor: hand;
+    -fx-opacity: 0.75;
+}
+
+/* 缩放交给 NavEffects 的代码动画（hover 1.06 / 按下 0.94 带回弹）：
+ * 样式表里的 -fx-scale-x/y 优先级高于代码，写了会把动画值打回去，所以这里只留透明度。 */
+.window-btn:hover {
+    -fx-opacity: 1;
+}
+
+.window-btn.minimize { -fx-background-color: #fbbf24; }
+.window-btn.maximize { -fx-background-color: #34d399; }
+.window-btn.close    { -fx-background-color: #ef4444; }
+
+/* ===== 窗口控制：非 macOS 样式（减号 + 叉号，由「仿 macOS 三点式窗口按钮」开关切换） =====
+ * 关掉三点式后不再用圆点：按钮改成小圆角方钮，背景透明、只有 hover 才浮现；
+ * 图标（减号=最小化、叉号=关闭）由 AppIcons 挂上并跟随按钮文字色 —— 与同一栏的标签文字
+ * 同一套规则：浅色主题深灰、深色主题浅灰，两种主题下都看得清。 */
+.window-controls.win-classic .window-btn {
+    -fx-min-width: 30px;
+    -fx-min-height: 24px;
+    -fx-max-width: 30px;
+    -fx-max-height: 24px;
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-border-width: 0;
+    -fx-opacity: 1;
+    -fx-text-fill: #374151;
+}
+
+.window-controls.win-classic .window-btn:hover {
+    -fx-background-color: rgba(0, 0, 0, 0.12);
+}
+
+/* 关闭按钮 hover 给红底白叉，与三点式里的红点呼应 */
+.window-controls.win-classic .window-btn.close:hover {
+    -fx-background-color: #ef4444;
+    -fx-text-fill: white;
+}
+
+.root.dark .window-controls.win-classic .window-btn {
+    -fx-text-fill: #f3f4f6;
+}
+
+.root.dark .window-controls.win-classic .window-btn:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.22);
+}
+
+.root.dark .window-controls.win-classic .window-btn.close:hover {
+    -fx-background-color: #ef4444;
+    -fx-text-fill: white;
+}
+
+/* ===== Tab 导航 =====
+ * 选中态不再用页签自己的下边框，而是由 .nav-indicator（弹性滑动指示条）承担，
+ * 避免出现两条指示线。 */
+.tab-bar {
+    -fx-padding: 6 0 4 0;
+    -fx-spacing: 6;
+    -fx-alignment: center;
+    -fx-border-color: transparent transparent rgba(0,0,0,0.04) transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+/* 滚动收缩时原本会淡入一层白底 + 投影；实测在浅色页面上就是一条白带（用户要求去掉），
+ * 现在只保留收缩时的高度变化，这层不再画任何东西。 */
+.nav-bg {
+    -fx-background-color: transparent;
+}
+
+/* 弹性滑动指示条：蓝色渐变（双站 #60a5fa→#3b82f6）+ 同色辉光（无向下偏移） */
+.nav-indicator {
+    -fx-background-color: linear-gradient(to right, #60a5fa 0%, #3b82f6 100%);
+    -fx-background-radius: 999;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.5), 8, 0, 0, 0);
+}
+
+/* 页签水波纹（页签专用，与通用按钮水波纹分开） */
+.nav-tab-ripple {
+    -fx-background-color: rgba(59,130,246,0.22);
+    -fx-background-radius: 999;
+}
+
+/* 通知红点：8px，光环由 NavEffects 动画 */
+.nav-dot {
+    -fx-min-width: 8;
+    -fx-pref-width: 8;
+    -fx-max-width: 8;
+    -fx-min-height: 8;
+    -fx-pref-height: 8;
+    -fx-max-height: 8;
+    -fx-background-color: #ef4444;
+    -fx-background-radius: 999;
+}
+
+/* 页签灰化用字色阶（未选中 #4b5563 / 选中 #3b82f6），不用 opacity —— 毛玻璃底上
+ * 半透明会让图标和文字发灰发虚。宽度只由 padding 驱动（不写 -fx-min-width）。 */
+.tab-item {
+    -fx-background-color: transparent;
+    -fx-text-fill: #4b5563;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-padding: 9 16;
+    -fx-cursor: hand;
+    -fx-border-width: 0;
+    -fx-background-radius: 8 8 0 0;
+}
+
+.tab-item:hover {
+    -fx-text-fill: #3b82f6;
+    -fx-background-color: rgba(59,130,246,0.06);
+}
+
+.tab-item.selected {
+    -fx-font-weight: 600;
+    -fx-text-fill: #3b82f6;
+}
+
+/* ===== 主布局 ===== */
+.main-body {
+    -fx-background-color: transparent;
+}
+
+/* ===== 侧边栏 ===== */
+.sidebar {
+    -fx-pref-width: 200;
+    -fx-min-width: 200;
+    -fx-max-width: 200;
+    -fx-padding: 10 0;
+    -fx-background-color: rgba(255,255,255,0.45);
+    -fx-border-color: transparent rgba(0,0,0,0.04) transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+
+/* 侧边栏滚动条透明背景 */
+.sidebar-scroll {
+    -fx-background: transparent;
+    -fx-background-color: transparent;
+}
+
+.sidebar-section-title {
+    -fx-font-size: 11px;
+    -fx-text-fill: #6b7280;
+    -fx-opacity: 0.7;
+    -fx-padding: 6 18 4 18;
+    -fx-font-weight: 500;
+    -fx-letter-spacing: 0.6px;
+}
+
+.sidebar-item {
+    -fx-background-color: transparent;
+    -fx-text-fill: #1f2937;
+    -fx-font-size: 13px;
+    -fx-padding: 7 14;
+    -fx-background-radius: 8;
+    -fx-cursor: hand;
+    -fx-alignment: center-left;
+    -fx-graphic-text-gap: 10;
+    -fx-border-width: 0;
+    -fx-pref-width: 184; /* 200 - 16px padding */
+}
+
+.sidebar-item:hover {
+    -fx-background-color: rgba(0,0,0,0.04);
+}
+
+.sidebar-item.selected {
+    -fx-background-color: rgba(0,0,0,0.06);
+}
+
+.sidebar-item-icon {
+    -fx-font-size: 14px;
+    -fx-opacity: 0.65;
+}
+
+.sidebar-item.selected .sidebar-item-icon {
+    -fx-opacity: 0.9;
+}
+
+/* ===== 联机方式导航栏（圆角卡片底色） ===== */
+.multiplayer-nav {
+    -fx-background-color: rgba(255,255,255,0.45);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 14 12;
+}
+
+.multiplayer-nav-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+    -fx-padding: 0 4 12 4;
+}
+
+/* ===== 下载中心导航栏（圆角卡片底色） ===== */
+.download-nav {
+    -fx-background-color: rgba(255,255,255,0.45);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 14 12;
+}
+
+.download-nav-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+    -fx-padding: 0 4 12 4;
+}
+
+/* ===== 主内容区 ===== */
+.main-content {
+    -fx-padding: 18 22;
+    -fx-background-color: transparent;
+}
+
+.content-title {
+    -fx-font-size: 19px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+    -fx-padding: 0 0 18 0;
+    -fx-letter-spacing: -0.3px;
+}
+
+/* ===== 页面返回按钮（子页面返回来源页） ===== */
+.back-btn {
+    -fx-background-color: rgba(0,0,0,0.04);
+    -fx-text-fill: #6b7280;
+    -fx-font-size: 12px;
+    -fx-padding: 4 12;
+    -fx-background-radius: 999;
+    -fx-cursor: hand;
+}
+
+.back-btn:hover {
+    -fx-background-color: rgba(0,0,0,0.08);
+    -fx-text-fill: #1f2937;
+}
+
+/* ===== 首页卡片 ===== */
+.home-layout {
+    -fx-spacing: 20;
+    -fx-alignment: top-left;
+}
+
+.home-card, .home-card-left-item, .settings-card {
+    -fx-background-color: rgba(255,255,255,0.55);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 14 16;
+}
+
+.home-card-left-item {
+    -fx-padding: 18 20;
+}
+
+.home-avatar {
+    -fx-min-width: 52px;
+    -fx-min-height: 52px;
+    -fx-max-width: 52px;
+    -fx-max-height: 52px;
+    -fx-background-radius: 12;
+    -fx-background-color: transparent;
+    -fx-alignment: center;
+    -fx-font-size: 24px;
+    -fx-text-fill: #9ca3af;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.10), 6, 0, 0, 2);
+    -fx-cursor: hand;
+}
+
+.home-avatar:hover {
+    -fx-scale-x: 1.05;
+    -fx-scale-y: 1.05;
+}
+
+.home-welcome {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6b7280;
+    -fx-font-weight: 500;
+}
+
+.home-username {
+    -fx-font-size: 17px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #1f2937;
+}
+
+/* 主页账号信息卡片 · 账号类型徽标（微软 / 离线 / 第三方） */
+.home-account-badge {
+    -fx-text-fill: #007bff;
+    -fx-font-size: 11px;
+    -fx-font-weight: 600;
+    -fx-background-color: rgba(0,123,255,0.12);
+    -fx-background-radius: 999;
+    -fx-padding: 2 8;
+    -fx-alignment: center;
+}
+
+.home-recent-title {
+    -fx-font-size: 12px;
+    -fx-text-fill: #9ca3af;
+    -fx-padding: 0 0 10 0;
+}
+
+.home-recent-item {
+    -fx-padding: 8 6;
+    -fx-min-height: 54px;
+    -fx-background-radius: 8;
+    -fx-cursor: hand;
+    -fx-spacing: 10;
+    -fx-alignment: center-left;
+}
+
+.home-recent-item:hover {
+    -fx-background-color: rgba(0,0,0,0.04);
+}
+
+.home-recent-name {
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #1f2937;
+}
+
+.home-recent-time {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+    -fx-padding: 2 0 0 0;
+}
+
+.home-recent-play {
+    -fx-min-width: 28px;
+    -fx-min-height: 28px;
+    -fx-max-width: 28px;
+    -fx-max-height: 28px;
+    -fx-background-radius: 50%;
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: white;
+    -fx-alignment: center;
+    -fx-font-size: 14px;
+    -fx-opacity: 0;
+    -fx-cursor: hand;
+}
+
+.home-recent-item:hover .home-recent-play {
+    -fx-opacity: 1;
+}
+
+.home-recent-remove {
+    -fx-min-width: 28px;
+    -fx-min-height: 28px;
+    -fx-max-width: 28px;
+    -fx-max-height: 28px;
+    -fx-background-radius: 50%;
+    -fx-background-color: #ef4444;
+    -fx-text-fill: white;
+    -fx-alignment: center;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+    -fx-opacity: 0;
+    -fx-cursor: hand;
+}
+
+.home-recent-item:hover .home-recent-remove {
+    -fx-opacity: 1;
+}
+
+.home-launch-btn {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+    -fx-padding: 14 0;
+    -fx-background-radius: 10;
+    -fx-cursor: hand;
+    -fx-letter-spacing: 0.5px;
+}
+
+.home-launch-btn:hover {
+    -fx-background-color: #2563eb;
+    -fx-translate-y: -2px;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.4), 20, 0, 0, 6);
+}
+
+.home-card-title {
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+    -fx-opacity: 0.8;
+    -fx-padding: 0 0 8 0;
+}
+
+.home-stats-row {
+    -fx-spacing: 12;
+    -fx-alignment: center;
+}
+
+.home-stat-item {
+    -fx-alignment: center;
+    -fx-spacing: 4;
+    -fx-pref-width: 100;
+}
+
+/* 磁盘项显示「读 x / 写 y MB/s」，比 100px 宽，固定宽度避免文字被截断成「…」 */
+.home-stat-item-disk {
+    -fx-pref-width: 170;
+    -fx-min-width: 170;
+}
+
+.home-stat-label {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+}
+
+.home-stat-value {
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #1f2937;
+}
+
+.home-stat-bar {
+    -fx-pref-width: 80px;
+    -fx-min-height: 4px;
+    -fx-max-height: 4px;
+    -fx-background-color: rgba(0,0,0,0.1);
+    -fx-background-radius: 2;
+}
+
+.home-stat-bar-fill {
+    -fx-min-height: 4px;
+    -fx-max-height: 4px;
+    -fx-background-radius: 2;
+    -fx-background-color: #22c55e;
+}
+
+.home-stat-bar-fill.warn {
+    -fx-background-color: #eab308;
+}
+
+.home-stat-bar-fill.danger {
+    -fx-background-color: #ef4444;
+}
+
+.home-ver-card {
+    -fx-spacing: 14;
+    -fx-alignment: center-left;
+}
+
+.home-ver-info {
+    -fx-spacing: 2;
+}
+
+.home-ver-title {
+    -fx-font-weight: 600;
+    -fx-font-size: 13px;
+    -fx-text-fill: #1f2937;
+}
+
+.home-ver-desc {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+}
+
+.home-tools-grid {
+    -fx-spacing: 10;
+    -fx-alignment: center;
+}
+
+.home-tool-item {
+    -fx-alignment: center;
+    -fx-padding: 10 0;
+    -fx-background-radius: 8;
+    -fx-cursor: hand;
+    -fx-pref-width: 80;
+}
+
+.home-tool-item:hover {
+    -fx-background-color: rgba(0,0,0,0.04);
+}
+
+.home-tool-icon {
+    -fx-min-width: 32px;
+    -fx-min-height: 32px;
+    -fx-max-width: 32px;
+    -fx-max-height: 32px;
+    -fx-background-radius: 50%;
+    -fx-background-color: rgba(59,130,246,0.1);
+    -fx-alignment: center;
+    -fx-font-size: 16px;
+    -fx-text-fill: #3b82f6;
+}
+
+.home-tool-label {
+    -fx-font-size: 11px;
+    -fx-text-fill: #6b7280;
+}
+
+/* ===== 设置卡片 ===== */
+.settings-group-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+    -fx-padding: 0 0 12 0;
+}
+
+.settings-card {
+    -fx-padding: 14 18;
+    -fx-background-color: rgba(255,255,255,0.55);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-spacing: 10;
+    -fx-alignment: center-left;
+    -fx-margin: 0 0 10 0;
+}
+
+.settings-card:hover {
+    -fx-background-color: rgba(255,255,255,0.7);
+    -fx-translate-y: -1px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.12), 16, 0, 0, 4);
+}
+
+/* 下拉框展开期间锁住卡片的高亮/上浮：候选面板是独立窗口，指针移到面板上后卡片的 :hover 会丢，
+ * 看起来像「点开下拉框，卡片就不悬浮了」。与上面的 :hover 保持一致。 */
+.settings-card.hover-locked {
+    -fx-background-color: rgba(255,255,255,0.7);
+    -fx-translate-y: -1px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.12), 16, 0, 0, 4);
+}
+
+/* 上标题 / 下控件的通栏卡片（多行输入等需要整行宽度的控件）：顶对齐，控件撑满宽度 */
+.settings-card-stacked {
+    -fx-alignment: top-left;
+}
+
+/* ===== 下载页工具条卡片：搜索框 + 筛选控件统一装进一张卡片 =====
+ * 与 settings-card 共用一套主题色（深色 / 高对比度见下方同名分组），
+ * 但它整体不可点击，所以没有 hover 位移与阴影。 */
+.toolbar-card {
+    -fx-padding: 14 18;
+    -fx-background-color: rgba(255,255,255,0.55);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-spacing: 10;
+    -fx-alignment: center-left;
+}
+
+.settings-card-info {
+    -fx-spacing: 2;
+}
+
+.settings-card-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #1f2937;
+}
+
+.settings-card-desc {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6b7280;
+    -fx-line-spacing: 1.4;
+}
+
+/* ===== 账号「当前使用中」徽标 ===== */
+.account-current-badge {
+    -fx-text-fill: #16a34a;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-background-color: rgba(34,197,94,0.12);
+    -fx-background-radius: 999;
+    -fx-padding: 3 10;
+    -fx-alignment: center;
+}
+
+/* ===== 游戏目录多目录管理：「当前使用」徽标 ===== */
+.game-dir-current-badge {
+    -fx-text-fill: #16a34a;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-background-color: rgba(34,197,94,0.12);
+    -fx-background-radius: 999;
+    -fx-padding: 3 10;
+    -fx-alignment: center;
+}
+
+.root.dark .game-dir-current-badge {
+    -fx-text-fill: #4ade80;
+    -fx-background-color: rgba(34,197,94,0.22);
+}
+
+/* ===== 页面内小节标题（浅色背景上默认文字色偏白，需显式指定深色；深色主题用亮色） ===== */
+.section-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #000000;
+}
+
+.root.dark .section-title {
+    -fx-text-fill: #ffffff;
+}
+
+/* ===== 按钮 ===== */
+.btn-primary {
+    -fx-background-color: white;
+    -fx-text-fill: #1f2937;
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+    -fx-padding: 6 16;
+    -fx-background-radius: 6;
+    -fx-cursor: hand;
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-border-width: 1px;
+    /* 不要在这里设 -fx-min-width：CSS 会覆盖代码里 setMinWidth(USE_PREF_SIZE)
+       的按钮宽度锁定，按钮被挤压时文字变成「…」。按钮下限由代码按需设置。 */
+    -fx-text-alignment: center;
+}
+
+.btn-primary:hover {
+    -fx-background-color: #f0f4ff;
+    -fx-translate-y: -1px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.12), 10, 0, 0, 2);
+}
+
+/* ===== 按钮水波纹（Ripple）=====
+ * 圆形本身由 RippleEffect 在点击位置生成并按 0.6s ease-out 扩散，这里只声明颜色。
+ * 设计稿是白色 0.35，但本工程大量按钮本身是白底（.btn-primary 等），白色水波纹在上面
+ * 完全看不见，所以浅色底自动走 .on-light 的深色档（由代码按背景亮度挑样式类）。 */
+.button-ripple {
+    -fx-background-color: rgba(255,255,255,0.35);
+    -fx-background-radius: 999;
+}
+
+.button-ripple.on-light {
+    -fx-background-color: rgba(0,0,0,0.10);
+}
+
+.root.dark .button-ripple.on-light {
+    -fx-background-color: rgba(255,255,255,0.18);
+}
+
+/* ===== 输入框 ===== */
+.input-field {
+    -fx-background-color: rgba(255,255,255,0.85);
+    -fx-text-fill: #1f2937;
+    -fx-prompt-text-fill: #9ca3af;
+    -fx-padding: 11 14;
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(0,0,0,0.1);
+    -fx-border-radius: 10;
+    -fx-font-size: 13px;
+    -fx-pref-width: 180;
+}
+
+.input-field:hover {
+    -fx-border-color: rgba(59,130,246,0.35);
+}
+
+.input-field:focused {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #3b82f6;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.15), 6, 0, 0, 0);
+}
+
+/* 窄输入框（端口号等短数字）：CSS 的宽度优先于代码里的 setPrefWidth，
+   所以要变窄只能在样式表里覆盖，不能靠 Java 侧设置。 */
+.input-field.input-field-sm {
+    -fx-pref-width: 110;
+}
+
+/* ===== Toast：顶部白色卡片 + 彩色圆点（对应 弹窗样式.html 的 .toast）===== */
+.toast-box {
+    -fx-background-color: rgba(255,255,255,0.95);
+    -fx-border-color: rgba(0,0,0,0.05);
+    -fx-border-width: 1;
+    -fx-border-radius: 11;
+    -fx-background-radius: 11;
+    -fx-padding: 11 18;
+    -fx-effect: dropshadow(gaussian, rgba(13,33,55,0.18), 28, 0.05, 0, 10);
+}
+
+.toast-text {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+
+.toast-dot {
+    -fx-min-width: 8;
+    -fx-min-height: 8;
+    -fx-pref-width: 8;
+    -fx-pref-height: 8;
+    -fx-max-width: 8;
+    -fx-max-height: 8;
+    -fx-background-radius: 50;
+}
+
+.toast-dot.success { -fx-background-color: #22c55e; }
+.toast-dot.info    { -fx-background-color: #3b82f6; }
+.toast-dot.warning { -fx-background-color: #f59e0b; }
+.toast-dot.error   { -fx-background-color: #ef4444; }
+
+.root.dark .toast-box {
+    -fx-background-color: rgba(20,32,50,0.96);
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+
+.root.dark .toast-text {
+    -fx-text-fill: #f3f4f6;
+}
+
+.textarea-field {
+    -fx-background-color: rgba(0,0,0,0.05);
+    -fx-text-fill: #1f2937;
+    -fx-padding: 6 10;
+    -fx-background-radius: 6;
+    -fx-border-color: rgba(0,0,0,0.1);
+    -fx-border-radius: 6;
+    -fx-font-size: 12px;
+    -fx-control-inner-background: transparent;
+}
+
+.textarea-field:focused {
+    -fx-border-color: #60a5fa;
+}
+
+/* 命令行/参数类多行输入：等宽字体，便于逐段核对参数 */
+.textarea-mono {
+    -fx-font-family: 'Consolas', 'Courier New', monospace;
+    -fx-font-size: 12px;
+}
+
+.select-field {
+    -fx-background-color: rgba(0,0,0,0.05);
+    -fx-text-fill: #1f2937;
+    -fx-padding: 5 10;
+    -fx-background-radius: 6;
+    -fx-border-color: rgba(0,0,0,0.1);
+    -fx-border-radius: 6;
+    -fx-font-size: 12px;
+}
+
+.select-field:focused {
+    -fx-border-color: #60a5fa;
+}
+
+/* 可编辑下拉框（ComboBox）内部输入区：跟随容器背景，保证深浅色主题可读 */
+.select-field .text-field {
+    -fx-control-inner-background: transparent;
+    -fx-background-color: transparent;
+    -fx-text-fill: #1f2937;
+}
+
+.select-field .list-cell {
+    -fx-text-fill: #1f2937;
+}
+
+/* ===== 主题选择器 ===== */
+.theme-selector {
+    -fx-spacing: 20;
+    -fx-padding: 0 0 20 0;
+}
+
+.theme-option {
+    -fx-cursor: hand;
+    -fx-padding: 4;
+    -fx-background-radius: 12;
+    -fx-alignment: center;
+    -fx-spacing: 6;
+}
+
+.theme-option:hover {
+    -fx-background-color: rgba(0,0,0,0.04);
+}
+
+.theme-preview {
+    -fx-min-width: 100px;
+    -fx-min-height: 75px;
+    -fx-max-width: 100px;
+    -fx-max-height: 75px;
+    -fx-background-radius: 8;
+    -fx-border-color: transparent;
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 8, 0, 0, 2);
+}
+
+.theme-option:hover .theme-preview {
+    -fx-scale-x: 1.03;
+    -fx-scale-y: 1.03;
+}
+
+.theme-option.selected .theme-preview {
+    -fx-border-color: #3b82f6;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.2), 12, 0, 0, 3);
+}
+
+.theme-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6b7280;
+}
+
+.theme-option:hover .theme-label {
+    -fx-text-fill: #1f2937;
+}
+
+.theme-option.selected .theme-label {
+    -fx-text-fill: #1f2937;
+    -fx-font-weight: 500;
+}
+
+/* ===== 切换开关（关闭态灰底白滑块，开启态蓝底 + 4px 光晕；滑块带回弹/挤压动画） =====
+ * 分工：轨道尺寸（外框、圆角、边框、内边距）写在这里；
+ * 滑块的尺寸与位移由 Java 侧 ToggleSwitchAnimator 在皮肤就绪后独占驱动
+ * （回弹位移 0.34s cubic-bezier(0.34,1.3,0.64,1)、按压挤压 24→28px、✓/✕ 交叉淡入淡出）。
+ * 为什么滑块那两项不能写在这儿：作者样式表的优先级高于代码，一旦样式重算
+ * （悬停/聚焦/选中都会触发）就会把动画中的 -fx-pref-width / -fx-translate-x 打回原值，
+ * 滑块会跳回原位。所以下面 .box / .mark 只留外观，不留尺寸与位移。
+ *
+ * 几何：轨道 52×30 无边框、GAP 3、行程 22px（与 ToggleSwitchAnimator 常量同值）。
+ * -fx-padding 必须是 0：Region.getInsets() 是「边框 + 内边距」之和，非 0 会把 .box 又推进去，
+ * 滑块就不是贴着内区定位了（实测滑块左边缘会偏 1px）。 */
+.toggle-switch {
+    -fx-background-color: rgba(0,0,0,0.12);
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-border-radius: 999;
+    -fx-background-radius: 999;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-min-width: 52;
+    -fx-pref-width: 52;
+    -fx-max-width: 52;
+    -fx-min-height: 30;
+    -fx-pref-height: 30;
+    -fx-max-height: 30;
+    -fx-cursor: hand;
+}
+
+.toggle-switch .box {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+}
+
+/* 覆盖通用复选框的悬停/选中样式（上方新增的 .check-box:… 规则特异性同为 0,3,0，
+ * 而开关不是方块复选，它的轨道是自绘的，盒子与滑块必须保持原样）。
+ * 尺寸也必须在这里锁住：通用 .check-box .box 的 20×20 是 author CSS，
+ * 优先级高于代码侧 box.setMinSize/setPrefSize，不覆盖的话内区只剩 20×20、
+ * 滑块整体偏左 16px（ToggleSwitchAnimator 的几何契约以 52×30 内区为前提）。 */
+.toggle-switch .box,
+.toggle-switch:hover .box,
+.toggle-switch:selected .box,
+.toggle-switch:focused .box {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-min-width: 52;
+    -fx-pref-width: 52;
+    -fx-max-width: 52;
+    -fx-min-height: 30;
+    -fx-pref-height: 30;
+    -fx-max-height: 30;
+    -fx-padding: 0;
+}
+
+.toggle-switch .mark {
+    -fx-shape: null; /* 清除 CheckBox 默认的对勾形状，改为纯圆形滑块（两个图标由代码放进来） */
+    -fx-background-color: white;
+    -fx-background-radius: 999;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    /* 基准阴影 0 2px 4px rgba(13,33,55,.25)：白滑块要有一点投影才浮在灰轨道上 */
+    -fx-effect: dropshadow(gaussian, rgba(13,33,55,0.25), 4, 0, 0, 2);
+}
+
+.toggle-switch:selected .mark {
+    -fx-background-color: white;
+}
+
+/* 开启态：双层背景 = 外层 4px 光晕（insets -4）+ 内层本体 #3b82f6（基准 box-shadow: 0 0 0 4px） */
+.toggle-switch:selected {
+    -fx-background-color: rgba(59,130,246,0.14), #3b82f6;
+    -fx-background-insets: -4, 0;
+    -fx-background-radius: 999, 999;
+    -fx-border-color: transparent;
+}
+
+.toggle-switch .text {
+    -fx-fill: transparent;
+}
+
+/* 焦点环：键盘聚焦（Tab）时显示 3px 蓝色外环。
+ * 用两层背景实现「向外 3px 的环」：外层 -fx-background-insets: -3 画出环、内层保持本体色。
+ * 必须写在这几条 :selected 之后 —— 同为 (类+伪类) 特异性，靠后出现的才生效。 */
+.toggle-switch:focused {
+    -fx-background-color: rgba(59,130,246,0.35), rgba(0,0,0,0.12);
+    -fx-background-insets: -3, 0;
+    -fx-background-radius: 999, 999;
+}
+
+.toggle-switch:focused:selected {
+    -fx-background-color: rgba(59,130,246,0.35), rgba(59,130,246,0.14), #3b82f6;
+    -fx-background-insets: -3, -4, 0;
+    -fx-background-radius: 999, 999, 999;
+}
+
+/* 鼠标点出来的焦点不算 :focus-visible，不画环（样式类由 ToggleSwitchAnimator 维护）。
+ * 特异性 (0,3,0)/(0,4,0) 高于上面两条，所以能压住。 */
+.toggle-switch.no-focus-ring:focused {
+    -fx-background-color: rgba(0,0,0,0.12);
+    -fx-background-insets: 0;
+    -fx-background-radius: 999;
+}
+
+.toggle-switch.no-focus-ring:focused:selected {
+    -fx-background-color: rgba(59,130,246,0.14), #3b82f6;
+    -fx-background-insets: -4, 0;
+    -fx-background-radius: 999, 999;
+}
+
+/* 禁用态：半透明 + 默认光标（JavaFX 没有 not-allowed 光标，取最接近的 default），点击被 setDisable 阻断 */
+.toggle-switch:disabled {
+    -fx-opacity: 0.45;
+    -fx-cursor: default;
+}
+
+/* 开关右侧的说明标签：点它等同于点开关，所以给手型光标 */
+.toggle-switch-label {
+    -fx-font-size: 13px;
+    -fx-text-fill: -sl-text;
+    -fx-cursor: hand;
+}
+
+/* ===== 内存使用率进度条 ===== */
+/* ===== 进度条：标准款（6px 轨道 + 蓝→浅蓝渐变填充）=====
+ * 宽度变化的 0.4s 缓动与填充上的白色扫光（progressShine 1.6s 循环）由 ProgressBars 在代码里做。 */
+.memory-bar {
+    -fx-pref-height: 6;
+    -fx-min-height: 6;
+    -fx-max-height: 6;
+    -fx-background-color: rgba(0,0,0,0.1);
+    -fx-background-radius: 999;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.memory-bar > .track {
+    -fx-background-color: transparent;
+    -fx-background-radius: 999;
+    -fx-background-insets: 0;
+}
+
+.memory-bar > .bar {
+    -fx-background-color: linear-gradient(to right, #3b82f6, #93c5fd);
+    -fx-background-radius: 999;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.root.dark .memory-bar {
+    -fx-background-color: rgba(255,255,255,0.14);
+}
+
+.root.dark .memory-bar > .bar {
+    -fx-background-color: linear-gradient(to right, #60a5fa, #bae6fd);
+}
+
+/* ===== 右下角悬浮操作按钮 FAB（FabMenu）=====
+ * 主按钮 52px 圆形蓝色渐变 #60a5fa→#2563eb，阴影 0 6px 20px rgba(59,130,246,.4)；
+ * 子按钮 44px 白底，位移/缩放/透明度与主按钮旋转全由 FabMenu 代码动画
+ * （0.4s cubic-bezier(0.34,1.56,0.64,1) + 0.02/0.06/0.10s 错位）。 */
+.fab-main {
+    -fx-min-width: 52;
+    -fx-pref-width: 52;
+    -fx-max-width: 52;
+    -fx-min-height: 52;
+    -fx-pref-height: 52;
+    -fx-max-height: 52;
+    -fx-padding: 0;
+    -fx-background-color: linear-gradient(to bottom right, #60a5fa, #2563eb);
+    -fx-background-radius: 999;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.4), 20, 0, 0, 6);
+    -fx-cursor: hand;
+}
+
+.fab-main:hover {
+    -fx-background-color: linear-gradient(to bottom right, #93c5fd, #3b82f6);
+}
+
+.fab-item {
+    -fx-padding: 0;
+    -fx-text-fill: #2563eb;
+    -fx-background-color: white;
+    -fx-background-radius: 999;
+    -fx-background-insets: 0;
+    -fx-border-color: rgba(59,130,246,0.28);
+    -fx-border-width: 1;
+    -fx-border-radius: 999;
+    -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.18), 10, 0, 0, 3);
+    -fx-cursor: hand;
+}
+
+.fab-item:hover {
+    -fx-background-color: #eff6ff;
+}
+
+/* 危险操作子按钮（关闭游戏进程）：红底白图标，和普通白底子按钮拉开辨识度 */
+.fab-item-danger {
+    -fx-text-fill: white;
+    -fx-background-color: linear-gradient(to bottom right, #f87171, #dc2626);
+    -fx-border-color: transparent;
+}
+
+.fab-item-danger:hover {
+    -fx-background-color: linear-gradient(to bottom right, #fca5a5, #ef4444);
+}
+
+.fab-badge {
+    -fx-background-color: #ef4444;
+    -fx-text-fill: white;
+    -fx-font-size: 10px;
+    -fx-padding: 0 5;
+    -fx-background-radius: 8;
+    -fx-font-weight: bold;
+}
+
+.root.dark .fab-item {
+    -fx-text-fill: #93c5fd;
+    -fx-background-color: #1e293b;
+    -fx-border-color: rgba(59,130,246,0.45);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 10, 0, 0, 3);
+}
+
+.root.dark .fab-item-danger {
+    -fx-background-color: linear-gradient(to bottom right, #ef4444, #b91c1c);
+}
+
+.root.dark .fab-item-danger:hover {
+    -fx-background-color: linear-gradient(to bottom right, #f87171, #dc2626);
+}
+
+.root.dark .fab-item:hover {
+    -fx-background-color: #273449;
+}
+
+/* ===== 滚动条 ===== */
+.scroll-bar:vertical {
+    -fx-background-color: transparent;
+    -fx-pref-width: 5;
+}
+
+.scroll-bar:vertical .track {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar:vertical .thumb {
+    -fx-background-color: rgba(128,128,128,0.2);
+    -fx-background-radius: 3;
+}
+
+.scroll-bar:vertical .thumb:hover {
+    -fx-background-color: rgba(128,128,128,0.35);
+}
+
+/* ===== 高对比度模式（辅助功能开关） ===== */
+.root.high-contrast .content-title,
+.root.high-contrast .settings-card-title,
+.root.high-contrast .home-ver-title,
+.root.high-contrast .home-recent-name,
+.root.high-contrast .home-card-title,
+.root.high-contrast .home-username,
+.root.high-contrast .sidebar-item,
+.root.high-contrast .tab-item {
+    -fx-text-fill: #000000;
+    -fx-font-weight: 700;
+}
+
+.root.high-contrast .settings-card-desc,
+.root.high-contrast .home-ver-desc,
+.root.high-contrast .home-recent-time,
+.root.high-contrast .home-stat-label,
+.root.high-contrast .home-tool-label {
+    -fx-text-fill: #111111;
+}
+
+.root.high-contrast .home-account-badge {
+    -fx-text-fill: #000000;
+    -fx-background-color: rgba(0,0,0,0.12);
+    -fx-border-color: rgba(0,0,0,0.5);
+    -fx-border-width: 1;
+    -fx-border-radius: 999;
+}
+
+.root.high-contrast.dark .home-account-badge {
+    -fx-text-fill: #ffffff;
+    -fx-background-color: rgba(255,255,255,0.16);
+    -fx-border-color: rgba(255,255,255,0.5);
+}
+
+.root.high-contrast .home-card,
+.root.high-contrast .home-card-left-item,
+.root.high-contrast .settings-card,
+.root.high-contrast .toolbar-card {
+    -fx-background-color: rgba(255,255,255,0.85);
+    -fx-border-color: rgba(0,0,0,0.35);
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast .back-btn {
+    -fx-background-color: #1f2937;
+    -fx-text-fill: white;
+}
+
+.root.high-contrast.dark .back-btn {
+    -fx-background-color: #e2e8f0;
+    -fx-text-fill: #0d2137;
+}
+
+.root.high-contrast .sidebar {
+    -fx-background-color: rgba(255,255,255,0.8);
+    -fx-border-color: transparent rgba(0,0,0,0.25) transparent transparent;
+}
+
+.root.high-contrast .sidebar-item.selected {
+    -fx-background-color: rgba(0,0,0,0.18);
+}
+
+.root.high-contrast .input-field,
+.root.high-contrast .textarea-field,
+.root.high-contrast .select-field {
+    -fx-border-color: rgba(0,0,0,0.45);
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast .select-field .text-field,
+.root.high-contrast .select-field .list-cell {
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast.dark .select-field .text-field,
+.root.high-contrast.dark .select-field .list-cell {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .content-title,
+.root.high-contrast.dark .settings-card-title,
+.root.high-contrast.dark .home-ver-title,
+.root.high-contrast.dark .home-recent-name,
+.root.high-contrast.dark .home-card-title,
+.root.high-contrast.dark .home-username,
+.root.high-contrast.dark .sidebar-item,
+.root.high-contrast.dark .tab-item {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .settings-card-desc,
+.root.high-contrast.dark .home-ver-desc,
+.root.high-contrast.dark .home-recent-time,
+.root.high-contrast.dark .home-stat-label,
+.root.high-contrast.dark .home-tool-label {
+    -fx-text-fill: #e2e8f0;
+}
+
+.root.high-contrast.dark .home-card,
+.root.high-contrast.dark .home-card-left-item,
+.root.high-contrast.dark .settings-card,
+.root.high-contrast.dark .toolbar-card {
+    -fx-background-color: rgba(0,0,0,0.45);
+    -fx-border-color: rgba(255,255,255,0.35);
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast.dark .sidebar {
+    -fx-background-color: rgba(0,0,0,0.55);
+    -fx-border-color: transparent rgba(255,255,255,0.25) transparent transparent;
+}
+
+/* ===== 深色主题 ===== */
+.root.dark {
+    -fx-background-color: linear-gradient(to bottom right, #0d2137 0%, #1a3a5c 50%, #0f2847 100%);
+}
+
+.root.dark .tab-bar {
+    -fx-border-color: transparent transparent rgba(255,255,255,0.05) transparent;
+}
+
+.root.dark .tab-item {
+    -fx-text-fill: white;
+}
+
+/* 暗色选中：亮蓝与白字未选中拉开层次 */
+.root.dark .tab-item.selected {
+    -fx-text-fill: #60a5fa;
+}
+
+/* 深色主题单选按钮：选中圆点改为亮色，避免与深色背景混淆
+   （文字色统一由文件开头的 `-sl-text` 兜底规则接管，深色下自动变浅） */
+.root.dark .radio-button .radio {
+    -fx-background-color: rgba(255,255,255,0.12);
+    -fx-border-color: rgba(255,255,255,0.45);
+}
+/* 选中：与浅色同源的双层结构（3px 光晕 + 本体），修复原先单层背景把光晕覆盖丢失的缺陷 */
+.root.dark .radio-button:selected .radio {
+    -fx-background-color: rgba(59,130,246,0.15), rgba(255,255,255,0.2);
+    -fx-background-insets: -3, 0;
+    -fx-background-radius: 999, 999;
+}
+/* .dot 的 shape 已在浅色规则里清 null，-fx-mark-color 随之失效，改用背景色上色 */
+.root.dark .radio-button:selected .dot {
+    -fx-background-color: #60a5fa;
+}
+
+.root.dark .tab-item:hover {
+    -fx-background-color: rgba(255,255,255,0.06);
+}
+
+/* 顶部导航深色态：收缩背景层与页签水波纹 */
+.root.dark .nav-bg {
+    -fx-background-color: transparent;
+}
+
+.root.dark .nav-tab-ripple {
+    -fx-background-color: rgba(96,165,250,0.28);
+}
+
+.root.dark .sidebar {
+    -fx-background-color: rgba(13,33,55,0.55);
+    -fx-border-color: transparent rgba(255,255,255,0.06) transparent transparent;
+}
+
+.root.dark .multiplayer-nav {
+    -fx-background-color: rgba(13,33,55,0.55);
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+
+.root.dark .multiplayer-nav-title {
+    -fx-text-fill: white;
+}
+
+.root.dark .download-nav {
+    -fx-background-color: rgba(13,33,55,0.55);
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+
+.root.dark .download-nav-title {
+    -fx-text-fill: white;
+}
+
+.root.dark .sidebar-item {
+    -fx-text-fill: white;
+}
+
+.root.dark .sidebar-item:hover {
+    -fx-background-color: rgba(255,255,255,0.06);
+}
+
+.root.dark .sidebar-section-title {
+    -fx-text-fill: white;
+}
+
+.root.dark .content-title {
+    -fx-text-fill: white;
+}
+
+.root.dark .back-btn {
+    -fx-background-color: rgba(255,255,255,0.1);
+    -fx-text-fill: #a0aec0;
+}
+
+.root.dark .back-btn:hover {
+    -fx-background-color: rgba(255,255,255,0.16);
+    -fx-text-fill: white;
+}
+
+.root.dark .home-card,
+.root.dark .home-card-left-item,
+.root.dark .settings-card,
+.root.dark .toolbar-card {
+    -fx-background-color: rgba(0,0,0,0.2);
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+
+.root.dark .settings-card:hover {
+    -fx-background-color: rgba(0,0,0,0.32);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 16, 0, 0, 4);
+}
+
+.root.dark .settings-card.hover-locked {
+    -fx-background-color: rgba(0,0,0,0.32);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 16, 0, 0, 4);
+}
+
+.root.dark .home-recent-item:hover {
+    -fx-background-color: rgba(255,255,255,0.06);
+}
+
+.root.dark .home-tool-item:hover {
+    -fx-background-color: rgba(255,255,255,0.06);
+}
+
+.root.dark .theme-option:hover {
+    -fx-background-color: rgba(255,255,255,0.06);
+}
+
+.root.dark .home-stat-bar {
+    -fx-background-color: rgba(255,255,255,0.12);
+}
+
+.root.dark .input-field,
+.root.dark .textarea-field,
+.root.dark .select-field {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-text-fill: white;
+    -fx-border-color: rgba(255,255,255,0.1);
+}
+
+.root.dark .select-field .text-field,
+.root.dark .select-field .list-cell {
+    -fx-text-fill: white;
+    -fx-prompt-text-fill: #a0aec0;
+}
+
+.root.dark .btn-primary {
+    -fx-background-color: rgba(255,255,255,0.92);
+    -fx-border-color: rgba(0,0,0,0.08);
+}
+
+.root.dark .btn-primary:hover {
+    -fx-background-color: white;
+}
+
+.root.dark .settings-card-title,
+.root.dark .home-ver-title,
+.root.dark .home-recent-name,
+.root.dark .home-card-title,
+.root.dark .home-username {
+    -fx-text-fill: white;
+}
+
+.root.dark .settings-card-desc,
+.root.dark .home-ver-desc,
+.root.dark .home-recent-time,
+.root.dark .home-stat-label,
+.root.dark .home-tool-label,
+.root.dark .home-welcome,
+.root.dark .theme-label {
+    -fx-text-fill: #a0aec0;
+}
+
+.root.dark .account-current-badge {
+    -fx-text-fill: #4ade80;
+    -fx-background-color: rgba(34,197,94,0.16);
+}
+
+.root.dark .home-account-badge {
+    -fx-text-fill: #60a5fa;
+    -fx-background-color: rgba(96,165,250,0.16);
+}
+
+.root.dark .theme-option.selected .theme-label {
+    -fx-text-fill: white;
+}
+
+.root.dark .toggle-switch {
+    -fx-background-color: rgba(255,255,255,0.16);
+    -fx-border-color: transparent;
+}
+
+/* 基准滑块恒白：暗色下灰滑块在灰轨道上几乎不可见 */
+.root.dark .toggle-switch .mark {
+    -fx-background-color: white;
+}
+
+/* 与浅色同规格：本体 #3b82f6 + 四周 4px 光晕层 */
+.root.dark .toggle-switch:selected {
+    -fx-background-color: rgba(59,130,246,0.14), #3b82f6;
+    -fx-background-insets: -4, 0;
+    -fx-background-radius: 999, 999;
+    -fx-border-color: transparent;
+}
+
+.root.dark .toggle-switch:selected .mark {
+    -fx-background-color: white;
+}
+
+/* mainContent 作为 VBox 需要拉伸 */
+.main-content {
+    -fx-padding: 18 22;
+    -fx-background-color: transparent;
+    -fx-fill-width: true;
+}
+
+/* 首页布局填满 */
+.home-layout {
+    -fx-spacing: 20;
+    -fx-alignment: top-left;
+    -fx-fill-height: true;
+}
+
+/* 确保 ScrollPane 内的内容不会导致双重滚动 */
+.scroll-pane {
+    -fx-background: transparent;
+    -fx-background-color: transparent;
+}
+
+.scroll-pane .viewport {
+    -fx-background: transparent;
+    -fx-background-color: transparent;
+}
+
+/* ===== 惯性滚动面板：滚动条完全隐藏 =====
+ * 挂接面板（PageKit.configureScrollPane 挂接时添加 inertia-pane 样式类）的滚动
+ * 由惯性引擎全权驱动，配合 vbarPolicy NEVER（PageKit）构成「策略 + 样式」双保险：
+ * 即使皮肤差异导致滚动条节点存在，也保证三主题下完全不可见。
+ * 选择器全部带 .inertia-pane 前缀且用 > 直接子代，不影响未挂接的内部滚动区。 */
+.inertia-pane > .scroll-bar:vertical,
+.inertia-pane > .scroll-bar:horizontal {
+    -fx-opacity: 0;
+    -fx-pref-width: 0;
+}
+
+.inertia-pane > .scroll-bar .track,
+.inertia-pane > .scroll-bar .thumb,
+.inertia-pane > .scroll-bar .increment-button,
+.inertia-pane > .scroll-bar .decrement-button {
+    -fx-opacity: 0;
+}
+
+/* ===== 日志列表样式 ===== */
+.log-list {
+    -fx-background-color: transparent;
+    -fx-control-inner-background: transparent;
+}
+
+.log-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #cbd5e1;
+    -fx-font-family: "SF Mono", "Fira Code", monospace;
+    -fx-font-size: 12px;
+    -fx-padding: 4px 0;
+}
+
+/* ===== 滑块刻度与当前值黑色（JVM内存/滚动速度/并发下载数） ===== */
+.black-value-label {
+    -fx-text-fill: #000000;
+}
+
+.slider.black-ticks .axis {
+    -fx-tick-label-fill: #000000;
+}
+
+/* ===== 社区页 ===== */
+.community-user-card {
+    -fx-background-color: rgba(255,255,255,0.55);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 20;
+    -fx-spacing: 10;
+    -fx-alignment: center;
+}
+
+.community-avatar-lg {
+    -fx-min-width: 64px;
+    -fx-min-height: 64px;
+    -fx-max-width: 64px;
+    -fx-max-height: 64px;
+    -fx-background-radius: 16;
+    -fx-background-color: #3b82f6;
+    -fx-alignment: center;
+    -fx-font-size: 28px;
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.3), 12, 0, 0, 4);
+}
+
+.community-login-name {
+    -fx-font-size: 16px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #1f2937;
+}
+
+.community-login-desc {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+    -fx-wrap-text: true;
+    -fx-text-alignment: center;
+}
+
+.community-login-btn {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: white;
+    -fx-min-width: 120;
+    -fx-padding: 8 16;
+    -fx-background-radius: 8;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+}
+
+.community-login-btn:hover {
+    -fx-background-color: #2563eb;
+}
+
+.community-checkin-card {
+    -fx-background-color: rgba(255,255,255,0.55);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 16 20;
+    -fx-spacing: 8;
+    -fx-alignment: center;
+}
+
+.community-checkin-title {
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+    -fx-opacity: 0.8;
+}
+
+.community-checkin-status {
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #f59e0b;
+}
+
+.community-checkin-btn {
+    -fx-background-color: #f59e0b;
+    -fx-text-fill: white;
+    -fx-min-width: 120;
+    -fx-padding: 8 16;
+    -fx-background-radius: 8;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-cursor: hand;
+}
+
+.community-checkin-btn:hover {
+    -fx-background-color: #d97706;
+}
+
+.community-post-item {
+    -fx-background-color: rgba(0,0,0,0.02);
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(0,0,0,0.05);
+    -fx-border-radius: 10;
+    -fx-padding: 12 14;
+    -fx-spacing: 12;
+    -fx-cursor: hand;
+}
+
+.community-post-item:hover {
+    -fx-background-color: rgba(0,0,0,0.04);
+}
+
+.community-avatar-sm {
+    -fx-min-width: 36px;
+    -fx-min-height: 36px;
+    -fx-max-width: 36px;
+    -fx-max-height: 36px;
+    -fx-background-radius: 50%;
+    -fx-background-color: rgba(59,130,246,0.15);
+    -fx-alignment: center;
+    -fx-font-size: 16px;
+}
+
+.community-post-author {
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+
+.community-post-time {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+}
+
+.community-post-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+
+.community-post-content {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6b7280;
+    -fx-line-spacing: 1.3;
+}
+
+.community-action-btn {
+    -fx-background-color: rgba(0,0,0,0.04);
+    -fx-text-fill: #6b7280;
+    -fx-font-size: 11px;
+    -fx-padding: 4 12;
+    -fx-background-radius: 999;
+    -fx-cursor: hand;
+}
+
+.community-action-btn:hover {
+    -fx-background-color: rgba(0,0,0,0.08);
+    -fx-text-fill: #1f2937;
+}
+
+.community-comment-area {
+    -fx-background-color: rgba(0,0,0,0.02);
+    -fx-background-radius: 8;
+    -fx-padding: 10 12;
+    -fx-spacing: 10;
+}
+
+.community-empty {
+    -fx-font-size: 12px;
+    -fx-text-fill: #9ca3af;
+    -fx-padding: 14 0;
+    -fx-alignment: center;
+}
+
+/* 深色主题 */
+.root.dark .community-user-card,
+.root.dark .community-checkin-card {
+    -fx-background-color: rgba(0,0,0,0.2);
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+
+.root.dark .community-login-name,
+.root.dark .community-checkin-title,
+.root.dark .community-post-author,
+.root.dark .community-post-title {
+    -fx-text-fill: white;
+}
+
+.root.dark .community-login-desc,
+.root.dark .community-post-time,
+.root.dark .community-post-content,
+.root.dark .community-empty {
+    -fx-text-fill: #a0aec0;
+}
+
+.root.dark .community-post-item {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-border-color: rgba(255,255,255,0.06);
+}
+
+.root.dark .community-post-item:hover {
+    -fx-background-color: rgba(255,255,255,0.08);
+}
+
+.root.dark .community-action-btn {
+    -fx-background-color: rgba(255,255,255,0.1);
+    -fx-text-fill: #a0aec0;
+}
+
+.root.dark .community-action-btn:hover {
+    -fx-background-color: rgba(255,255,255,0.16);
+    -fx-text-fill: white;
+}
+
+.root.dark .community-comment-area {
+    -fx-background-color: rgba(255,255,255,0.04);
+}
+
+/* 社区页：分类/标签、评论项、点赞高亮 */
+.community-tag {
+    -fx-background-color: rgba(59,130,246,0.12);
+    -fx-text-fill: #3b82f6;
+    -fx-font-size: 10px;
+    -fx-font-weight: 600;
+    -fx-padding: 2 8;
+    -fx-background-radius: 999;
+}
+
+.community-action-btn.liked {
+    -fx-background-color: rgba(239,68,68,0.12);
+    -fx-text-fill: #ef4444;
+}
+
+.community-action-btn.liked:hover {
+    -fx-background-color: rgba(239,68,68,0.2);
+    -fx-text-fill: #ef4444;
+}
+
+.community-comment-item {
+    -fx-background-color: rgba(0,0,0,0.02);
+    -fx-background-radius: 8;
+    -fx-padding: 8 10;
+}
+
+.community-comment-author {
+    -fx-font-size: 11px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+
+.community-comment-time {
+    -fx-font-size: 10px;
+    -fx-text-fill: #9ca3af;
+}
+
+.community-comment-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: #4b5563;
+    -fx-line-spacing: 1.3;
+}
+
+.root.dark .community-tag {
+    -fx-background-color: rgba(59,130,246,0.2);
+    -fx-text-fill: #60a5fa;
+}
+
+.root.dark .community-action-btn.liked {
+    -fx-background-color: rgba(239,68,68,0.2);
+    -fx-text-fill: #f87171;
+}
+
+.root.dark .community-comment-item {
+    -fx-background-color: rgba(255,255,255,0.04);
+}
+
+.root.dark .community-comment-author {
+    -fx-text-fill: white;
+}
+
+.root.dark .community-comment-text {
+    -fx-text-fill: #cbd5e1;
+}
+
+/* ===== 官网提示卡片（红色提示框） ===== */
+.community-notice-card {
+    -fx-background-color: rgba(239,68,68,0.08);
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(239,68,68,0.35);
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-padding: 12 14;
+}
+.community-notice-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #dc2626;
+}
+.community-notice-desc {
+    -fx-font-size: 12px;
+    -fx-text-fill: #b91c1c;
+    -fx-line-spacing: 1.4;
+}
+.community-notice-btn {
+    -fx-background-color: #ef4444;
+    -fx-text-fill: white;
+    -fx-background-radius: 8;
+    -fx-padding: 7 14;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-cursor: hand;
+}
+.community-notice-btn:hover {
+    -fx-background-color: #dc2626;
+}
+.community-notice-btn:pressed {
+    -fx-background-color: #b91c1c;
+}
+
+/* ===== 帖子详情页 ===== */
+.community-avatar-xs {
+    -fx-min-width: 24px;
+    -fx-min-height: 24px;
+    -fx-max-width: 24px;
+    -fx-max-height: 24px;
+    -fx-background-radius: 50%;
+    -fx-background-color: rgba(59,130,246,0.15);
+    -fx-alignment: center;
+    -fx-font-size: 12px;
+}
+
+.community-dialog-title {
+    -fx-font-size: 17px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #1f2937;
+}
+.root.dark .community-dialog-title {
+    -fx-text-fill: #f3f4f6;
+}
+
+.community-dialog-author {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+.root.dark .community-dialog-author {
+    -fx-text-fill: #e5e7eb;
+}
+
+.community-dialog-body {
+    -fx-background-color: rgba(0,0,0,0.03);
+    -fx-background-radius: 10;
+    -fx-padding: 14 16;
+    -fx-font-size: 13.5px;
+    -fx-text-fill: #374151;
+    -fx-line-spacing: 1.5;
+}
+.root.dark .community-dialog-body {
+    -fx-background-color: rgba(255,255,255,0.05);
+    -fx-text-fill: #d1d5db;
+}
+
+.community-dialog-divider {
+    -fx-background-color: rgba(0,0,0,0.08);
+    -fx-pref-height: 1;
+    -fx-max-height: 1;
+}
+.root.dark .community-dialog-divider {
+    -fx-background-color: rgba(255,255,255,0.1);
+}
+
+.community-dialog-stat {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+}
+.root.dark .community-dialog-stat {
+    -fx-text-fill: #94a3b8;
+}
+
+/* ===== 集成式弹窗（modal panel）：与启动器主题一致 =====
+ * 浅色主题：半透明白玻璃卡片，与首页/设置卡片同风格；
+ * 深色主题：深蓝黑玻璃卡片，与 .root.dark 渐变背景协调。
+ * 弹窗卡片 / 标题 / 关闭按钮 / 正文 / 按钮均用 CSS 类驱动，
+ * 随 rootPane 的 light/dark 样式类实时切换。
+ */
+.modal-overlay {
+    -fx-background-color: rgba(13,33,55,0.45);
+}
+
+.modal-card {
+    -fx-background-color: rgba(255,255,255,0.94);
+    -fx-background-radius: 16;
+    -fx-border-color: rgba(255,255,255,0.7);
+    -fx-border-radius: 16;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(13,33,55,0.30), 34, 0.10, 0, 14);
+}
+
+.modal-card-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #1f2937;
+}
+
+/* ===== 顶部图标块（对应弹窗样式.html 的 .modal-icon）===== */
+.modal-icon {
+    -fx-min-width: 54;
+    -fx-min-height: 54;
+    -fx-pref-width: 54;
+    -fx-pref-height: 54;
+    -fx-max-width: 54;
+    -fx-max-height: 54;
+    -fx-background-radius: 16;
+    -fx-alignment: center;
+}
+
+.modal-icon.info {
+    -fx-background-color: rgba(59,130,246,0.14);
+}
+
+.modal-icon.success {
+    -fx-background-color: rgba(34,197,94,0.14);
+}
+
+.modal-icon.warning {
+    -fx-background-color: rgba(251,191,36,0.16);
+}
+
+.modal-icon.danger {
+    -fx-background-color: rgba(239,68,68,0.13);
+}
+
+/* 描述文字：居中、行高宽松 */
+.modal-desc {
+    -fx-font-size: 13px;
+    -fx-text-fill: #6b7280;
+}
+
+/* 详情列表（对应 .modal-list） */
+.modal-list {
+    -fx-background-color: rgba(59,130,246,0.06);
+    -fx-border-color: rgba(59,130,246,0.10);
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 12 14;
+}
+
+.modal-list-key {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6b7280;
+}
+
+.modal-list-value {
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+
+.modal-close-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: #9ca3af;
+    -fx-font-size: 13px;
+    -fx-cursor: hand;
+    -fx-padding: 4 8;
+    -fx-background-radius: 8;
+}
+
+.modal-close-btn:hover {
+    -fx-background-color: rgba(0,0,0,0.06);
+    -fx-text-fill: #4b5563;
+}
+
+.modal-text {
+    -fx-font-size: 13px;
+    -fx-text-fill: #374151;
+}
+
+.modal-text-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+
+.modal-hint {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6b7280;
+}
+
+.modal-info-row {
+    -fx-background-color: rgba(0,0,0,0.04);
+    -fx-background-radius: 8;
+}
+
+/* ===== 「配置下载路径」弹窗：候选安装位置 =====
+ * 版式对齐 下载.html 设计稿：分组标签 + 双行候选行（单选圆点 / 分类图标 / 名称 + 路径 / 徽章）、
+ * 通栏虚线浏览按钮、蓝色路径预览框。宽度 380、列表高 168 由代码给定。
+ * 徽章四种：accent=会加载（绿，当前配置下真正生效的那个文件夹）、current=当前（蓝）、
+ * shared=所有版本共用（紫）、temp=不保存（绿，资源管理器临时加入的自定义路径）。 */
+
+/* 分组小标题（对应 .path-group-label） */
+.install-target-group {
+    -fx-font-size: 10.5px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #9ca3af;
+    -fx-padding: 6 4 2 4;
+}
+
+.install-target-list > .install-target-group:first-child {
+    -fx-padding: 0 4 2 4;
+}
+
+.install-target-empty {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+    -fx-padding: 8 0;
+}
+
+/* 候选行（对应 .path-option）：白底、细边、圆角 10，选中蓝色描边 */
+.install-target-row {
+    -fx-background-color: rgba(255,255,255,0.75);
+    -fx-border-color: rgba(0,0,0,0.05);
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 8 11;
+}
+
+.install-target-row:hover {
+    -fx-background-color: rgba(59,130,246,0.06);
+    -fx-border-color: rgba(59,130,246,0.20);
+}
+
+.install-target-row.selected {
+    -fx-background-color: rgba(59,130,246,0.09);
+    -fx-border-color: rgba(59,130,246,0.38);
+}
+
+/* 单选圆点：只留指示器（文字由 .install-target-name 承担），尺寸对齐设计稿的 .radio-indicator */
+.install-target-radio {
+    -fx-padding: 0;
+    -fx-min-width: 16;
+    -fx-pref-width: 16;
+    -fx-max-width: 16;
+    -fx-mark-color: #3b82f6;
+}
+
+.install-target-radio .radio {
+    -fx-min-width: 16;
+    -fx-pref-width: 16;
+    -fx-max-width: 16;
+    -fx-min-height: 16;
+    -fx-pref-height: 16;
+    -fx-max-height: 16;
+    -fx-background-color: white;
+    -fx-border-color: rgba(0,0,0,0.18);
+    -fx-border-width: 1.5;
+    -fx-border-radius: 999;
+    -fx-background-radius: 999;
+    -fx-padding: 3;
+}
+
+.install-target-row.selected .install-target-radio .radio {
+    -fx-border-color: #3b82f6;
+}
+
+/* 分类图标底板（对应 .path-icon）：全局紫、版本蓝、自定义绿 */
+.install-target-icon {
+    -fx-min-width: 32;
+    -fx-pref-width: 32;
+    -fx-max-width: 32;
+    -fx-min-height: 32;
+    -fx-pref-height: 32;
+    -fx-max-height: 32;
+    -fx-background-radius: 9;
+    -fx-border-radius: 9;
+    -fx-border-width: 1;
+    -fx-alignment: center;
+    -fx-background-color: rgba(59,130,246,0.10);
+    -fx-border-color: rgba(59,130,246,0.15);
+}
+
+.install-target-icon.global {
+    -fx-background-color: rgba(139,92,246,0.10);
+    -fx-border-color: rgba(139,92,246,0.18);
+}
+
+.install-target-icon.custom {
+    -fx-background-color: rgba(34,197,94,0.10);
+    -fx-border-color: rgba(34,197,94,0.18);
+}
+
+.install-target-name {
+    -fx-font-size: 12.5px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+
+/* 副标题（相对路径）：等宽字体，长路径省略且不撑宽弹窗 */
+.install-target-sub {
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #9ca3af;
+    -fx-font-family: "Consolas", "Monaco", "Courier New", monospace;
+}
+
+/* 徽章（对应 .path-badge） */
+.install-target-badge {
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+    -fx-padding: 2 7;
+    -fx-background-radius: 5;
+}
+
+.install-target-badge.current {
+    -fx-text-fill: #3b82f6;
+    -fx-background-color: rgba(59,130,246,0.12);
+}
+
+.install-target-badge.shared {
+    -fx-text-fill: #8b5cf6;
+    -fx-background-color: rgba(139,92,246,0.12);
+}
+
+.install-target-badge.accent {
+    -fx-text-fill: #16a34a;
+    -fx-background-color: rgba(34,197,94,0.14);
+}
+
+.install-target-badge.temp {
+    -fx-text-fill: #16a34a;
+    -fx-background-color: rgba(34,197,94,0.12);
+}
+
+/* 搜索框：放大镜 + 透明输入框 + 清除按钮 */
+.install-target-search {
+    -fx-background-color: rgba(255,255,255,0.85);
+    -fx-border-color: rgba(0,0,0,0.10);
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 5 10;
+}
+
+.install-target-search-field {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-font-size: 12px;
+    -fx-text-fill: #1f2937;
+    -fx-prompt-text-fill: #9ca3af;
+}
+
+.install-target-search-field:focused {
+    -fx-background-color: transparent;
+    -fx-effect: null;
+}
+
+.install-target-clear {
+    -fx-background-color: transparent;
+    -fx-background-radius: 999;
+    -fx-padding: 2;
+    -fx-cursor: hand;
+    -fx-opacity: 0.6;
+}
+
+.install-target-clear:hover {
+    -fx-background-color: rgba(0,0,0,0.08);
+    -fx-opacity: 1;
+}
+
+/* 通栏虚线按钮（对应 .browse-btn） */
+.install-target-browse {
+    -fx-background-color: rgba(59,130,246,0.04);
+    -fx-border-color: rgba(59,130,246,0.35);
+    -fx-border-style: dashed;
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-text-fill: #3b82f6;
+    -fx-font-size: 12.5px;
+    -fx-font-weight: 600;
+    -fx-padding: 10 14;
+    -fx-cursor: hand;
+}
+
+.install-target-browse:hover {
+    -fx-background-color: rgba(59,130,246,0.08);
+    -fx-border-color: rgba(59,130,246,0.55);
+    -fx-border-style: solid;
+}
+
+/* 路径预览（对应 .path-preview）：蓝底，整块可点开文件夹 */
+.install-target-preview {
+    -fx-background-color: rgba(59,130,246,0.05);
+    -fx-border-color: rgba(59,130,246,0.10);
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 9 12;
+}
+
+.install-target-preview-label {
+    -fx-font-size: 9.5px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #9ca3af;
+}
+
+.install-target-preview-value {
+    -fx-font-size: 11px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+    -fx-font-family: "Consolas", "Monaco", "Courier New", monospace;
+}
+
+.install-target-preview-value.empty {
+    -fx-text-fill: #9ca3af;
+    -fx-font-weight: 400;
+    -fx-font-style: italic;
+}
+
+.install-target-open {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-padding: 4 6;
+    -fx-cursor: hand;
+    -fx-opacity: 0.7;
+}
+
+.install-target-open:hover {
+    -fx-background-color: rgba(59,130,246,0.12);
+    -fx-opacity: 1;
+}
+
+.install-target-open:disabled {
+    -fx-opacity: 0.3;
+}
+
+/* 候选列表滚动区：透明底、细滚动条，与弹窗卡片融为一体 */
+.install-target-scroll {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.install-target-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.install-target-scroll .scroll-bar:vertical {
+    -fx-pref-width: 5;
+}
+
+/* ===== 深色主题 ===== */
+.root.dark .install-target-group {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .install-target-empty {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .install-target-row {
+    -fx-background-color: rgba(255,255,255,0.05);
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+
+.root.dark .install-target-row:hover {
+    -fx-background-color: rgba(59,130,246,0.16);
+    -fx-border-color: rgba(59,130,246,0.35);
+}
+
+.root.dark .install-target-row.selected {
+    -fx-background-color: rgba(59,130,246,0.22);
+    -fx-border-color: rgba(59,130,246,0.55);
+}
+
+.root.dark .install-target-radio {
+    -fx-mark-color: #60a5fa;
+}
+
+.root.dark .install-target-radio .radio {
+    -fx-background-color: rgba(255,255,255,0.10);
+    -fx-border-color: rgba(255,255,255,0.35);
+}
+
+.root.dark .install-target-name {
+    -fx-text-fill: #e5e7eb;
+}
+
+.root.dark .install-target-sub {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .install-target-icon {
+    -fx-background-color: rgba(59,130,246,0.20);
+    -fx-border-color: rgba(59,130,246,0.30);
+}
+
+.root.dark .install-target-icon.global {
+    -fx-background-color: rgba(139,92,246,0.22);
+    -fx-border-color: rgba(139,92,246,0.32);
+}
+
+.root.dark .install-target-icon.custom {
+    -fx-background-color: rgba(34,197,94,0.20);
+    -fx-border-color: rgba(34,197,94,0.30);
+}
+
+.root.dark .install-target-badge.current {
+    -fx-text-fill: #93c5fd;
+    -fx-background-color: rgba(59,130,246,0.25);
+}
+
+.root.dark .install-target-badge.shared {
+    -fx-text-fill: #c4b5fd;
+    -fx-background-color: rgba(139,92,246,0.25);
+}
+
+.root.dark .install-target-badge.accent,
+.root.dark .install-target-badge.temp {
+    -fx-text-fill: #86efac;
+    -fx-background-color: rgba(34,197,94,0.25);
+}
+
+.root.dark .install-target-search {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-border-color: rgba(255,255,255,0.14);
+}
+
+.root.dark .install-target-search-field {
+    -fx-text-fill: #e5e7eb;
+}
+
+.root.dark .install-target-browse {
+    -fx-background-color: rgba(59,130,246,0.12);
+    -fx-border-color: rgba(59,130,246,0.45);
+    -fx-text-fill: #93c5fd;
+}
+
+.root.dark .install-target-browse:hover {
+    -fx-background-color: rgba(59,130,246,0.20);
+}
+
+.root.dark .install-target-preview {
+    -fx-background-color: rgba(59,130,246,0.12);
+    -fx-border-color: rgba(59,130,246,0.22);
+}
+
+.root.dark .install-target-preview-label {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .install-target-preview-value {
+    -fx-text-fill: #e5e7eb;
+}
+
+/* ===== 按钮：等宽、10 圆角、带投影（对应 .modal-btn）=====
+ * 左右内边距给 18：弹窗底栏里按钮被拉伸，加不加都一样；但同一套样式被用在
+ * 非底栏的工具栏行里（崩溃报告 / AI 诊断 / 更新提示）时，左右 0 会让图标与文字贴边。 */
+.modal-btn-cancel {
+    -fx-background-color: rgba(0,0,0,0.045);
+    -fx-text-fill: #4b5563;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-padding: 11 18;
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(0,0,0,0.07);
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-cursor: hand;
+}
+
+.modal-btn-cancel:hover {
+    -fx-background-color: rgba(0,0,0,0.08);
+    -fx-text-fill: #1f2937;
+}
+
+.modal-btn-ok {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: white;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-padding: 11 18;
+    -fx-background-radius: 10;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.28), 12, 0, 0, 4);
+}
+
+.modal-btn-ok:hover {
+    -fx-background-color: #2563eb;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.40), 20, 0, 0, 7);
+}
+
+.modal-btn-danger {
+    -fx-background-color: #ef4444;
+    -fx-text-fill: white;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-padding: 11 18;
+    -fx-background-radius: 10;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(239,68,68,0.28), 12, 0, 0, 4);
+}
+
+.modal-btn-danger:hover {
+    -fx-background-color: #dc2626;
+    -fx-effect: dropshadow(gaussian, rgba(239,68,68,0.40), 20, 0, 0, 7);
+}
+
+/* ===== 登录弹窗：登录方式分段切换按钮（账号登录 / 令牌登录） ===== */
+.login-mode-toggle {
+    -fx-background-color: rgba(0,0,0,0.05);
+    -fx-text-fill: #6b7280;
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+    -fx-padding: 6 22;
+    -fx-background-radius: 6;
+    -fx-border-color: rgba(0,0,0,0.08);
+    -fx-border-radius: 6;
+    -fx-cursor: hand;
+}
+
+.login-mode-toggle:hover {
+    -fx-background-color: rgba(0,0,0,0.08);
+    -fx-text-fill: #1f2937;
+}
+
+.login-mode-toggle:selected {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: white;
+    -fx-border-color: #3b82f6;
+    -fx-font-weight: 600;
+}
+
+.login-mode-toggle:selected:hover {
+    -fx-background-color: #2563eb;
+    -fx-border-color: #2563eb;
+}
+
+/* 深色主题登录方式切换 */
+.root.dark .login-mode-toggle {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-text-fill: #94a3b8;
+    -fx-border-color: rgba(255,255,255,0.1);
+}
+
+.root.dark .login-mode-toggle:hover {
+    -fx-background-color: rgba(255,255,255,0.14);
+    -fx-text-fill: white;
+}
+
+.root.dark .login-mode-toggle:selected,
+.root.dark .login-mode-toggle:selected:hover {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: white;
+    -fx-border-color: #3b82f6;
+}
+
+/* 深色主题弹窗：深蓝黑玻璃卡片 + 浅色文字 */
+.root.dark .modal-card {
+    -fx-background-color: rgba(13,33,55,0.96);
+    -fx-border-color: rgba(255,255,255,0.12);
+}
+
+.root.dark .modal-card-title {
+    -fx-text-fill: #f3f4f6;
+}
+
+.root.dark .modal-close-btn {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .modal-close-btn:hover {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-text-fill: white;
+}
+
+.root.dark .modal-text {
+    -fx-text-fill: #d1d5db;
+}
+
+.root.dark .modal-text-title {
+    -fx-text-fill: #f3f4f6;
+}
+
+.root.dark .modal-hint {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .modal-desc {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .modal-list {
+    -fx-background-color: rgba(59,130,246,0.10);
+    -fx-border-color: rgba(96,165,250,0.18);
+}
+
+.root.dark .modal-list-key {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .modal-list-value {
+    -fx-text-fill: #f3f4f6;
+}
+
+.root.dark .modal-info-row {
+    -fx-background-color: rgba(255,255,255,0.06);
+}
+
+.root.dark .modal-btn-cancel {
+    -fx-background-color: rgba(255,255,255,0.1);
+    -fx-text-fill: #e5e7eb;
+}
+
+.root.dark .modal-btn-cancel:hover {
+    -fx-background-color: rgba(255,255,255,0.16);
+}
+
+/* 弹窗勾选框（如“下次自动更新不再提醒”）：主题蓝勾选，深浅色均适配 */
+.modal-checkbox {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6b7280;
+    -fx-cursor: hand;
+}
+
+.modal-checkbox .box {
+    -fx-background-color: white;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 1 3 1 3;
+}
+
+.modal-checkbox:selected .box {
+    -fx-background-color: #3b82f6;
+    -fx-border-color: #3b82f6;
+}
+
+/* 白勾由 FormControls 用描边虚线画出（同通用 .check-box 规则）；这里的勾也在主场景里
+ * 会被巡检认领，mark 不置透明就会叠出两个对号（实测） */
+.modal-checkbox:selected .mark {
+    -fx-background-color: transparent;
+}
+
+.root.dark .modal-checkbox {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .modal-checkbox .box {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-border-color: rgba(255,255,255,0.25);
+}
+
+.root.dark .modal-checkbox:selected .box {
+    -fx-background-color: #3b82f6;
+    -fx-border-color: #3b82f6;
+}
+
+/* ===================================================================
+ * 「关闭游戏进程」弹窗：进程列表 / 折叠框 / 全选栏
+ * 对应设计稿 关闭游戏弹窗示例.html 的 .process-* / .collapse-* / .row-close
+ * =================================================================== */
+
+/* 固定高度的内部滚动区：展开/收起折叠框时弹窗高度完全不变（高度由代码写死 168） */
+.process-area {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-background-insets: 0;
+}
+
+.process-area > .viewport {
+    -fx-background-color: transparent;
+}
+
+/* 空状态：所有进程都关完了 */
+.process-empty {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: #9ca3af;
+}
+
+.process-empty-icon {
+    -fx-opacity: 0.55;
+}
+
+/* 分类框：最近启动常显 + 其他进程可折叠 */
+.collapse-box {
+    -fx-background-color: rgba(0,0,0,0.018);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-background-radius: 11;
+    -fx-border-radius: 11;
+}
+
+.collapse-box:hover {
+    -fx-border-color: rgba(59,130,246,0.20);
+}
+
+.collapse-box.expanded {
+    -fx-background-color: rgba(59,130,246,0.025);
+    -fx-border-color: rgba(59,130,246,0.24);
+}
+
+.collapse-header {
+    -fx-padding: 10 12;
+    -fx-cursor: hand;
+}
+
+.collapse-header:hover {
+    -fx-background-color: rgba(59,130,246,0.05);
+}
+
+.collapse-arrow {
+    -fx-font-size: 10px;
+    -fx-text-fill: #9ca3af;
+}
+
+.collapse-box.expanded .collapse-arrow {
+    -fx-text-fill: #3b82f6;
+}
+
+.collapse-title {
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #4b5563;
+}
+
+.collapse-count {
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #3b82f6;
+    -fx-background-color: rgba(59,130,246,0.12);
+    -fx-background-radius: 20;
+    -fx-padding: 1 7;
+}
+
+.collapse-hint {
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #b0b8c4;
+}
+
+.collapse-body {
+    -fx-padding: 0;
+}
+
+.collapse-inner {
+    -fx-padding: 0 8 8 8;
+}
+
+/* 进程行 */
+.process-item {
+    -fx-background-color: rgba(255,255,255,0.75);
+    -fx-border-color: rgba(0,0,0,0.05);
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 9 10;
+    -fx-cursor: hand;
+}
+
+.process-item:hover {
+    -fx-background-color: rgba(59,130,246,0.06);
+    -fx-border-color: rgba(59,130,246,0.20);
+}
+
+.process-item.selected {
+    -fx-background-color: rgba(59,130,246,0.09);
+    -fx-border-color: rgba(59,130,246,0.36);
+}
+
+/* 最近启动：左侧一条蓝色标识条（示例里是 inset box-shadow，这里用左侧 3px 边框等价实现） */
+.process-item.recent-item {
+    -fx-background-color: rgba(59,130,246,0.07);
+    -fx-border-color: rgba(59,130,246,0.24) rgba(59,130,246,0.24) rgba(59,130,246,0.24) #3b82f6;
+    -fx-border-width: 1 1 1 3;
+}
+
+.process-item.recent-item.selected {
+    -fx-background-color: rgba(59,130,246,0.13);
+    -fx-border-color: rgba(59,130,246,0.42) rgba(59,130,246,0.42) rgba(59,130,246,0.42) #3b82f6;
+    -fx-border-width: 1 1 1 3;
+}
+
+/* 行内勾选框：复用弹窗勾选样式，尺寸收到 17×17（示例的 .process-check） */
+.process-check {
+    -fx-cursor: hand;
+}
+
+.process-check .box {
+    -fx-background-color: white;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 5;
+    -fx-background-radius: 5;
+    -fx-padding: 0;
+    -fx-min-width: 17;
+    -fx-min-height: 17;
+    -fx-max-width: 17;
+    -fx-max-height: 17;
+}
+
+.process-check:selected .box,
+.process-check:indeterminate .box {
+    -fx-background-color: #3b82f6;
+    -fx-border-color: #3b82f6;
+}
+
+/* 白勾由 FormControls 用描边虚线画出，mark 不置透明会和它叠出两个对号（实测）；
+ * 半选态仍用默认短横（全选栏部分勾选时可读） */
+.process-check:selected .mark {
+    -fx-background-color: transparent;
+}
+
+.process-icon {
+    -fx-background-color: rgba(59,130,246,0.10);
+    -fx-border-color: rgba(59,130,246,0.16);
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-min-width: 30;
+    -fx-min-height: 30;
+    -fx-max-width: 30;
+    -fx-max-height: 30;
+}
+
+.process-name {
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+
+.process-meta {
+    -fx-font-size: 10px;
+    -fx-text-fill: #9ca3af;
+}
+
+.process-memory {
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #3b82f6;
+}
+
+.process-uptime {
+    -fx-font-size: 10px;
+    -fx-text-fill: #9ca3af;
+}
+
+/* 行尾「仅关闭此进程」按钮（图标色跟随 -fx-text-fill） */
+.row-close {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-padding: 0;
+    -fx-min-width: 22;
+    -fx-min-height: 22;
+    -fx-max-width: 22;
+    -fx-max-height: 22;
+    -fx-cursor: hand;
+    -fx-text-fill: #cbd5e1;
+}
+
+.row-close:hover {
+    -fx-background-color: rgba(239,68,68,0.10);
+    -fx-text-fill: #ef4444;
+}
+
+/* 多进程弹窗描述里的加粗数字（示例的 .modal-desc strong） */
+.modal-desc-strong {
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #374151;
+}
+
+/* 底部：全选 + 已选计数 */
+.process-footer {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #6b7280;
+}
+
+.process-check-all {
+    -fx-font-size: 11.5px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #4b5563;
+    -fx-cursor: hand;
+}
+
+.process-selected-count {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #6b7280;
+}
+
+.process-selected-count-value {
+    -fx-font-size: 11.5px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #3b82f6;
+}
+
+/* 危险按钮禁用态（示例的 .modal-btn.danger:disabled）：0 个选中时不可点 */
+.modal-btn-danger:disabled {
+    -fx-opacity: 0.4;
+    -fx-cursor: default;
+    -fx-effect: null;
+}
+
+/* 单进程弹窗里的红字警告 */
+.danger-text {
+    -fx-text-fill: #ef4444;
+    -fx-font-weight: 600;
+}
+
+/* ===== 深色主题 ===== */
+.root.dark .collapse-box {
+    -fx-background-color: rgba(255,255,255,0.03);
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+
+.root.dark .collapse-box.expanded {
+    -fx-background-color: rgba(59,130,246,0.10);
+    -fx-border-color: rgba(59,130,246,0.34);
+}
+
+.root.dark .collapse-header:hover {
+    -fx-background-color: rgba(255,255,255,0.06);
+}
+
+.root.dark .collapse-title {
+    -fx-text-fill: #cbd5e1;
+}
+
+.root.dark .collapse-hint {
+    -fx-text-fill: #64748b;
+}
+
+.root.dark .process-item {
+    -fx-background-color: rgba(255,255,255,0.05);
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+
+.root.dark .process-item:hover {
+    -fx-background-color: rgba(59,130,246,0.14);
+    -fx-border-color: rgba(59,130,246,0.34);
+}
+
+.root.dark .process-item.selected {
+    -fx-background-color: rgba(59,130,246,0.18);
+    -fx-border-color: rgba(59,130,246,0.50);
+}
+
+.root.dark .process-item.recent-item {
+    -fx-background-color: rgba(59,130,246,0.16);
+    -fx-border-color: rgba(59,130,246,0.36) rgba(59,130,246,0.36) rgba(59,130,246,0.36) #3b82f6;
+}
+
+.root.dark .process-item.recent-item.selected {
+    -fx-background-color: rgba(59,130,246,0.24);
+    -fx-border-color: rgba(59,130,246,0.55) rgba(59,130,246,0.55) rgba(59,130,246,0.55) #3b82f6;
+}
+
+.root.dark .process-check .box {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-border-color: rgba(255,255,255,0.25);
+}
+
+.root.dark .process-check:selected .box,
+.root.dark .process-check:indeterminate .box {
+    -fx-background-color: #3b82f6;
+    -fx-border-color: #3b82f6;
+}
+
+.root.dark .process-icon {
+    -fx-background-color: rgba(59,130,246,0.16);
+    -fx-border-color: rgba(59,130,246,0.26);
+}
+
+.root.dark .process-name {
+    -fx-text-fill: #f1f5f9;
+}
+
+.root.dark .process-meta,
+.root.dark .process-uptime,
+.root.dark .process-empty {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .process-footer {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .process-check-all {
+    -fx-text-fill: #cbd5e1;
+}
+
+.root.dark .row-close:hover {
+    -fx-background-color: rgba(239,68,68,0.18);
+}
+
+.root.dark .modal-desc-strong {
+    -fx-text-fill: #e5e7eb;
+}
+
+.root.dark .danger-text {
+    -fx-text-fill: #f87171;
+}
+
+/* ===== 游戏启动动画弹窗：进度条（复用集成式弹窗卡片，随主题切换） ===== */
+.launch-progress-track {
+    -fx-background-color: rgba(0,0,0,0.08);
+    -fx-background-radius: 2;
+}
+
+.launch-progress-fill {
+    -fx-background-color: linear-gradient(to right, #3b82f6, #60a5fa);
+    -fx-background-radius: 2;
+}
+
+.root.dark .launch-progress-track {
+    -fx-background-color: rgba(255,255,255,0.12);
+}
+
+/* ===================================================================
+ * 下拉选择框（ComboBox）统一外观
+ * 之前只给容器上了底色，弹出列表仍是 JavaFX 默认的「白底 + 亮蓝选中」，
+ * 与启动器主题不搭。这里把按钮本体与弹出列表补齐。
+ * 注意：弹出列表是独立弹窗，深色主题的覆盖写在 dark-extra.css 里
+ *      （那边的选择器不带 .root.dark 前缀，才能命中弹窗）。
+ * =================================================================== */
+.combo-box, .select-field {
+    -fx-background-color: rgba(0,0,0,0.05);
+    -fx-background-radius: 6;
+    -fx-border-color: rgba(0,0,0,0.10);
+    -fx-border-radius: 6;
+    -fx-padding: 0;
+    -fx-font-size: 12px;
+    -fx-cursor: hand;
+}
+
+.combo-box:hover, .select-field:hover {
+    -fx-background-color: rgba(0,0,0,0.08);
+}
+
+.combo-box:focused, .select-field:focused {
+    -fx-border-color: #60a5fa;
+}
+
+.combo-box .list-cell, .select-field .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #1f2937;
+    -fx-padding: 5 10;
+}
+
+.combo-box .arrow-button, .select-field .arrow-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0 8 0 0;
+}
+
+.combo-box .arrow, .select-field .arrow {
+    -fx-background-color: #6b7280;
+}
+
+/* 展开时箭头同步变蓝（旋转由 ComboBoxAnimator 做，颜色交给样式表）。
+ * 必须写在上面那条之后：同为「类 + 元素」特异性，靠后出现的才生效。 */
+.combo-box:showing .arrow, .select-field:showing .arrow {
+    -fx-background-color: #3b82f6;
+}
+
+/* 面板与触发器之间的 8px 间距、以及展开动画所需的头部空间，由 ComboBoxAnimator 在代码里做：
+ * 弹窗场景根垫 8px 撑高窗口 + 面板静止位下移 8px。原因是这个间距用 CSS 做不到 ——
+ * 弹窗里带 .combo-box-popup 样式类的是 PopupControl 的 CSSBridge，
+ * 实测给它写 -fx-padding 不生效（列表的 -fx-padding/背景/圆角却都正常生效）。 */
+
+/* 展开的候选列表（设计稿：白 0.97、圆角 12、内边距 6、双层阴影、1px 近白边框） */
+.combo-box-popup > .list-view {
+    -fx-background-color: rgba(255,255,255,0.97);
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(255,255,255,0.8);
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+    -fx-padding: 6;
+    -fx-effect: dropshadow(gaussian, rgba(13,33,55,0.18), 40, 0.05, 0, 16),
+                dropshadow(gaussian, rgba(13,33,55,0.08), 8, 0, 0, 2);
+}
+
+.combo-box-popup .list-cell {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-text-fill: #1f2937;
+    -fx-padding: 7 10;
+}
+
+.combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: rgba(59,130,246,0.12);
+}
+
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: rgba(59,130,246,0.20);
+    -fx-text-fill: #1d4ed8;
+    -fx-font-weight: 600;
+}
+
+/* ===== 下拉候选行的定制元件（见 SelectCells）=====
+ * 行的文本换成了 Label，所以选中态的 -fx-text-fill 要单独给到它。 */
+.select-option-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: #1f2937;
+}
+
+.combo-box-popup .list-cell:filled:selected .select-option-text {
+    -fx-text-fill: #1d4ed8;
+    -fx-font-weight: 600;
+}
+
+/* 悬停指示条：3px 竖条，scaleY 由代码从 0 弹到 1 */
+.select-hover-bar {
+    -fx-min-width: 3;
+    -fx-pref-width: 3;
+    -fx-max-width: 3;
+    -fx-min-height: 16;
+    -fx-pref-height: 16;
+    -fx-max-height: 16;
+    -fx-background-color: #3b82f6;
+    -fx-background-radius: 999;
+    -fx-scale-y: 0;
+}
+
+/* 勾选图标：默认不显示，选中时由代码从 0.4 弹到 1 */
+.select-check {
+    -fx-opacity: 1;
+}
+
+.select-value-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: #1f2937;
+}
+
+.root.dark .select-option-text,
+.root.dark .select-value-text {
+    -fx-text-fill: #e5e7eb;
+}
+
+.root.dark .combo-box-popup .list-cell:filled:selected .select-option-text {
+    -fx-text-fill: #93c5fd;
+}
+
+.root.dark .select-hover-bar {
+    -fx-background-color: #60a5fa;
+}
+
+.combo-box-popup .scroll-bar:vertical {
+    -fx-pref-width: 8;
+}
+
+.combo-box-popup .scroll-bar:vertical .thumb {
+    -fx-background-color: rgba(0,0,0,0.22);
+    -fx-background-radius: 4;
+}
+
+.root.dark .combo-box, .root.dark .select-field {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-border-color: rgba(255,255,255,0.14);
+}
+
+.root.dark .combo-box .list-cell,
+.root.dark .select-field .list-cell {
+    -fx-text-fill: #e5e7eb;
+}
+
+.root.dark .combo-box .arrow,
+.root.dark .select-field .arrow {
+    -fx-background-color: #94a3b8;
+}
+
+/* ===================================================================
+ * 下载配置页（游戏版本 → 下载配置）：组件列表 / 展开的版本列表
+ * 这些控件原先只设了字号，文字颜色靠继承，在浅色主题下会糊成一片；
+ * 这里统一给显式颜色，并补上深色主题对应值。
+ * =================================================================== */
+.component-row {
+    -fx-padding: 12 16;
+    -fx-translate-y: 0;
+}
+
+.component-row.usable {
+    -fx-cursor: hand;
+}
+
+.component-row.chosen {
+    -fx-border-color: rgba(59,130,246,0.75);
+    -fx-border-width: 1.4;
+}
+
+.component-name {
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #111827;
+}
+
+.component-status {
+    -fx-font-size: 12px;
+    -fx-text-fill: #4b5563;
+}
+
+.component-status.chosen {
+    -fx-text-fill: #1d4ed8;
+    -fx-font-weight: 600;
+}
+
+.component-chevron {
+    -fx-font-size: 13px;
+    -fx-text-fill: #6b7280;
+}
+
+.component-row.disabled .component-name,
+.component-row.disabled .component-status,
+.component-row.disabled .component-chevron {
+    -fx-text-fill: #9ca3af;
+}
+
+.root.dark .component-name {
+    -fx-text-fill: #f9fafb;
+}
+
+.root.dark .component-status {
+    -fx-text-fill: #cbd5e1;
+}
+
+.root.dark .component-status.chosen {
+    -fx-text-fill: #7dd3fc;
+}
+
+.root.dark .component-chevron {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .component-row.disabled .component-name,
+.root.dark .component-row.disabled .component-status,
+.root.dark .component-row.disabled .component-chevron {
+    -fx-text-fill: #64748b;
+}
+
+.loader-version-item {
+    -fx-padding: 6 10;
+    -fx-background-radius: 8;
+    -fx-cursor: hand;
+}
+
+.loader-version-item:hover {
+    -fx-background-color: rgba(0,0,0,0.06);
+}
+
+.loader-version-item.chosen {
+    -fx-background-color: rgba(59,130,246,0.18);
+}
+
+.loader-version-name {
+    -fx-font-size: 13px;
+    -fx-text-fill: #111827;
+}
+
+.loader-version-item.chosen .loader-version-name {
+    -fx-font-weight: 600;
+    -fx-text-fill: #1d4ed8;
+}
+
+.loader-version-caption {
+    -fx-font-size: 11px;
+    -fx-text-fill: #6b7280;
+}
+
+.root.dark .loader-version-item:hover {
+    -fx-background-color: rgba(255,255,255,0.08);
+}
+
+.root.dark .loader-version-item.chosen {
+    -fx-background-color: rgba(59,130,246,0.32);
+}
+
+.root.dark .loader-version-name {
+    -fx-text-fill: #f9fafb;
+}
+
+.root.dark .loader-version-item.chosen .loader-version-name {
+    -fx-text-fill: #7dd3fc;
+}
+
+.root.dark .loader-version-caption {
+    -fx-text-fill: #cbd5e1;
+}
+
+/* 配置页的标题 / 提示 / 字段标签 */
+.config-section-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #111827;
+}
+
+.config-hint {
+    -fx-font-size: 12px;
+    -fx-text-fill: #4b5563;
+}
+
+.config-version-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #111827;
+}
+
+.config-version-meta {
+    -fx-font-size: 12px;
+    -fx-text-fill: #4b5563;
+}
+
+.config-field-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #374151;
+}
+
+.config-panel-title {
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #374151;
+}
+
+.root.dark .config-section-title,
+.root.dark .config-version-title {
+    -fx-text-fill: #f9fafb;
+}
+
+.root.dark .config-hint,
+.root.dark .config-version-meta,
+.root.dark .config-field-label,
+.root.dark .config-panel-title {
+    -fx-text-fill: #cbd5e1;
+}
+
+/* ===================================================================
+ * 版本选择页：按加载器分组后展开的「已安装版本」条目
+ * 视觉与下载配置页的 .loader-version-item 一致，但整行不可点
+ * （选择 / 版本设置 / 删除 都走右侧按钮），因此不带手型光标与 hover 反馈。
+ * 文字沿用 .loader-version-name / .loader-version-caption 的配色。
+ * =================================================================== */
+.installed-version-item {
+    -fx-padding: 6 10;
+    -fx-background-radius: 8;
+}
+
+.installed-version-item.chosen {
+    -fx-background-color: rgba(59,130,246,0.18);
+}
+
+.installed-version-item.chosen .loader-version-name {
+    -fx-font-weight: 600;
+    -fx-text-fill: #1d4ed8;
+}
+
+.root.dark .installed-version-item.chosen {
+    -fx-background-color: rgba(59,130,246,0.32);
+}
+
+.root.dark .installed-version-item.chosen .loader-version-name {
+    -fx-text-fill: #7dd3fc;
+}
+
+/* ===================================================================
+ * 资源详情页：标签栏（描述 / 图库 / 版本）
+ * 之前直接复用了侧边栏条目的样式，选中态只是一个很淡的灰底，
+ * 在浅蓝背景上几乎看不出哪个被选中，这里给一套独立的、对比明确的样式。
+ * =================================================================== */
+.detail-tab {
+    -fx-font-size: 13px;
+    -fx-padding: 6 18;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-border-color: rgba(0,0,0,0.10);
+    -fx-background-color: rgba(255,255,255,0.55);
+    -fx-text-fill: #374151;
+    -fx-cursor: hand;
+}
+
+.detail-tab:hover {
+    -fx-background-color: rgba(255,255,255,0.85);
+    -fx-border-color: rgba(59,130,246,0.45);
+    -fx-text-fill: #111827;
+}
+
+.detail-tab.selected {
+    -fx-background-color: #3b82f6;
+    -fx-border-color: #3b82f6;
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: 600;
+}
+
+.detail-tab.selected:hover {
+    -fx-background-color: #2563eb;
+    -fx-border-color: #2563eb;
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .detail-tab {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-border-color: rgba(255,255,255,0.16);
+    -fx-text-fill: #cbd5e1;
+}
+
+.root.dark .detail-tab:hover {
+    -fx-background-color: rgba(255,255,255,0.14);
+    -fx-text-fill: #f9fafb;
+}
+
+.root.dark .detail-tab.selected {
+    -fx-background-color: #3b82f6;
+    -fx-border-color: #3b82f6;
+    -fx-text-fill: #ffffff;
+}
+
+/* ===================================================================
+ * 资源详情页：模组版本条目
+ * 之前只设了字号，日期与元信息靠 -fx-opacity 压灰，浅色下几乎看不清，这里改为显式深色。
+ * =================================================================== */
+.mod-version-row {
+    -fx-background-color: rgba(0,0,0,0.045);
+    -fx-background-radius: 8;
+    -fx-border-color: rgba(0,0,0,0.07);
+    -fx-border-radius: 8;
+    -fx-padding: 10 12;
+}
+
+.root.dark .mod-version-row {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+
+.mod-version-name {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #111827;
+}
+
+.mod-version-date {
+    -fx-font-size: 11px;
+    -fx-text-fill: #4b5563;
+}
+
+.mod-version-meta {
+    -fx-font-size: 11px;
+    -fx-text-fill: #4b5563;
+}
+
+.mod-version-deps {
+    -fx-font-size: 11px;
+    -fx-text-fill: #b45309;
+}
+
+.root.dark .mod-version-name {
+    -fx-text-fill: #f9fafb;
+}
+
+.root.dark .mod-version-date,
+.root.dark .mod-version-meta {
+    -fx-text-fill: #cbd5e1;
+}
+
+.root.dark .mod-version-deps {
+    -fx-text-fill: #fbbf24;
+}
+
+/* ===== 加载失败状态卡片（bug 图标 + 重新加载 + 复制错误信息） =====
+ * 由 PageKit.buildErrorState 挂接，仅在内容无法正常加载时显示。 */
+.error-state {
+    -fx-background-color: rgba(127,127,127,0.06);
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(127,127,127,0.18);
+    -fx-border-radius: 12;
+    -fx-border-width: 1;
+}
+
+.error-state-icon {
+    -fx-background-color: rgba(239,68,68,0.10);
+    -fx-background-radius: 999;
+    -fx-min-width: 54;
+    -fx-min-height: 54;
+    -fx-max-width: 54;
+    -fx-max-height: 54;
+}
+
+.error-state-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -sl-text;
+}
+
+.error-state-detail {
+    -fx-font-size: 11px;
+    -fx-text-fill: -sl-text-dim;
+}
+
+.error-state-btn {
+    -fx-font-size: 12px;
+}
+
+.error-state-btn-secondary {
+    -fx-background-color: transparent;
+    -fx-border-color: rgba(127,127,127,0.35);
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-text-fill: -sl-text-dim;
+}
+
+.root.dark .error-state {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+
+.root.dark .error-state-btn-secondary {
+    -fx-border-color: rgba(255,255,255,0.18);
+    -fx-text-fill: #cbd5e1;
+}
+
+/* ===================================================================
+ * 版本独立设置页（2026-09 参考稿重做版，对齐 版本独立设置参考.html）
+ * 类前缀 vset-：副标题 / 卡片 / 状态标签 / 设置行 / 路径框 / 数值滑块
+ * / 快捷档位 / 只读回显 / 底部固定操作栏等。含 .root.dark 变体。
+ * =================================================================== */
+
+/* ---------- 页头副标题 ---------- */
+.vset-subtitle {
+    -fx-font-size: 12px;
+}
+
+.vset-subtitle .vset-sub-text {
+    -fx-fill: #6b7280;
+}
+
+.vset-subtitle .vset-sub-ver {
+    -fx-fill: #2563eb;
+    -fx-font-weight: 700;
+}
+
+.root.dark .vset-subtitle .vset-sub-text {
+    -fx-fill: #cbd5e1;
+}
+
+.root.dark .vset-subtitle .vset-sub-ver {
+    -fx-fill: #60a5fa;
+}
+
+/* ---------- 卡片 ---------- */
+.vset-card {
+    -fx-background-color: rgba(255,255,255,0.72);
+    -fx-border-color: rgba(0,0,0,0.07);
+    -fx-border-width: 1;
+    -fx-border-radius: 14;
+    -fx-background-radius: 14;
+    -fx-padding: 15 18;
+    -fx-effect: dropshadow(gaussian, rgba(13,33,55,0.09), 18, 0, 0, 6);
+}
+
+.root.dark .vset-card {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.10);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.35), 16, 0, 0, 6);
+}
+
+.vset-card-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #1f2937;
+}
+
+.root.dark .vset-card-title {
+    -fx-text-fill: #f9fafb;
+}
+
+/* 状态标签：继承全局（灰）/ 已覆盖（琥珀）/ 静态分类（蓝） */
+.vset-tag {
+    -fx-font-size: 10.5px;
+    -fx-font-weight: 700;
+    -fx-padding: 2.5 9;
+    -fx-background-color: rgba(127,127,127,0.12);
+    -fx-border-color: transparent;
+    -fx-border-width: 1;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-text-fill: #6b7280;
+}
+
+.vset-tag.on {
+    -fx-background-color: rgba(245,158,11,0.13);
+    -fx-border-color: rgba(245,158,11,0.30);
+    -fx-text-fill: #b45309;
+}
+
+.vset-tag.static {
+    -fx-background-color: rgba(59,130,246,0.10);
+    -fx-border-color: rgba(59,130,246,0.22);
+    -fx-text-fill: #3b82f6;
+}
+
+.root.dark .vset-tag {
+    -fx-background-color: rgba(255,255,255,0.12);
+    -fx-text-fill: #d6dde7;
+}
+
+.root.dark .vset-tag.on {
+    -fx-background-color: rgba(245,158,11,0.20);
+    -fx-border-color: rgba(245,158,11,0.40);
+    -fx-text-fill: #fbbf24;
+}
+
+.root.dark .vset-tag.static {
+    -fx-background-color: rgba(59,130,246,0.20);
+    -fx-border-color: rgba(59,130,246,0.40);
+    -fx-text-fill: #60a5fa;
+}
+
+/* 卡片内的「恢复继承」小链接 */
+.vset-mini-link {
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #3b82f6;
+    -fx-padding: 2 7;
+    -fx-background-radius: 6;
+}
+
+.vset-mini-link:hover {
+    -fx-background-color: rgba(59,130,246,0.10);
+}
+
+.root.dark .vset-mini-link {
+    -fx-text-fill: #60a5fa;
+}
+
+.root.dark .vset-mini-link:hover {
+    -fx-background-color: rgba(96,165,250,0.15);
+}
+
+/* ---------- 设置行 ---------- */
+.vset-row {
+    -fx-padding: 4 0;
+}
+
+.vset-row.divider-top {
+    -fx-border-color: rgba(0,0,0,0.055);
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 13 0 4 0;
+}
+
+.root.dark .vset-row.divider-top {
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+
+.vset-row-label {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+
+.root.dark .vset-row-label {
+    -fx-text-fill: #f9fafb;
+}
+
+.vset-row-desc {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #6b7280;
+}
+
+.root.dark .vset-row-desc {
+    -fx-text-fill: #94a3b8;
+}
+
+/* ---------- 说明行（圆点 + 小字） ---------- */
+.vset-note {
+    -fx-padding: 2 0 0 0;
+}
+
+.vset-note-dot {
+    -fx-min-width: 7;
+    -fx-min-height: 7;
+    -fx-max-width: 7;
+    -fx-max-height: 7;
+    -fx-background-radius: 999;
+}
+
+.vset-note-dot.ok {
+    -fx-background-color: #22c55e;
+}
+
+.vset-note-dot.warn {
+    -fx-background-color: #f59e0b;
+}
+
+.vset-note-text {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #6b7280;
+}
+
+.root.dark .vset-note-text {
+    -fx-text-fill: #a5b0c2;
+}
+
+/* ---------- Java 路径框 ---------- */
+.vset-path-field {
+    -fx-background-color: rgba(255,255,255,0.85);
+    -fx-border-color: rgba(0,0,0,0.10);
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 7 8 7 12;
+    -fx-min-height: 44;
+}
+
+.vset-path-field.focused {
+    -fx-border-color: #3b82f6;
+    -fx-background-color: #ffffff;
+}
+
+.root.dark .vset-path-field {
+    -fx-background-color: rgba(255,255,255,0.07);
+    -fx-border-color: rgba(255,255,255,0.14);
+}
+
+.root.dark .vset-path-field.focused {
+    -fx-border-color: #60a5fa;
+    -fx-background-color: rgba(255,255,255,0.10);
+}
+
+/* 容器内的输入框去掉自身的边框与背景（描边由容器承担） */
+.vset-path-field .input-field,
+.vset-path-field .input-field:focused {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-effect: null;
+    -fx-padding: 0;
+    -fx-min-height: 26;
+    -fx-pref-height: 28;
+}
+
+.root.dark .vset-path-field .input-field,
+.root.dark .vset-path-field .input-field:focused {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.vset-browse-btn {
+    -fx-background-color: rgba(59,130,246,0.10);
+    -fx-border-color: rgba(59,130,246,0.22);
+    -fx-border-width: 1;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-text-fill: #3b82f6;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+    -fx-padding: 6 12;
+    -fx-cursor: hand;
+}
+
+.vset-browse-btn:hover {
+    -fx-background-color: rgba(59,130,246,0.18);
+}
+
+.root.dark .vset-browse-btn {
+    -fx-background-color: rgba(96,165,250,0.12);
+    -fx-border-color: rgba(96,165,250,0.30);
+    -fx-text-fill: #60a5fa;
+}
+
+/* ---------- 大数值 + 单位 ---------- */
+.vset-value {
+    -fx-font-family: "Consolas", "Monaco", "Courier New", monospace;
+    -fx-font-size: 22px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #3b82f6;
+}
+
+.root.dark .vset-value {
+    -fx-text-fill: #60a5fa;
+}
+
+.vset-value-unit {
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #6b7280;
+}
+
+.root.dark .vset-value-unit {
+    -fx-text-fill: #94a3b8;
+}
+
+/* ---------- 滑块 / 档位 / 小数输入 ---------- */
+.vset-slider {
+    -fx-min-width: 200;
+    -fx-max-width: 5000;
+}
+
+.vset-chips {
+    -fx-padding: 2 0 0 0;
+}
+
+.vset-chip {
+    -fx-background-color: rgba(255,255,255,0.72);
+    -fx-border-color: rgba(0,0,0,0.09);
+    -fx-border-width: 1;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 6 13;
+    -fx-font-size: 11.5px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #4b5563;
+    -fx-cursor: hand;
+}
+
+.vset-chip:hover {
+    -fx-background-color: rgba(59,130,246,0.10);
+    -fx-border-color: rgba(59,130,246,0.40);
+    -fx-text-fill: #3b82f6;
+}
+
+.vset-chip.active {
+    -fx-background-color: #3b82f6;
+    -fx-border-color: #3b82f6;
+    -fx-text-fill: #ffffff;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.35), 10, 0, 0, 3);
+}
+
+.root.dark .vset-chip {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-border-color: rgba(255,255,255,0.18);
+    -fx-text-fill: #cbd5e1;
+}
+
+.root.dark .vset-chip:hover {
+    -fx-background-color: rgba(96,165,250,0.16);
+    -fx-border-color: rgba(96,165,250,0.40);
+    -fx-text-fill: #93c5fd;
+}
+
+.root.dark .vset-chip.active {
+    -fx-background-color: #3b82f6;
+    -fx-border-color: #3b82f6;
+    -fx-text-fill: #ffffff;
+}
+
+.vset-unit-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #6b7280;
+}
+
+.root.dark .vset-unit-label {
+    -fx-text-fill: #94a3b8;
+}
+
+.vset-mono {
+    -fx-font-family: "Consolas", "Monaco", "Courier New", monospace;
+}
+
+.vset-num {
+    -fx-alignment: center;
+}
+
+/* ---------- 版本隔离回显框 ---------- */
+.vset-readout {
+    -fx-background-color: rgba(59,130,246,0.07);
+    -fx-border-color: rgba(59,130,246,0.26);
+    -fx-border-style: dashed;
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 10 13;
+}
+
+.vset-readout.off {
+    -fx-background-color: rgba(0,0,0,0.035);
+    -fx-border-color: rgba(0,0,0,0.14);
+    -fx-opacity: 0.65;
+}
+
+.vset-ro-text {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #4b5563;
+}
+
+.root.dark .vset-readout {
+    -fx-background-color: rgba(96,165,250,0.10);
+    -fx-border-color: rgba(96,165,250,0.30);
+}
+
+.root.dark .vset-readout.off {
+    -fx-background-color: rgba(255,255,255,0.05);
+    -fx-border-color: rgba(255,255,255,0.16);
+}
+
+.root.dark .vset-ro-text {
+    -fx-text-fill: #cbd5e1;
+}
+
+/* ---------- 版本卡：统计与路径小字 ---------- */
+.vset-summary {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #6b7280;
+}
+
+.vset-summary.warn {
+    -fx-text-fill: #b45309;
+}
+
+.root.dark .vset-summary {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .vset-summary.warn {
+    -fx-text-fill: #fbbf24;
+}
+
+.vset-path-note {
+    -fx-font-family: "Consolas", "Monaco", "Courier New", monospace;
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #9ca3af;
+}
+
+.root.dark .vset-path-note {
+    -fx-text-fill: #8b98ab;
+}
+
+/* ---------- 版本下拉（富样式触发区 + 两行候选行） ---------- */
+.vset-version-combo {
+    -fx-background-color: rgba(255,255,255,0.85);
+    -fx-border-color: rgba(0,0,0,0.10);
+    -fx-border-width: 1;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-padding: 5 10;
+}
+
+.vset-version-combo:hover {
+    -fx-border-color: rgba(59,130,246,0.40);
+}
+
+.vset-version-combo:focused,
+.vset-version-combo:showing {
+    -fx-border-color: #3b82f6;
+}
+
+.vset-version-combo .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 3 2;
+}
+
+.vset-version-combo .arrow {
+    -fx-background-color: #4b5563;
+}
+
+.root.dark .vset-version-combo .arrow {
+    -fx-background-color: #cbd5e1;
+}
+
+.root.dark .vset-version-combo {
+    -fx-background-color: rgba(255,255,255,0.07);
+    -fx-border-color: rgba(255,255,255,0.14);
+}
+
+.root.dark .vset-version-combo:hover {
+    -fx-border-color: rgba(96,165,250,0.45);
+}
+
+.root.dark .vset-version-combo:focused,
+.root.dark .vset-version-combo:showing {
+    -fx-border-color: #60a5fa;
+}
+
+.vset-vitem-name {
+    -fx-font-size: 12.5px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1f2937;
+}
+
+.vset-vitem-meta {
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #9ca3af;
+}
+
+/* 选中行的圆点标记（轻量实现：纯 CSS 圆点，避免每个单元格解析 SVG） */
+.vset-vitem-check {
+    -fx-min-width: 12;
+    -fx-min-height: 12;
+    -fx-max-width: 12;
+    -fx-max-height: 12;
+    -fx-background-radius: 999;
+    -fx-background-color: #3b82f6;
+}
+
+.root.dark .vset-vitem-check {
+    -fx-background-color: #60a5fa;
+}
+
+.root.dark .vset-vitem-name {
+    -fx-text-fill: #f9fafb;
+}
+
+.root.dark .vset-vitem-meta {
+    -fx-text-fill: #94a3b8;
+}
+
+/* ---------- 复制配置按钮（通栏虚线） ---------- */
+.vset-copy-btn {
+    -fx-background-color: rgba(59,130,246,0.05);
+    -fx-border-color: rgba(59,130,246,0.38);
+    -fx-border-style: dashed;
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 10 14;
+    -fx-text-fill: #3b82f6;
+    -fx-font-size: 12.5px;
+    -fx-font-weight: 700;
+    -fx-cursor: hand;
+    -fx-alignment: center;
+}
+
+.vset-copy-btn:hover {
+    -fx-background-color: rgba(59,130,246,0.13);
+    -fx-border-color: rgba(59,130,246,0.62);
+}
+
+.root.dark .vset-copy-btn {
+    -fx-background-color: rgba(96,165,250,0.10);
+    -fx-border-color: rgba(96,165,250,0.55);
+    -fx-text-fill: #7cb3ff;
+}
+
+.root.dark .vset-copy-btn:hover {
+    -fx-background-color: rgba(96,165,250,0.16);
+    -fx-border-color: rgba(96,165,250,0.65);
+}
+
+/* ---------- 底部固定操作栏（浮动圆角栏，对齐卡片的圆角体系） ---------- */
+.vset-footer {
+    -fx-padding: 10 14;
+    -fx-background-color: rgba(255,255,255,0.88);
+    -fx-border-color: rgba(0,0,0,0.09);
+    -fx-border-width: 1;
+    -fx-border-radius: 14;
+    -fx-background-radius: 14;
+    -fx-effect: dropshadow(gaussian, rgba(13,33,55,0.10), 16, 0, 0, 4);
+}
+
+.root.dark .vset-footer {
+    -fx-background-color: rgba(255,255,255,0.07);
+    -fx-border-color: rgba(255,255,255,0.14);
+}
+
+.vset-footer-hint {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #6b7280;
+}
+
+.root.dark .vset-footer-hint {
+    -fx-text-fill: #94a3b8;
+}
+
+.vset-fh-dot {
+    -fx-min-width: 7;
+    -fx-min-height: 7;
+    -fx-max-width: 7;
+    -fx-max-height: 7;
+    -fx-background-radius: 999;
+    -fx-background-color: #3b82f6;
+}
+
+.vset-fh-dot.dirty {
+    -fx-background-color: #f59e0b;
+}
+
+.vset-btn-ghost {
+    -fx-background-color: rgba(0,0,0,0.045);
+    -fx-border-color: rgba(0,0,0,0.07);
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 9 20;
+    -fx-text-fill: #4b5563;
+    -fx-font-size: 12.5px;
+    -fx-font-weight: 700;
+    -fx-cursor: hand;
+}
+
+/* 底部「保存设置」：实心蓝主按钮（对齐参考稿 CTA，覆盖 .btn-primary 的白底样式） */
+.vset-save-btn {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: transparent;
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 10 22;
+    -fx-font-size: 12.5px;
+    -fx-font-weight: 700;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.30), 10, 0, 0, 3);
+}
+
+.vset-save-btn:hover {
+    -fx-background-color: #2563eb;
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .vset-save-btn {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .vset-save-btn:hover {
+    -fx-background-color: #2563eb;
+}
+
+.vset-btn-ghost:hover {
+    -fx-background-color: rgba(0,0,0,0.08);
+    -fx-text-fill: #1f2937;
+}
+
+.root.dark .vset-btn-ghost {
+    -fx-background-color: rgba(255,255,255,0.07);
+    -fx-border-color: rgba(255,255,255,0.10);
+    -fx-text-fill: #cbd5e1;
+}
+
+.root.dark .vset-btn-ghost:hover {
+    -fx-background-color: rgba(255,255,255,0.13);
+    -fx-text-fill: #f9fafb;
+}
+
+/* 复制弹窗里的源版本行（禁用态） */
+.vset-row-disabled {
+    -fx-opacity: 0.65;
+}
+
+/* ---------- 参数输入框提亮 ---------- */
+/* 参考稿的输入区为白底；工程基础类的 gray 底在白色卡片上容易被看成禁用态，这里统一提亮 */
+.vset-card .textarea-field {
+    -fx-background-color: rgba(255,255,255,0.85);
+}
+
+.vset-card .textarea-field:focused {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #3b82f6;
+}
+
+.root.dark .vset-card .textarea-field {
+    -fx-background-color: rgba(255,255,255,0.07);
+}
+
+.root.dark .vset-card .textarea-field:focused {
+    -fx-background-color: rgba(255,255,255,0.10);
+    -fx-border-color: #60a5fa;
+}

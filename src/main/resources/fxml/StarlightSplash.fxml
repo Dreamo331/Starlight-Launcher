@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.Rectangle?>
+<?import javafx.scene.text.Text?>
+
+<StackPane fx:id="root"
+           xmlns="http://javafx.com/javafx/17"
+           xmlns:fx="http://javafx.com/fxml"
+           fx:controller="com.example.starlight.newui.StarlightSplashController"
+           prefWidth="520" prefHeight="325"
+           styleClass="splash-root">
+
+    <!-- ============ 第 1 层：背景画布 ============ -->
+    <Canvas fx:id="bgCanvas" width="520" height="325"/>
+
+    <!-- ============ 第 2 层：光效画布（ADD + Bloom 在 Java 里设置） ============ -->
+    <Canvas fx:id="glowCanvas" width="520" height="325"/>
+
+    <!-- ============ 第 3 层：暗角遮罩 ============ -->
+    <Region styleClass="mask-vignette" mouseTransparent="true"/>
+
+    <!-- ============ 第 4 层：边缘压暗 ============ -->
+    <Region styleClass="mask-edge" mouseTransparent="true"/>
+
+    <!-- ============ 第 5 层：UI（标题 / 副标题 / 进度 / 状态） ============ -->
+    <VBox fx:id="uiLayer"
+          alignment="BOTTOM_CENTER"
+          spacing="0"
+          mouseTransparent="true"
+          styleClass="ui-layer">
+
+        <!-- 品牌区 -->
+        <VBox alignment="CENTER" styleClass="brand">
+            <VBox.margin>
+                <Insets bottom="16"/>
+            </VBox.margin>
+
+            <HBox fx:id="titleBox" alignment="CENTER" spacing="9.5"
+                  styleClass="title-box">
+                <Text text="S" styleClass="title-char"/>
+                <Text text="T" styleClass="title-char"/>
+                <Text text="A" styleClass="title-char"/>
+                <Text text="R" styleClass="title-char"/>
+                <Text text="L" styleClass="title-char"/>
+                <Text text="I" styleClass="title-char"/>
+                <Text text="G" styleClass="title-char"/>
+                <Text text="H" styleClass="title-char"/>
+                <Text text="T" styleClass="title-char"/>
+            </HBox>
+
+            <HBox fx:id="subBox" alignment="CENTER" spacing="6.1"
+                  styleClass="sub-box">
+                <HBox.margin>
+                    <Insets top="5"/>
+                </HBox.margin>
+                <Text text="L" styleClass="sub-char"/>
+                <Text text="A" styleClass="sub-char"/>
+                <Text text="U" styleClass="sub-char"/>
+                <Text text="N" styleClass="sub-char"/>
+                <Text text="C" styleClass="sub-char"/>
+                <Text text="H" styleClass="sub-char"/>
+                <Text text="E" styleClass="sub-char"/>
+                <Text text="R" styleClass="sub-char"/>
+            </HBox>
+        </VBox>
+
+        <!-- 加载区 -->
+        <VBox fx:id="loaderPane" alignment="CENTER" spacing="10"
+              styleClass="loader">
+            <VBox.margin>
+                <Insets bottom="34"/>
+            </VBox.margin>
+
+            <!-- maxWidth 锁住 200：否则被 VBox 拉伸到全宽，进度条会从窗口左缘起画 -->
+            <StackPane prefWidth="200" prefHeight="2" maxWidth="200">
+                <Region styleClass="progress-track"
+                        prefWidth="200" prefHeight="2"/>
+                <HBox alignment="CENTER_LEFT" prefWidth="200" prefHeight="2">
+                    <Rectangle fx:id="progressFill"
+                               width="0" height="2"
+                               arcWidth="2" arcHeight="2"
+                               styleClass="progress-fill"/>
+                </HBox>
+            </StackPane>
+
+            <Text fx:id="statusText" text="正在初始化…"
+                  styleClass="status-text"/>
+        </VBox>
+    </VBox>
+
+    <!-- ============ 第 6 层：版权 ============ -->
+    <Text fx:id="footerText"
+          text=""
+          styleClass="footer-text"
+          StackPane.alignment="BOTTOM_CENTER"
+          translateY="-9"/>
+
+    <!-- ============ 第 7 层：噪点 ============ -->
+    <Region fx:id="noiseLayer" styleClass="noise-layer"
+            mouseTransparent="true"/>
+</StackPane>

@@ -1,0 +1,463 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- (C) Copyright 2026 Starlight. All rights reserved. -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.starlight</groupId>
+    <artifactId>starlight-launcher-cli</artifactId>
+    <version>2.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>Starlight Launcher</name>
+    <description>Starlight Launcher - Cross-platform Minecraft Launcher (JavaFX)</description>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <gson.version>2.10.1</gson.version>
+        <jackson.version>2.17.2</jackson.version>
+        <zxing.version>3.5.3</zxing.version>
+        <!-- 修正：Kotlin 1.9.24 为已确认存在的稳定老版本 -->
+        <kotlin.version>1.9.24</kotlin.version>
+    </properties>
+
+    <dependencies>
+        <!-- Gson: JSON parser required by StarlightLauncher core lib -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>${gson.version}</version>
+        </dependency>
+
+        <!-- SLF4J + Logback for structured logging -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>2.0.16</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.5.16</version>
+        </dependency>
+
+        <!-- ice4j: ICE protocol implementation for NAT traversal -->
+        <dependency>
+            <groupId>org.jitsi</groupId>
+            <artifactId>ice4j</artifactId>
+            <version>3.2-10-gfcadc70</version>
+        </dependency>
+
+        <!-- Jackson: generate .bat launch scripts -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- ZXing: generate QR codes for error log links -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>${zxing.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>javase</artifactId>
+            <version>${zxing.version}</version>
+        </dependency>
+
+        <!-- JavaFX -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>17.0.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-fxml</artifactId>
+            <version>17.0.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-web</artifactId>
+            <version>17.0.6</version>
+        </dependency>
+
+        <!-- StarlightLauncher core library (local JAR in lib/) -->
+        <!-- 使用前请先安装到本地仓库：
+             mvn install:install-file -Dfile=lib/StarlightLauncher-2.0.0.jar -DgroupId=com.starlight -DartifactId=starlight-launcher-core -Dversion=2.0.0 -Dpackaging=jar -->
+        <dependency>
+            <groupId>com.starlight</groupId>
+            <artifactId>starlight-launcher-core</artifactId>
+            <version>2.0.0</version>
+        </dependency>
+
+        <!-- Kotlin -->
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-stdlib-jdk8</artifactId>
+            <version>${kotlin.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-reflect</artifactId>
+            <version>${kotlin.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-test</artifactId>
+            <version>${kotlin.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JavaMail: send feedback emails via 139 SMTP -->
+        <dependency>
+            <groupId>com.sun.mail</groupId>
+            <artifactId>javax.mail</artifactId>
+            <version>1.6.2</version>
+        </dependency>
+
+        <!-- Apache Commons Compress: tar.gz extraction (Terracotta) -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.26.2</version>
+        </dependency>
+
+        <!-- JetBrains Annotations -->
+        <dependency>
+            <groupId>org.jetbrains</groupId>
+            <artifactId>annotations</artifactId>
+            <version>24.1.0</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- OSHI: 系统硬件信息（磁盘读写速率统计，与任务管理器性能页一致） -->
+        <dependency>
+            <groupId>com.github.oshi</groupId>
+            <artifactId>oshi-core</artifactId>
+            <version>6.6.3</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <includes>
+                    <include>**/*.fxml</include>
+                    <include>**/*.css</include>
+                    <include>**/*.png</include>
+                    <include>**/*.properties</include>
+                    <include>**/*.xml</include>
+                    <include>**/*.html</include>
+                    <include>**/*.json</include>
+                    <!-- Mod 中文名字典（assets/mod_data.txt、assets/modpack_data.txt）等纯文本资源 -->
+                    <include>**/*.txt</include>
+                    <!-- 品牌 logo（svg/GitHub_light.svg、svg/gitee_logo_black.svg）：AppIcons 运行期读取 -->
+                    <include>**/*.svg</include>
+                </includes>
+            </resource>
+        </resources>
+
+        <plugins>
+            <!-- JavaFX Maven Plugin -->
+            <plugin>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-maven-plugin</artifactId>
+                <version>0.0.8</version>
+                <configuration>
+                    <mainClass>com.example.starlight.MainApp</mainClass>
+                </configuration>
+            </plugin>
+
+            <!-- Package executable fat JAR (used for agent-based config collection) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.7.1</version>
+                <configuration>
+                    <descriptors>
+                        <descriptor>${project.basedir}/src/main/assembly/fatjar.xml</descriptor>
+                    </descriptors>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.example.starlight.MainApp</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>make-assembly</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Run plugin: execute project directly -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>com.example.starlight.MainApp</mainClass>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Kotlin compiler -->
+            <plugin>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-maven-plugin</artifactId>
+                <version>${kotlin.version}</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <id>compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                        <configuration>
+                            <sourceDirs>
+                                <sourceDir>src/main/kotlin</sourceDir>
+                                <sourceDir>target/generated-sources/annotations</sourceDir>
+                            </sourceDirs>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>test-compile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>test-compile</goal>
+                        </goals>
+                        <configuration>
+                            <sourceDirs>
+                                <sourceDir>src/test/java</sourceDir>
+                                <sourceDir>target/generated-test-sources/test-annotations</sourceDir>
+                            </sourceDirs>
+                        </configuration>
+                    </execution>
+                </executions>
+                <configuration>
+                    <jvmTarget>${maven.compiler.target}</jvmTarget>
+                </configuration>
+            </plugin>
+
+            <!-- Maven Compiler Plugin (disabled default executions because Kotlin handles compilation) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>testCompile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>testCompile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+
+            <!-- Build time: copy JavaFX module JARs to target/modules/ for module path loading -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-javafx-modules</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.openjfx</groupId>
+                                    <artifactId>javafx-controls</artifactId>
+                                    <classifier>win</classifier>
+                                    <version>17.0.6</version>
+                                    <outputDirectory>${project.build.directory}/modules</outputDirectory>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.openjfx</groupId>
+                                    <artifactId>javafx-fxml</artifactId>
+                                    <classifier>win</classifier>
+                                    <version>17.0.6</version>
+                                    <outputDirectory>${project.build.directory}/modules</outputDirectory>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.openjfx</groupId>
+                                    <artifactId>javafx-graphics</artifactId>
+                                    <classifier>win</classifier>
+                                    <version>17.0.6</version>
+                                    <outputDirectory>${project.build.directory}/modules</outputDirectory>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.openjfx</groupId>
+                                    <artifactId>javafx-base</artifactId>
+                                    <classifier>win</classifier>
+                                    <version>17.0.6</version>
+                                    <outputDirectory>${project.build.directory}/modules</outputDirectory>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.openjfx</groupId>
+                                    <artifactId>javafx-web</artifactId>
+                                    <classifier>win</classifier>
+                                    <version>17.0.6</version>
+                                    <outputDirectory>${project.build.directory}/modules</outputDirectory>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.openjfx</groupId>
+                                    <artifactId>javafx-media</artifactId>
+                                    <classifier>win</classifier>
+                                    <version>17.0.6</version>
+                                    <outputDirectory>${project.build.directory}/modules</outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
+                            <overWriteReleases>false</overWriteReleases>
+                            <overWriteSnapshots>false</overWriteSnapshots>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- GluonFX Native Image plugin (GraalVM) - generates single unextractable EXE -->
+            <plugin>
+                <groupId>com.gluonhq</groupId>
+                <artifactId>gluonfx-maven-plugin</artifactId>
+                <version>1.0.29</version>
+                <configuration>
+                    <mainClass>com.example.starlight.MainApp</mainClass>
+                    <verbose>true</verbose>
+                    <!-- 与项目 JavaFX 17 主版本匹配的 Gluon 静态 SDK（用于 native-image 静态链接） -->
+                    <javafxStaticSdkVersion>17.0.8</javafxStaticSdkVersion>
+                    <!-- 将所有运行期资源（FXML/CSS/图片/SVG/配置）打入原生镜像 -->
+                    <resourcesList>
+                        <list>.*\.(fxml|css|png|jpg|jpeg|ico|svg|properties|json|xml|html|txt|ttf|otf|dll|dat|so|dylib)$</list>
+                    </resourcesList>
+                    <!-- Gson 反射模型类：Native Image 关闭运行期反射，必须显式注册
+                         （LaunchRecord 最近游玩 / Community* 社区登录 / Modrinth* 模组库 / CacheEntry） -->
+                    <reflectionList>
+                        <list>com.example.starlight.launch.LaunchRecord</list>
+                        <list>com.example.starlight.community.CommunityApi$CommunityUser</list>
+                        <list>com.example.starlight.community.CommunityApi$CommunityPost</list>
+                        <list>com.example.starlight.community.CommunityApi$CommunityComment</list>
+                        <list>com.example.starlight.ModsApi.ModrinthAPI$ModrinthProject</list>
+                        <list>com.example.starlight.ModsApi.ModrinthAPI$GameVersion</list>
+                        <list>com.example.starlight.ModsApi.ModrinthAPI$ModrinthVersion</list>
+                        <list>com.example.starlight.ModsApi.ModrinthAPI$ModrinthFile</list>
+                        <list>com.example.starlight.version.CacheManager$CacheEntry</list>
+                    </reflectionList>
+                    <!-- JNI 注册：应用类 native 方法在 Native Image 下默认不启用 JNI 支持
+                         （运行期按符号名查找抛 UnsatisfiedLinkError），必须在此显式注册，
+                         substrate 会生成 jni-config.json 并启用 -H:+JNI，使
+                         SystemInfoMonitor.nativeDiskReadMBps/WriteMBps 链接到
+                         native/management_stub.c 的 PDH 桩（JDK 类桩不受此限制） -->
+                    <jniList>
+                        <list>com.example.starlight.util.SystemInfoMonitor</list>
+                    </jniList>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <!-- Native packaging profile: jlink + jpackage (kept for alternative use) -->
+    <profiles>
+        <profile>
+            <id>native-package</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <!-- jlink: create trimmed JRE runtime -->
+                            <execution>
+                                <id>jlink-create-runtime</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>jlink</executable>
+                                    <commandlineArgs>--module-path "${java.home}/jmods;${project.build.directory}/modules" --add-modules java.base,java.logging,java.xml,java.desktop,java.management,java.naming,java.net.http,java.prefs,java.scripting,java.sql,jdk.management,jdk.unsupported,jdk.crypto.ec,jdk.crypto.mscapi,jdk.localedata,jdk.charsets,javafx.controls,javafx.fxml,javafx.web --output "${project.build.directory}/runtime" --strip-debug --no-header-files --no-man-pages --compress=2</commandlineArgs>
+                                </configuration>
+                            </execution>
+                            <!-- jpackage: portable app-image directory (no installer, no temp extraction) -->
+                            <execution>
+                                <id>jpackage-create-app-image</id>
+                                <phase>install</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>jpackage</executable>
+                                    <commandlineArgs>--name StarlightLauncher --app-version 2.0.0 --type app-image --input "${project.build.directory}" --main-jar ${project.build.finalName}-jar-with-dependencies.jar --main-class com.example.starlight.MainApp --runtime-image "${project.build.directory}/runtime" --dest "${project.basedir}/build/StarlightLauncherApp"</commandlineArgs>
+                                </configuration>
+                            </execution>
+                            <!-- jpackage: installer EXE (not the single-file native approach) -->
+                            <execution>
+                                <id>jpackage-create-image</id>
+                                <phase>install</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>jpackage</executable>
+                                    <commandlineArgs>--name StarlightLauncher --app-version 2.0.0 --type exe --input "${project.build.directory}" --main-jar ${project.build.finalName}-jar-with-dependencies.jar --main-class com.example.starlight.MainApp --runtime-image "${project.build.directory}/runtime" --dest "${project.basedir}/build/StarlightLauncher" --win-dir-chooser --win-menu</commandlineArgs>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

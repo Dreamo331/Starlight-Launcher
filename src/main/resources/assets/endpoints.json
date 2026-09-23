@@ -1,0 +1,111 @@
+{
+  "_meta": {
+    "说明": "星光启动器密钥与自家服务地址集中配置。keys/services 两节由 com.example.starlight.config.Endpoints 运行时读取（classpath 资源 /assets/endpoints.json），改动后需重新打包；reference 节仅为归档备查（对应仍硬编码在源码里的公共端点），代码不读取。各节内的 _sources 为「值 → 原硬编码位置（文件:行）」的来源对照。",
+    "创建日期": "2026-09-20"
+  },
+
+  "keys": {
+    "_sources": {
+      "curseforgeApiKey": "CurseForgeAPI.java:56-57（原纯硬编码，现改由本文件读取）",
+      "nvidiaNimApiKey": "LongCatChat.java:24-25（保留 -Dstarlight.ai.apiKey 系统属性覆盖）",
+      "communityApiKey": "CommunityApi.java:56-58（保留 -Dstarlight.community.apiKey 系统属性覆盖）",
+      "microsoftClientId": "MinecraftAuthLauncherDeviceCode.java:33（Azure 公开客户端 ID）",
+      "smtp.host": "FeedbackEmailSender.java:26",
+      "smtp.port": "FeedbackEmailSender.java:27",
+      "smtp.user": "FeedbackEmailSender.java:28",
+      "smtp.password": "FeedbackEmailSender.java:29（139 邮箱 SMTP 授权码）",
+      "smtp.to": "FeedbackEmailSender.java:30"
+    },
+    "curseforgeApiKey": "$2a$10$M4rv7dbTdjKRIzU51gTdIu.HrzLmK2u3DeqFZtEsmEyObg9XTcLUe",
+    "nvidiaNimApiKey": "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",
+    "communityApiKey": "api-2c1b4ae36240c25d1e6e01c9eeacf728bd197c3c8610d8c0",
+    "microsoftClientId": "5ef82875-f627-46ad-8350-fd5073d8b7c1",
+    "smtp": {
+      "host": "smtp.139.com",
+      "port": "465",
+      "user": "13278050205@139.com",
+      "password": "8bd4dfd233f424c04d00",
+      "to": "13278050205@139.com"
+    }
+  },
+
+  "services": {
+    "_sources": {
+      "communityApiUrl": "CommunityApi.java:49、UpdateChecker.java:31",
+      "communitySiteUrl": "CommunityApi.java:362（头像相对路径补全）、CommunityPage.java:146（打开官网按钮）",
+      "logUploadUrl": "UIGeneralControlClass.java:102、LogService.java:22、FrpService.java:30（三处相同的兜底默认值）",
+      "frpControlHost": "FrpClient.java:14、FrpService.java:24、UIGeneralControlClass.java:1300",
+      "frpControlPort": "FrpClient.java:15",
+      "sponsorUrl": "SponsorPage.java:30（爱发电赞助页）",
+      "colorBlindOverlayUrl": "ColorBlindOverlayManager.java:53-54（色盲辅助工具 Gitee Release 下载地址）"
+    },
+    "communityApiUrl": "https://slmc.cc.cd/auth.php",
+    "communitySiteUrl": "https://slmc.cc.cd",
+    "logUploadUrl": "http://121.196.173.18:19000/api/logs",
+    "frpControlHost": "wfrp.starlightmc.top",
+    "frpControlPort": 11400,
+    "sponsorUrl": "https://ifdian.net/order/create?plan_id=953af8c4b33b11f0adc85254001e7c00&product_type=0&remark=&affiliate_code=&fr=afcom",
+    "colorBlindOverlayUrl": "https://gitee.com/Horses-always-love-to-run/color-blind-overlay/releases/download/v1.0.0-RC/ColorBlindOverlay.exe"
+  },
+
+  "reference": {
+    "_说明": "以下公共端点按方案约定仍硬编码在源码中、代码不改，仅归档备查；「——」后为 来源（文件:行）。联机中继默认 ws://38.76.161.218:8080 与 SL-MinecraftLAN 模块下载地址已外置于 assets/multiplayer.json；Terracotta 下载源/许可证见 assets/terracotta.json、assets/licenses.json。",
+    "mojang官方": {
+      "版本清单packages": "https://launchermeta.mojang.com/v1/packages —— AssetDownloader.java:32、DownloadProvider.java:31",
+      "资源CDN": "https://resources.download.minecraft.net —— AssetDownloader.java:33、MojangDownloadProvider.java:22",
+      "piston-meta": "https://piston-meta.mojang.com（版本清单 v2）—— MojangDownloadProvider.java:17",
+      "库CDN": "https://libraries.minecraft.net —— LibraryDownloader.java:33",
+      "头像API": "https://api.mojang.com 与 https://sessionserver.mojang.com —— MojangAvatarFetcher.java:46-47"
+    },
+    "微软认证链": {
+      "设备码": "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode —— MinecraftAuthLauncherDeviceCode.java:35",
+      "令牌": "https://login.microsoftonline.com/consumers/oauth2/v2.0/token —— MinecraftAuthLauncherDeviceCode.java:36",
+      "Xbox用户认证": "https://user.auth.xboxlive.com/user/authenticate —— MinecraftAuthLauncherDeviceCode.java:37",
+      "XSTS授权": "https://xsts.auth.xboxlive.com/xsts/authorize —— MinecraftAuthLauncherDeviceCode.java:38",
+      "MC登录": "https://api.minecraftservices.com/authentication/login_with_xbox —— MinecraftAuthLauncherDeviceCode.java:39",
+      "MC档案": "https://api.minecraftservices.com/minecraft/profile —— MinecraftAuthLauncherDeviceCode.java:40",
+      "RelyingParty": "http://auth.xboxlive.com 与 rp://api.minecraftservices.com/ —— MinecraftAuthLauncherDeviceCode.java:305,330,570,589"
+    },
+    "国内镜像": {
+      "BMCLAPI": "https://bmclapi2.bangbang93.com —— VersionDownloadService.java:46-47、LoaderInstallEngine.java:32,35、GameResourceCompleter.java:64,86、AssetDownloader.java:34,83、BMCLAPIDownloadProvider.java:25-46、ModrinthRemoteModRepository.java（bmclapi/modrinth 分支 :627-628）",
+      "MCBBS": "https://download.mcbbs.net —— MCBBSDownloadProvider.java:25-53",
+      "MCIM反代": "https://mod.mcimirror.top —— CurseForgeAPI.java:118、ModrinthRemoteModRepository.java:45、RemoteImageLoader.java:172,175,209",
+      "腾讯云Maven": "https://mirrors.cloud.tencent.com/nexus/repository/maven-public —— BMCLAPIDownloadProvider.java:38-39"
+    },
+    "Mod平台": {
+      "ModrinthAPI": "https://api.modrinth.com/v2/ —— ModrinthAPI.java:29、ModrinthRemoteModRepository.java:37",
+      "Modrinth页面": "https://modrinth.com —— ModrinthRemoteModRepository.java:217,350",
+      "CurseForgeAPI": "https://api.curseforge.com —— CurseForgeAPI.java:115",
+      "CurseForge页面": "https://www.curseforge.com/minecraft/ —— CurseForgeAPI.java:121",
+      "MC百科": "https://www.mcmod.cn —— ModTranslations.java:43,51",
+      "HMCL模组词典": "https://raw.githubusercontent.com/HMCL-dev/HMCL（mod_data.txt / modpack_data.txt）—— ModDictionaryManager.java:64-67"
+    },
+    "加载器": {
+      "Fabric-meta": "https://meta.fabricmc.net/v2 —— LoaderInstallEngine.java:28、FabricProvider.java",
+      "Fabric-maven": "https://maven.fabricmc.net —— LoaderInstallEngine.java:29",
+      "Forge-maven": "https://maven.minecraftforge.net —— LoaderInstallEngine.java:30",
+      "NeoForge-maven": "https://maven.neoforged.net —— LoaderInstallEngine.java:31",
+      "Quilt-meta": "https://meta.quiltmc.org/v3 —— QuiltProvider.java:18,22",
+      "OptiFine": "https://optifine.net/downloads —— OptiFineProvider.java:28",
+      "FabricAPI项目ID": "P7dR8mSH —— FabricAPIProvider.java:26；QSL 项目ID qsl —— QSLProvider.java:26"
+    },
+    "JDK安装源": {
+      "清华Adoptium": "https://mirrors.tuna.tsinghua.edu.cn（JDK 8/17/21）—— JavaInstall.java:31-33",
+      "华为云备用": "https://repo.huaweicloud.com —— JavaInstall.java:36-38"
+    },
+    "皮肤与外置登录": {
+      "littleskin CSL默认": "https://littleskin.cn/csl —— Skin.java:146,153",
+      "littleskin Yggdrasil默认": "https://littleskin.cn/api/yggdrasil —— MinecraftLauncherBuilder.java:139、UIGeneralControlClass.java:2100-2102",
+      "authlib-injector清单": "https://authlib-injector.yushi.moe/artifact/latest.json —— AuthlibInjectorSupport.java:34",
+      "authlib-injector下载": "https://github.com/yushijinhun/authlib-injector（版本 1.2.6）—— AuthlibInjectorSupport.java:35、OfflineSkinManager.java:87-89"
+    },
+    "其它": {
+      "内置搜索": "https://cn.bing.com/search?q= —— search.java:42",
+      "Terracotta节点列表": "https://terracotta.glavo.site/nodes —— TerracottaNodeList.java:23",
+      "Terracotta反馈": "https://docs.hmcl.net/multiplayer/feedback.html —— TerracottaMetadata.java:88",
+      "NVIDIA-NIM基址": "https://integrate.api.nvidia.com/v1（模型 nvidia/nemotron-3.5-lightning-30b-a3b，端点 /chat/completions）—— LongCatChat.java:26-30",
+      "MC局域网组播": "224.0.2.60:4445 —— MinecraftLanListenerV2.java:18-19（Minecraft 标准组播地址）",
+      "网络测速列表": "见 NetworkCheckPage.java:72（含 Mojang/BMCLAPI 等测速目标）"
+    }
+  }
+}

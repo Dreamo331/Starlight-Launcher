@@ -1,0 +1,13 @@
+/* ================================================== */
+/* Starlight Launcher - 启动动画样式表               */
+/* ================================================== */
+
+/* 根容器 - 透明背景 */
+StackPane {
+    -fx-background-color: transparent;
+}
+
+/* 模拟软件启动窗口 */
+#launcherWindow {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.8), 50, 0, 0, 20);
+}

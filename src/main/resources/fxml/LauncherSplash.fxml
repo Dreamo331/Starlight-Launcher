@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.shape.*?>
+<?import javafx.geometry.Insets?>
+
+<AnchorPane xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="application.StarlightLauncherSplash"
+            fx:id="launcherWindow"
+            prefWidth="660" prefHeight="400"
+            style="-fx-background-color: #13162b; -fx-background-radius: 16;"
+            stylesheets="@css/LauncherSplash.css">
+
+    <!-- 光柱加载动画 -->
+    <HBox fx:id="starPane" prefWidth="280" prefHeight="60" alignment="CENTER"
+          AnchorPane.topAnchor="100" AnchorPane.leftAnchor="50" AnchorPane.rightAnchor="50"/>
+
+    <!-- 主标题 -->
+    <Label text="Starlight Launcher"
+           AnchorPane.topAnchor="230" AnchorPane.leftAnchor="70"
+           style="-fx-text-fill: #ffffff; -fx-font-size: 46px; -fx-font-weight: 700;"/>
+
+    <!-- 副标题 -->
+    <Label text="快速、轻量的应用启动器"
+           AnchorPane.topAnchor="310" AnchorPane.leftAnchor="70"
+           style="-fx-text-fill: #8b8ea5; -fx-font-size: 16px; -fx-opacity: 0.8;"/>
+
+    <!-- 底部版权信息 -->
+    <HBox spacing="10" alignment="CENTER_LEFT"
+          AnchorPane.bottomAnchor="30" AnchorPane.leftAnchor="70" AnchorPane.rightAnchor="70">
+        <Label text="© 2026 Starlight Launcher. All rights reserved."
+               style="-fx-text-fill: #6f7187; -fx-font-size: 14px;"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label text="v2.0.0-alpha.1"
+               style="-fx-text-fill: #6f7187; -fx-font-size: 14px;"/>
+    </HBox>
+</AnchorPane>

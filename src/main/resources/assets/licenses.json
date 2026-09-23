@@ -1,0 +1,9 @@
+[
+  {"name": "JavaFX", "version": "17.0.x", "license": "GPLv2 + Classpath Exception", "url": "https://openjfx.io/"},
+  {"name": "Gson", "version": "2.10.x", "license": "Apache License 2.0", "url": "https://github.com/google/gson"},
+  {"name": "SLF4J", "version": "2.0.x", "license": "MIT License", "url": "https://www.slf4j.org/"},
+  {"name": "Logback", "version": "1.4.x", "license": "EPL 1.0 / LGPL 2.1", "url": "https://logback.qos.ch/"},
+  {"name": "OSHI", "version": "6.4.x", "license": "MIT License", "url": "https://github.com/oshi/oshi"},
+  {"name": "Terracotta", "version": "0.4.2", "license": "GPLv3", "url": "https://github.com/HMCL-dev/terracotta"},
+  {"name": "JFoenix", "version": "9.0.10", "license": "Apache License 2.0", "url": "https://github.com/sshahine/JFoenix"}
+]

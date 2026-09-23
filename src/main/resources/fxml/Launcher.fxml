@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane fx:id="rootPane" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="application.LauncherController" stylesheets="/fxml/css/style.css">
+
+    <top>
+        <VBox styleClass="top-container" fx:id="topContainer">
+            <HBox alignment="CENTER_RIGHT" spacing="8" styleClass="window-controls">
+                <Button styleClass="window-btn, minimize" onAction="#handleMinimize"/>
+                <Button styleClass="window-btn, maximize" onAction="#handleMaximize"/>
+                <Button styleClass="window-btn, close" onAction="#handleClose"/>
+            </HBox>
+
+            <HBox alignment="CENTER" spacing="6" styleClass="tab-bar">
+                <Button text="首页" styleClass="tab-item, selected" onAction="#switchTab" fx:id="homeTab"/>
+                <Button text="资源" styleClass="tab-item" onAction="#switchTab" fx:id="resourcesTab"/>
+                <Button text="社区" styleClass="tab-item" onAction="#switchTab" fx:id="newsTab"/>
+                <Button text="联机" styleClass="tab-item" onAction="#switchTab" fx:id="multiplayerTab"/>
+                <Button text="设置" styleClass="tab-item" onAction="#switchTab" fx:id="settingsTab"/>
+            </HBox>
+        </VBox>
+    </top>
+
+    <center>
+        <HBox styleClass="main-body">
+            <!-- 侧边栏用 ScrollPane 包裹，支持滚动 -->
+            <ScrollPane fitToWidth="true" hbarPolicy="NEVER"
+                        style="-fx-background: transparent; -fx-background-color: transparent;"
+                        visible="false" managed="false" fx:id="sidebarScroll">
+                <VBox styleClass="sidebar" fx:id="sidebar">
+                    <Label styleClass="sidebar-section-title" text="通用"/>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarAccount" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text=""/></graphic>
+                        <text>Account</text>
+                    </Button>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarAbout" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text="ℹ️"/></graphic>
+                        <text>关于</text>
+                    </Button>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarLicense" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text="️"/></graphic>
+                        <text>版权</text>
+                    </Button>
+
+                    <Label styleClass="sidebar-section-title" text="游戏"/>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarGameAccount" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text=""/></graphic>
+                        <text>游戏账户档案</text>
+                    </Button>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarJvm" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text="️"/></graphic>
+                        <text>Java虚拟机与内存</text>
+                    </Button>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarGameDir" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text=""/></graphic>
+                        <text>游戏目录</text>
+                    </Button>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarAdvanced" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text=""/></graphic>
+                        <text>高级设置</text>
+                    </Button>
+
+                    <Label styleClass="sidebar-section-title" text="个性化"/>
+                    <Button styleClass="sidebar-item, selected" onAction="#selectSidebarItem" fx:id="sidebarTheme" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text=""/></graphic>
+                        <text>主题与背景</text>
+                    </Button>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarMainUi" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text="️"/></graphic>
+                        <text>主界面</text>
+                    </Button>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarLanguage" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text=""/></graphic>
+                        <text>语言</text>
+                    </Button>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarAccessibility" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text=""/></graphic>
+                        <text>辅助功能</text>
+                    </Button>
+
+                    <Label styleClass="sidebar-section-title" text="网络"/>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarDownload" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text="️"/></graphic>
+                        <text>下载</text>
+                    </Button>
+
+                    <Label styleClass="sidebar-section-title" text="其他"/>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarFeedback" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text=""/></graphic>
+                        <text>服务与反馈</text>
+                    </Button>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarSponsor" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text="️"/></graphic>
+                        <text>赞助我们</text>
+                    </Button>
+                    <Button styleClass="sidebar-item" onAction="#selectSidebarItem" fx:id="sidebarDev" maxWidth="Infinity">
+                        <graphic><Label styleClass="sidebar-item-icon" text="&lt;/&gt;"/></graphic>
+                        <text>开发者选项</text>
+                    </Button>
+                </VBox>
+            </ScrollPane>
+
+            <!-- 主内容区域改 VBox -->
+            <VBox styleClass="main-content" fx:id="mainContent" VBox.vgrow="ALWAYS" HBox.hgrow="ALWAYS"/>
+        </HBox>
+    </center>
+</BorderPane>

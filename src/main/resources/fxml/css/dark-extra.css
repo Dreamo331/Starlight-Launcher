@@ -1,0 +1,75 @@
+/**
+ * dark-extra.css —— 深色主题补充样式
+ * ----------------------------------------------------------------------------
+ * 为什么单独一个文件：
+ *   ComboBox 的候选列表、以及其它弹出式控件，都是**独立的弹窗（PopupWindow）**，
+ *   它们的场景里没有启动器的 .root 节点，所以 style.css 里的 `.root.dark xxx`
+ *   选择器根本命中不到它们。
+ *   这里的选择器**不带 .root.dark 前缀**，并在切换到深色主题时把本文件挂到主 Scene 上
+ *   （见 LauncherView#syncDarkExtraStylesheet），弹窗会继承主 Scene 的样式表，从而生效；
+ *   切回浅色主题时本文件会被移除，不会影响浅色外观。
+ *
+ * 只放弹窗类控件的规则，主界面的深色覆盖仍然写在 style.css 里。
+ */
+
+/* ===== 下拉选择框：展开的候选列表 ===== */
+.combo-box-popup > .list-view {
+    -fx-background-color: rgba(13,33,55,0.98);
+    -fx-border-color: rgba(255,255,255,0.16);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 18, 0, 0, 5);
+}
+
+.combo-box-popup .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #e5e7eb;
+}
+
+.combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: rgba(255,255,255,0.08);
+}
+
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: rgba(59,130,246,0.38);
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: 600;
+}
+
+.combo-box-popup .scroll-bar:vertical .track {
+    -fx-background-color: transparent;
+}
+
+.combo-box-popup .scroll-bar:vertical .thumb {
+    -fx-background-color: rgba(255,255,255,0.28);
+    -fx-background-radius: 4;
+}
+
+/* ===== 右键菜单 ===== */
+.context-menu {
+    -fx-background-color: rgba(13,33,55,0.98);
+    -fx-border-color: rgba(255,255,255,0.16);
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+}
+
+.context-menu .menu-item .label {
+    -fx-text-fill: #e5e7eb;
+}
+
+.context-menu .menu-item:focused {
+    -fx-background-color: rgba(59,130,246,0.35);
+}
+
+/* ===== 工具提示 ===== */
+.tooltip {
+    -fx-background-color: rgba(13,33,55,0.96);
+    -fx-text-fill: #e5e7eb;
+    -fx-border-color: rgba(255,255,255,0.14);
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+
+/* ===== 日期选择器等弹出面板（若有使用） ===== */
+.date-picker-popup {
+    -fx-background-color: rgba(13,33,55,0.98);
+    -fx-border-color: rgba(255,255,255,0.16);
+}
