@@ -1,5 +1,8 @@
 package com.example.starlight.newui.page.settings;
 
+import com.example.starlight.config.AiConfig;
+import com.example.starlight.newui.ai.AiModelPickerDialog;
+import com.example.starlight.newui.ai.AiProviders;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.lang.GameLanguage;
@@ -16,22 +19,28 @@ import com.example.starlight.util.ResourceScanner;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.example.starlight.download.DownloadSettings;
@@ -310,7 +319,209 @@ public final class AdvancedPage {
         // ==================== 内存优化 ====================
         root.getChildren().add(host.buildMemoryOptimizeCard());
 
+        // ==================== AI 配置 ====================
+        Label aiSection = new Label("AI 配置");
+        aiSection.getStyleClass().add("config-section-title");
+        root.getChildren().add(aiSection);
+
+        addAiConfigCards(root);
+
         return root;
+    }
+
+    // ==================== AI 配置 ====================
+
+    /**
+     * AI 配置区：预设服务商 + API 地址 + API Key + 模型。
+     *
+     * <p>启动器里的 AI 只服务一件事——<b>分析错误脚本</b>：把崩溃日志 / 错误日志交给大模型，
+     * 让它给出错误概述、可能原因与解决步骤（见 {@code AIDiagnosisPanel} 与 {@code AIService}）。
+     * 所以这里的配置从<b>空</b>开始：不带内置密钥、不带默认模型，谁用谁填。
+     *
+     * <p>填起来只要两步：点一个服务商图标（自动补 API 地址 + 默认模型），再贴自己的 API Key。
+     * 模型栏旁边是「选择模型」，会打开启动器内置的伪弹窗（遮罩 + 卡片），
+     * 既能在线问服务商的 {@code /models} 拉取完整模型列表，也能直接用内置常见模型兜底。
+     *
+     * <p>三项配置都写进 {@code starlight-client.ini}（键名见 {@link AiConfig}），
+     * 由 {@code LongCatChat} 在真正发起请求时读取，改完即刻生效、无需重启。
+     */
+    private void addAiConfigCards(VBox root) {
+        // 三个输入框先建出来：服务商图标点完要回填地址与模型
+        TextField urlField = new TextField(host.config().getOrDefault(AiConfig.KEY_BASE_URL, ""));
+        urlField.getStyleClass().add("input-field");
+        urlField.setPrefWidth(300);
+        // 窄窗口下别被挤到看不清地址（宁可压缩左侧说明，说明本来就会换行）
+        urlField.setMinWidth(180);
+        urlField.setPromptText("https://api.deepseek.com/v1");
+
+        TextField keyField = new TextField(host.config().getOrDefault(AiConfig.KEY_API_KEY, ""));
+        keyField.getStyleClass().add("input-field");
+        keyField.setPrefWidth(300);
+        keyField.setMinWidth(180);
+        keyField.setPromptText("sk-…");
+
+        TextField modelField = new TextField(host.config().getOrDefault(AiConfig.KEY_MODEL, ""));
+        modelField.getStyleClass().add("input-field");
+        modelField.setMaxWidth(Double.MAX_VALUE);
+        modelField.setPromptText("deepseek-chat");
+        HBox.setHgrow(modelField, Priority.ALWAYS);
+
+        // ===== 1. 预设服务商：点图标即填入 API 地址 + 默认模型 =====
+        FlowPane providerRow = new FlowPane(8, 8);
+        providerRow.setPrefWrapLength(PageKit.SETTINGS_CONTROL_WIDTH);
+        List<VBox> chips = new ArrayList<>();
+        List<String> chipIds = new ArrayList<>();
+        String curProvider = host.config().getOrDefault(AiConfig.KEY_PROVIDER, "");
+        for (AiProviders.Provider p : AiProviders.ALL) {
+            VBox chip = buildAiProviderChip(p);
+            chips.add(chip);
+            chipIds.add(p.id());
+            chip.setOnMouseClicked(e -> {
+                // 地址与模型都填成该服务商的推荐值，用户只剩「贴 Key」一步
+                urlField.setText(p.baseUrl());
+                modelField.setText(p.defaultModel());
+                host.config().put(AiConfig.KEY_PROVIDER, p.id());
+                host.config().put(AiConfig.KEY_BASE_URL, p.baseUrl());
+                host.config().put(AiConfig.KEY_MODEL, p.defaultModel());
+                for (int i = 0; i < chips.size(); i++) {
+                    markAiChipSelected(chips.get(i), chipIds.get(i).equals(p.id()));
+                }
+                host.saveConfig();
+                host.ui().toast("已选择 " + p.name() + "，接着填 API Key 即可");
+            });
+            markAiChipSelected(chip, p.id().equalsIgnoreCase(curProvider));
+            providerRow.getChildren().add(chip);
+        }
+        VBox providerBox = new VBox(8, providerRow, PageKit.hintLabel(
+                "点图标自动填入 API 地址与推荐模型，再贴自己的 API Key 就能用；"
+                        + "地址随时可以手动改（中转站、本地推理服务都行）"));
+        root.getChildren().add(PageKit.settingsCardStacked("服务商预设",
+                "内置 " + AiProviders.ALL.size() + " 家常见服务商（图标取自启动器内置 logo）", providerBox));
+
+        // ===== 2. API 地址 =====
+        Button saveAiApi = AppIcons.button("save", "保存");
+        saveAiApi.getStyleClass().add("btn-primary");
+        saveAiApi.setOnAction(e -> {
+            host.config().put(AiConfig.KEY_BASE_URL, urlField.getText().trim());
+            host.saveConfig();
+            host.ui().toast("AI API 地址已保存");
+        });
+        HBox aiApiRow = new HBox(10, urlField, saveAiApi);
+        aiApiRow.setAlignment(Pos.CENTER_LEFT);
+        root.getChildren().add(PageKit.settingsCard("API 地址",
+                "OpenAI 兼容接口基址（不含 /chat/completions），例如 https://api.deepseek.com/v1", aiApiRow));
+
+        // ===== 3. API Key =====
+        Button saveAiApiKey = AppIcons.button("save", "保存");
+        saveAiApiKey.getStyleClass().add("btn-primary");
+        saveAiApiKey.setOnAction(e -> {
+            host.config().put(AiConfig.KEY_API_KEY, keyField.getText().trim());
+            host.saveConfig();
+            host.ui().toast("AI API Key 已保存");
+        });
+        HBox aiapiKeyRow = new HBox(10, keyField, saveAiApiKey);
+        aiapiKeyRow.setAlignment(Pos.CENTER_LEFT);
+        root.getChildren().add(PageKit.settingsCard("API Key",
+                "服务商控制台申请的密钥：只写在本机 starlight-client.ini，只会发给你填写的接口地址", aiapiKeyRow));
+
+        // ===== 4. 模型（内置伪弹窗选择，支持在线获取模型列表） =====
+        Button pickModel = AppIcons.button("list", "选择模型");
+        pickModel.getStyleClass().add("btn-primary");
+        pickModel.setMinWidth(Region.USE_PREF_SIZE);
+        pickModel.setOnAction(e -> AiModelPickerDialog.show(host,
+                urlField.getText().trim(), keyField.getText().trim(), modelField.getText().trim(),
+                picked -> {
+                    modelField.setText(picked);
+                    // 顺手把地址与 Key 一起落盘，免得用户改了地址却被当成没生效
+                    host.config().put(AiConfig.KEY_BASE_URL, urlField.getText().trim());
+                    host.config().put(AiConfig.KEY_API_KEY, keyField.getText().trim());
+                    host.config().put(AiConfig.KEY_MODEL, picked);
+                    AiProviders.Provider match = AiProviders.matchByBaseUrl(urlField.getText());
+                    if (match != null) host.config().put(AiConfig.KEY_PROVIDER, match.id());
+                    host.saveConfig();
+                    host.ui().toast("已选择模型: " + picked);
+                }));
+
+        Button saveAiModel = AppIcons.button("save", "保存");
+        saveAiModel.getStyleClass().add("btn-primary");
+        saveAiModel.setOnAction(e -> {
+            host.config().put(AiConfig.KEY_MODEL, modelField.getText().trim());
+            host.saveConfig();
+            host.ui().toast("AI 模型已保存");
+        });
+
+        HBox modelRow = new HBox(10, modelField, pickModel, saveAiModel);
+        modelRow.setAlignment(Pos.CENTER_LEFT);
+        VBox modelBox = new VBox(8, modelRow, PageKit.hintLabel(aiConfigSummary()));
+        root.getChildren().add(PageKit.settingsCardStacked("模型",
+                "「AI 分析错误脚本」（崩溃日志诊断）时调用的模型；不确定就点「选择模型」在线获取列表",
+                modelBox));
+    }
+
+    /**
+     * 服务商图标卡片：白底圆角 logo 板 + 名称。
+     *
+     * <p>logo 底板固定白色：OpenAI 这类纯黑 logo 直接放在深色主题上会糊成一片，
+     * 垫一层浅色底板后深浅主题都能看清；图标缺失时退化成通用图标，不留裂图。
+     */
+    private VBox buildAiProviderChip(AiProviders.Provider p) {
+        Node visual;
+        Image logo = AiProviders.logo(p.logo());
+        if (logo != null) {
+            ImageView iv = new ImageView(logo);
+            iv.setFitWidth(22);
+            iv.setFitHeight(22);
+            iv.setPreserveRatio(true);
+            iv.setSmooth(true);
+            visual = iv;
+        } else {
+            visual = AppIcons.icon("sparkles", 18, Color.web("#3b82f6"));
+        }
+
+        StackPane tile = new StackPane(visual);
+        tile.setMinSize(34, 34);
+        tile.setPrefSize(34, 34);
+        tile.setMaxSize(34, 34);
+        tile.setStyle("-fx-background-color: rgba(255,255,255,0.94); -fx-background-radius: 9;");
+
+        Label nameLabel = new Label(p.name());
+        nameLabel.getStyleClass().add("theme-label");
+
+        VBox chip = new VBox(6, tile, nameLabel);
+        chip.setAlignment(Pos.CENTER);
+        chip.setMinWidth(84);
+        chip.getStyleClass().add("theme-option");   // 复用主题选择器的悬停 / 主题色样式
+        chip.setCursor(Cursor.HAND);
+        Tooltip.install(chip, new Tooltip(p.name() + "\n" + p.baseUrl() + "\n推荐模型：" + p.defaultModel()));
+        return chip;
+    }
+
+    /** 高亮当前选中的服务商图标（selected 类管文字色，内联样式管底板） */
+    private void markAiChipSelected(VBox chip, boolean selected) {
+        if (selected) {
+            if (!chip.getStyleClass().contains("selected")) chip.getStyleClass().add("selected");
+            chip.setStyle("-fx-background-color: rgba(59,130,246,0.14); -fx-border-color: rgba(59,130,246,0.45);"
+                    + " -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+        } else {
+            chip.getStyleClass().remove("selected");
+            chip.setStyle("");
+        }
+    }
+
+    /** 模型卡片下方的一行状态说明：还差什么 / 已经配成什么样（不发网络请求，只读配置） */
+    private String aiConfigSummary() {
+        String url = host.config().getOrDefault(AiConfig.KEY_BASE_URL, "").trim();
+        String model = host.config().getOrDefault(AiConfig.KEY_MODEL, "").trim();
+        if (url.isEmpty() && model.isEmpty()) {
+            return "默认留空：不配置就不会启用 AI 诊断，也不会把任何日志发出去";
+        }
+        if (url.isEmpty()) {
+            return "还差 API 地址：点上方的服务商图标可以一键填入";
+        }
+        if (model.isEmpty()) {
+            return "还差模型：点「选择模型」挑一个，或直接手打模型名";
+        }
+        return "已配置：" + url + " · " + model + "（崩溃诊断时会把日志发送给该服务商）";
     }
 
 }

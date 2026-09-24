@@ -28,7 +28,7 @@ public final class AppConfig {
      * RC: 发布候选版本，接近正式发布，供公众测试使用
      * RELEASE: 正式发布版本，稳定可靠，供公众使用
      */
-    public static final String APP_VERSION = "2.0.0-RC";
+    public static final String APP_VERSION = "1.0.0-RELEASE";
 
     /** 界面显示的版本号（含 v 前缀） */
     public static final String DISPLAY_VERSION = "v" + APP_VERSION;

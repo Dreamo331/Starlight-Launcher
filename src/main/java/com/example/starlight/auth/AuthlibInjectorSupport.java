@@ -1,5 +1,6 @@
 package com.example.starlight.auth;
 
+import com.example.starlight.newui.AppConfig;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -115,7 +116,7 @@ public class AuthlibInjectorSupport {
     private static void downloadTo(String url, Path target, String expectedSha256) throws IOException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("User-Agent", "StarlightLauncher/2.0.0")
+                .header("User-Agent", AppConfig.USER_AGENT)
                 .timeout(Duration.ofSeconds(120))
                 .GET()
                 .build();
@@ -147,7 +148,7 @@ public class AuthlibInjectorSupport {
     private static String httpGetString(String url) throws IOException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("User-Agent", "StarlightLauncher/2.0.0")
+                .header("User-Agent", AppConfig.USER_AGENT)
                 .timeout(Duration.ofSeconds(20))
                 .GET()
                 .build();

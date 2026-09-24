@@ -1396,7 +1396,12 @@ public class LauncherView implements PageView, LauncherContext {
     /** AI 诊断面板：从崩溃面板打开，关闭后回到崩溃面板 */
     private void showAIDiagnosisPanel(CrashDiagnosticData data) {
         AIDiagnosisPanel panel = new AIDiagnosisPanel(data, ui::toast,
-                () -> showGameCrashPanel(data));
+                () -> showGameCrashPanel(data),
+                // 未配置 AI 服务时面板上的「去 AI 配置」：关掉弹窗直接跳到高级设置页
+                () -> {
+                    ui.closeModal();
+                    switchToSettings("sidebarAdvanced");
+                });
         ui.modal("AI 诊断分析", panel, 780, 540);
     }
 

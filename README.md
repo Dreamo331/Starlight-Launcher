@@ -10,22 +10,45 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0--RC-blue" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.0--RELEASE-blue" alt="version">
   <img src="https://img.shields.io/badge/Java-17-orange" alt="java">
   <img src="https://img.shields.io/badge/JavaFX-17.0.6-purple" alt="javafx">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
 </p>
 
 <p align="center">
-  <a href="https://gitee.com/Horses-always-love-to-run/starlight-launcher">Gitee</a> ·
-  <a href="#">GitHub</a> ·
+  <a href="https://gitee.com/Horses-always-love-to-run/starlight-launcher-cn">Gitee</a> ·
+  <a href="https://github.com/Dreamo331/Starlight-Launcher">GitHub</a> ·
   <a href="启动器MOD技术文档.md">MOD 开发文档</a>
 </p>
 
 ---
 
-> ⚠️ **当前状态：内测阶段（2.0.0-RC）**
+> ⚠️ **当前状态：内测阶段（1.0.0-RELEASE）**
 > 核心功能已可用，部分模块仍在打磨，接口与界面可能调整。欢迎提 Issue 反馈问题。
+
+## 版本号规则
+
+对外版本号统一写成 **`MAJOR.MINOR.PATCH` + 可选发布阶段后缀**，阶段顺序：
+
+```
+1.0.0-SNAPSHOT  <  1.0.0-ALPHA  <  1.0.0-BETA  <  1.0.0-RC  <  1.0.0-RELEASE
+```
+
+发版时这几处必须一致（改一处就得同步其余）：
+
+| 位置 | 值 | 说明 |
+|---|---|---|
+| `newui/AppConfig.java` → `APP_VERSION` | `1.0.0-RELEASE` | **唯一权威**，界面显示、User-Agent、更新比对都用它 |
+| `pom.xml` → `<version>` | `1.0.0` | 只能纯数字，Maven 与 jpackage 的 `--app-version` 不接受后缀 |
+| `检查更新PHP/latest_version.json` → `version` | `1.0.0-RELEASE` | 服务端声明的最新版，写法必须与 `APP_VERSION` 完全一致 |
+| GitHub / Gitee 的 tag / Release | `v1.0.0-RELEASE` | 官方接口不可用时的降级来源（带不带 `v` 都能识别） |
+
+`lib/` 里那个核心库 jar 的 `2.0.0` 是**另一个 artifact 的版本**，与启动器版本无关，不要一起改。
+
+版本比对规则见 `UpdateChecker.compareVersions`：先比数字段，数字相同再比阶段后缀，
+后缀里的数字不算版本号（`2.0.0-rc1` 的 `1` 是第 1 个候选版）。
+因此 `1.0.0-RC → 1.0.0-RELEASE` 这种「同号转正」也会被正确提示为更新。
 
 ## 目录
 
@@ -130,8 +153,12 @@ Starlight Launcher（星光启动器）是一个完全用 **Java 17 + JavaFX** �
 ### 1. 克隆仓库
 
 ```bash
-git clone https://gitee.com/Horses-always-love-to-run/starlight-launcher.git
-cd starlight-launcher
+# Gitee（国内推荐）
+git clone https://gitee.com/Horses-always-love-to-run/starlight-launcher-cn.git
+cd starlight-launcher-cn
+
+# 或 GitHub
+# git clone https://github.com/Dreamo331/Starlight-Launcher.git
 ```
 
 ### 2. 安装本地核心库
@@ -189,14 +216,14 @@ mvn javafx:run
 
 # 或打成 fat-jar 后运行
 mvn clean package
-java -jar target/starlight-launcher-cli-2.0.0-jar-with-dependencies.jar
+java -jar target/starlight-launcher-cli-1.0.0-jar-with-dependencies.jar
 ```
 
 ### 5. 命令行 / 控制台模式
 
 ```bash
 # 以控制台模式启动（不走 GUI，可用于脚本化启动游戏）
-java -jar target/starlight-launcher-cli-2.0.0-jar-with-dependencies.jar --console
+java -jar target/starlight-launcher-cli-1.0.0-jar-with-dependencies.jar --console
 ```
 
 ## 项目结构

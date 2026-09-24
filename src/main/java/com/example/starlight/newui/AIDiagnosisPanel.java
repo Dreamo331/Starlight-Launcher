@@ -1,6 +1,7 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.newui;
 
+import com.example.starlight.config.AiConfig;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.crash.CrashDiagnosticData;
 import com.example.starlight.longcatapi.LongCatChat;
@@ -24,20 +25,24 @@ import java.util.regex.Pattern;
 
 /**
  * AI 诊断面板 —— 集成在启动器窗口内（替代独立 Stage 的 AIDiagnosisWindow）。
- * 调用 LongCatChat API 分析崩溃日志，以 WebView 渲染 Markdown 结果。
- * 底层已切换为 NVIDIA NIM API（OpenAI 兼容接口）。
+ * 调用 {@link LongCatChat} 分析崩溃日志，以 WebView 渲染 Markdown 结果。
+ *
+ * <p>服务商不再写死在代码里：地址 / Key / 模型来自「设置 → 高级设置 → AI 配置」，
+ * 默认全部为空。没配置时面板不再抛网络错误，而是直接给出提示 +「去 AI 配置」按钮。
  */
 public class AIDiagnosisPanel extends VBox {
 
     private final CrashDiagnosticData crashData;
     private final Consumer<String> toast;   // 提示回调（LauncherView.showToast）
     private final Runnable closeHandler;    // 关闭面板回调（LauncherView.closeModalPanel）
+    private final Runnable openAiSettings;  // 「去 AI 配置」回调，可为 null
 
     private Label statusLabel;
     private ProgressIndicator loadingIndicator;
     private WebView webView;
     private Button retryBtn;
     private Button copyBtn;
+    private Button settingsBtn;
     private String lastAiResponse;
     private volatile boolean analyzing = false;
 
@@ -51,10 +56,19 @@ public class AIDiagnosisPanel extends VBox {
     private boolean renderPending = false;
 
     public AIDiagnosisPanel(CrashDiagnosticData crashData, Consumer<String> toast, Runnable closeHandler) {
+        this(crashData, toast, closeHandler, null);
+    }
+
+    /**
+     * @param openAiSettings 「去 AI 配置」按钮的动作（通常是关掉本弹窗并跳到高级设置），可为 null
+     */
+    public AIDiagnosisPanel(CrashDiagnosticData crashData, Consumer<String> toast, Runnable closeHandler,
+                            Runnable openAiSettings) {
         super(10);
         this.crashData = crashData;
         this.toast = toast;
         this.closeHandler = closeHandler;
+        this.openAiSettings = openAiSettings;
         setPadding(new Insets(10, 4, 0, 4));
 
         // 顶部：状态 + 加载指示 + 操作按钮
@@ -66,6 +80,16 @@ public class AIDiagnosisPanel extends VBox {
         loadingIndicator = new ProgressIndicator();
         loadingIndicator.setPrefSize(18, 18);
         loadingIndicator.setVisible(false);
+        // 未配置 AI 服务时才出现的快捷入口
+        settingsBtn = AppIcons.button("gear", "去 AI 配置");
+        settingsBtn.getStyleClass().add("btn-primary");
+        settingsBtn.setStyle("-fx-padding: 4 14; -fx-font-size: 12px; -fx-cursor: hand;");
+        settingsBtn.setVisible(false);
+        settingsBtn.setManaged(false);
+        settingsBtn.setOnAction(e -> {
+            if (openAiSettings != null) openAiSettings.run();
+            else toast.accept("请到「设置 → 高级设置 → AI 配置」填写 API 地址与模型");
+        });
         retryBtn = AppIcons.button("refresh", "重新分析");
         retryBtn.getStyleClass().add("btn-primary");
         retryBtn.setStyle("-fx-padding: 4 14; -fx-font-size: 12px; -fx-cursor: hand;");
@@ -79,10 +103,12 @@ public class AIDiagnosisPanel extends VBox {
         // 与同排按钮（4 14 / 12px）保持一致：.modal-btn-cancel 是弹窗底栏尺寸，直接用会比同排高一截
         closeBtn.setStyle("-fx-padding: 4 14; -fx-font-size: 12px;");
         closeBtn.setOnAction(e -> closeHandler.run());
-        topRow.getChildren().addAll(statusLabel, loadingIndicator, retryBtn, copyBtn, closeBtn);
+        topRow.getChildren().addAll(statusLabel, loadingIndicator, settingsBtn, retryBtn, copyBtn, closeBtn);
 
-        // 提示文案
-        Label subtitle = new Label("将崩溃信息发送至 NVIDIA AI 进行分析，结果以 Markdown 渲染");
+        // 提示文案：把当前实际用的模型写出来（未配置时提示去哪配）
+        Label subtitle = new Label(AiConfig.isConfigured()
+                ? "将崩溃信息发送至 " + AiConfig.model() + " 进行分析，结果以 Markdown 渲染"
+                : "尚未配置 AI 服务：请先在「设置 → 高级设置 → AI 配置」选服务商并填写 API Key");
         subtitle.getStyleClass().add("modal-hint");
 
         // WebView 结果区
@@ -116,6 +142,13 @@ public class AIDiagnosisPanel extends VBox {
 
     private void startAnalysis() {
         if (analyzing) return;
+
+        // 没配置 AI 服务就不发请求：直接告诉用户去哪配（默认出厂状态就是这种）
+        if (!AiConfig.isConfigured()) {
+            showNotConfigured();
+            return;
+        }
+        setSettingsButtonVisible(false);
         analyzing = true;
 
         setLoadingState(true, "正在连接 AI...");
@@ -146,10 +179,13 @@ public class AIDiagnosisPanel extends VBox {
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> {
+                    // getMessage() 可能为 null（如无参构造的异常），escapeHtml 不认 null
+                    String msg = e.getMessage() == null || e.getMessage().isBlank()
+                            ? e.getClass().getSimpleName() : e.getMessage();
                     webView.getEngine().loadContent(
                             "<html><body style='font-family:sans-serif;color:#c0392b;padding:40px;'>" +
-                                    "<h2>AI 诊断失败</h2><p>" + escapeHtml(e.getMessage()) + "</p>" +
-                                    "<p>请检查网络后点击「重新分析」重试</p>" +
+                                    "<h2>AI 诊断失败</h2><p>" + escapeHtml(msg) + "</p>" +
+                                    "<p>请检查网络与「高级设置 → AI 配置」后点击「重新分析」重试</p>" +
                                     "</body></html>", "text/html");
                     setLoadingState(false, "分析失败");
                 });
@@ -157,6 +193,30 @@ public class AIDiagnosisPanel extends VBox {
                 analyzing = false;
             }
         }, "ai-diagnosis").start();
+    }
+
+    /**
+     * 未配置 AI 服务时的静态提示页：不发请求、不说「网络失败」，直接告诉用户去哪配。
+     * 配置好后点「重新分析」即可（配置是每次调用实时读取的，不用重启启动器）。
+     */
+    private void showNotConfigured() {
+        setLoadingState(false, "尚未配置 AI 服务");
+        setSettingsButtonVisible(true);
+        webView.getEngine().loadContent(
+                "<html><head><meta charset='utf-8'></head>" +
+                        "<body style='font-family:sans-serif;color:#6b7280;padding:40px;text-align:center;'>" +
+                        "<h2 style='color:#374151;'>还没有配置 AI 服务</h2>" +
+                        "<p>" + escapeHtml(AiConfig.missingHint()) + "</p>" +
+                        "<p style='font-size:13px;'>配置好之后回到这里点「重新分析」即可；" +
+                        "不配置也不影响其它功能。</p>" +
+                        "</body></html>", "text/html");
+    }
+
+    /** 「去 AI 配置」按钮的显隐（只有未配置时才需要） */
+    private void setSettingsButtonVisible(boolean visible) {
+        if (settingsBtn == null) return;
+        settingsBtn.setVisible(visible);
+        settingsBtn.setManaged(visible);
     }
 
     /**

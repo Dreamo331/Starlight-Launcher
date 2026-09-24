@@ -9,7 +9,15 @@
 
     <groupId>com.starlight</groupId>
     <artifactId>starlight-launcher-cli</artifactId>
-    <version>2.0.0</version>
+    <!--
+      启动器版本：只写纯数字。Maven 与 jpackage 都不接受 -RELEASE 这类后缀，
+      jpackage 的 app-version 参数在 Windows 上必须是 major[.minor[.patch]]。
+      对外展示与更新比对用的完整版本号（带发布阶段后缀）在
+      src/main/java/com/example/starlight/newui/AppConfig.java 的 APP_VERSION，
+      两者要保持同一个数字段：这里 1.0.0 对应那边 1.0.0-RELEASE。
+      完整规则见 README 的「版本号规则」一节。
+    -->
+    <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <name>Starlight Launcher</name>
@@ -98,7 +106,9 @@
         </dependency>
 
         <!-- StarlightLauncher core library (local JAR in lib/) -->
-        <!-- 使用前请先安装到本地仓库：
+        <!-- 注意：这里的 2.0.0 是「核心库」自己的 artifact 版本，跟启动器版本（1.0.0）是两回事，
+             不要为了统一版本号把它改掉——改了就得同步重命名 lib/StarlightLauncher-2.0.0.jar 并重新 install-file。
+             使用前请先安装到本地仓库：
              mvn install:install-file -Dfile=lib/StarlightLauncher-2.0.0.jar -DgroupId=com.starlight -DartifactId=starlight-launcher-core -Dversion=2.0.0 -Dpackaging=jar -->
         <dependency>
             <groupId>com.starlight</groupId>
@@ -170,6 +180,10 @@
                     <include>**/*.txt</include>
                     <!-- 品牌 logo（svg/GitHub_light.svg、svg/gitee_logo_black.svg）：AppIcons 运行期读取 -->
                     <include>**/*.svg</include>
+                    <!-- UI 字体（ttf/JustFontFenYuanZiTi-2.ttf）：AppFonts 启动时用 Font.loadFont 注册。
+                         漏掉这行字体不会进 target/classes，界面会静默回退系统字体。 -->
+                    <include>**/*.ttf</include>
+                    <include>**/*.otf</include>
                 </includes>
             </resource>
         </resources>
@@ -378,8 +392,12 @@
                     <!-- 与项目 JavaFX 17 主版本匹配的 Gluon 静态 SDK（用于 native-image 静态链接） -->
                     <javafxStaticSdkVersion>17.0.8</javafxStaticSdkVersion>
                     <!-- 将所有运行期资源（FXML/CSS/图片/SVG/配置）打入原生镜像 -->
+                    <!-- 注意: gluonfx 序列化 resourcesList 时不做 JSON 转义, 原样写入 resourceconfig JSON.
+                         因此这里必须写 JSON 合法转义形式 \\. (生成的 JSON 里即 \\., 解析后正则为 \.);
+                         写单反斜杠 \. 会让 resourceconfig-x86_64-windows.json 成为非法 JSON,
+                         native-image 报 "Invalid escape character". step3-fix.ps1 里还有兜底修复. -->
                     <resourcesList>
-                        <list>.*\.(fxml|css|png|jpg|jpeg|ico|svg|properties|json|xml|html|txt|ttf|otf|dll|dat|so|dylib)$</list>
+                        <list>.*\\.(fxml|css|png|jpg|jpeg|ico|svg|properties|json|xml|html|txt|ttf|otf|dll|dat|so|dylib)$</list>
                     </resourcesList>
                     <!-- Gson 反射模型类：Native Image 关闭运行期反射，必须显式注册
                          （LaunchRecord 最近游玩 / Community* 社区登录 / Modrinth* 模组库 / CacheEntry） -->
@@ -393,6 +411,155 @@
                         <list>com.example.starlight.ModsApi.ModrinthAPI$ModrinthVersion</list>
                         <list>com.example.starlight.ModsApi.ModrinthAPI$ModrinthFile</list>
                         <list>com.example.starlight.version.CacheManager$CacheEntry</list>
+                        <!-- FXML fx:controller 控制器：FXMLLoader 反射实例化 + @FXML 字段注入 + initialize() 回调 -->
+                        <list>com.example.starlight.newui.StarlightSplashController</list>
+                        <!-- FXML 中实例化的 JavaFX 类：FXMLLoader 需要无参构造器反射元数据
+                             （substrate 自带的 JavaFX 反射配置只有方法，缺构造器，native 下会报
+                             NoSuchMethodException: Canvas.<init>()） -->
+                        <list>javafx.scene.canvas.Canvas</list>
+                        <list>javafx.scene.layout.Region</list>
+                        <list>javafx.scene.layout.StackPane</list>
+                        <list>javafx.scene.layout.VBox</list>
+                        <list>javafx.scene.layout.HBox</list>
+                        <list>javafx.scene.text.Text</list>
+                        <list>javafx.scene.shape.Rectangle</list>
+                        <list>javafx.geometry.Insets</list>
+                        <list>javafx.scene.layout.Pane</list>
+                        <list>javafx.scene.layout.AnchorPane</list>
+                        <list>javafx.scene.layout.BorderPane</list>
+                        <list>javafx.scene.layout.GridPane</list>
+                        <list>javafx.scene.control.Label</list>
+                        <list>javafx.scene.control.Button</list>
+                        <list>javafx.scene.image.ImageView</list>
+                        <list>javafx.scene.control.ProgressBar</list>
+                        <list>javafx.scene.control.TextField</list>
+                        <list>javafx.scene.control.PasswordField</list>
+                        <list>javafx.scene.control.ListView</list>
+                        <list>javafx.scene.control.ScrollPane</list>
+                        <list>javafx.scene.control.Separator</list>
+                        <list>javafx.scene.control.CheckBox</list>
+                        <list>javafx.scene.control.RadioButton</list>
+                        <list>javafx.scene.control.ComboBox</list>
+                        <list>javafx.scene.control.TextArea</list>
+                        <list>javafx.scene.control.Hyperlink</list>
+                        <list>javafx.scene.control.Tab</list>
+                        <list>javafx.scene.control.TabPane</list>
+                        <list>javafx.scene.control.ToggleGroup</list>
+                        <list>javafx.scene.layout.ColumnConstraints</list>
+                        <list>javafx.scene.layout.RowConstraints</list>
+                        <list>javafx.scene.Group</list>
+                        <list>javafx.scene.web.WebView</list>
+                        <!-- Prism 特效原生 peer 类：Bloom/Blur/BlendMode 等特效渲染时反射
+                             加载 com.sun.scenario.effect.impl.prism.ps.PPS*Peer，缺注册会报
+                             "Could not create peer Brightpass" 且整帧画不出来（闪屏黑屏/透明） -->
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_ADDPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_BLUEPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_COLOR_BURNPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_COLOR_DODGEPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_DARKENPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_DIFFERENCEPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_EXCLUSIONPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_GREENPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_HARD_LIGHTPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_LIGHTENPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_MULTIPLYPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_OVERLAYPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_REDPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_SCREENPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_SOFT_LIGHTPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_SRC_ATOPPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_SRC_INPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_SRC_OUTPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBlend_SRC_OVERPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSBrightpassPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSColorAdjustPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSDisplacementMapPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSEffectPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSInvertMaskPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSLinearConvolvePeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSLinearConvolveShadowPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSOneSamplerPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSPerspectiveTransformPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSPhongLighting_DISTANTPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSPhongLighting_POINTPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSPhongLighting_SPOTPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSSepiaTonePeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPStoPSWDisplacementMapPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSTwoSamplerPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.ps.PPSZeroSamplerPeer</list>
+                        <!-- Prism 主包 peers: Crop/Flood/Merge/Reflection 等特效的 peer 不在 ps 子包 -->
+                        <list>com.sun.scenario.effect.impl.prism.PrCropPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.PrFloodPeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.PrMergePeer</list>
+                        <list>com.sun.scenario.effect.impl.prism.PrReflectionPeer</list>
+                        <!-- 软件渲染回退管线 peers (JSW=纯Java, SSE=SSE指令集):
+                             GPU/D3D 初始化失败的机器会整体切到这两套管线, 分发给玩家的 EXE 必须兜底 -->
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_ADDPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_BLUEPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_COLOR_BURNPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_COLOR_DODGEPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_DARKENPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_DIFFERENCEPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_EXCLUSIONPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_GREENPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_HARD_LIGHTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_LIGHTENPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_MULTIPLYPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_OVERLAYPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_REDPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_SCREENPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_SOFT_LIGHTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_SRC_ATOPPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_SRC_INPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_SRC_OUTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBlend_SRC_OVERPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBoxBlurPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBoxShadowPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWBrightpassPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWColorAdjustPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWDisplacementMapPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWEffectPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWInvertMaskPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWLinearConvolvePeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWLinearConvolveShadowPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWPerspectiveTransformPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWPhongLighting_DISTANTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWPhongLighting_POINTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWPhongLighting_SPOTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.java.JSWSepiaTonePeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_ADDPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_BLUEPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_COLOR_BURNPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_COLOR_DODGEPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_DARKENPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_DIFFERENCEPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_EXCLUSIONPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_GREENPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_HARD_LIGHTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_LIGHTENPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_MULTIPLYPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_OVERLAYPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_REDPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_SCREENPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_SOFT_LIGHTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_SRC_ATOPPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_SRC_INPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_SRC_OUTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBlend_SRC_OVERPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBoxBlurPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBoxShadowPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEBrightpassPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEColorAdjustPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEDisplacementMapPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEEffectPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEInvertMaskPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSELinearConvolvePeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSELinearConvolveShadowPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEPerspectiveTransformPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEPhongLighting_DISTANTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEPhongLighting_POINTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSEPhongLighting_SPOTPeer</list>
+                        <list>com.sun.scenario.effect.impl.sw.sse.SSESepiaTonePeer</list>
                     </reflectionList>
                     <!-- JNI 注册：应用类 native 方法在 Native Image 下默认不启用 JNI 支持
                          （运行期按符号名查找抛 UnsatisfiedLinkError），必须在此显式注册，
@@ -439,7 +606,7 @@
                                 </goals>
                                 <configuration>
                                     <executable>jpackage</executable>
-                                    <commandlineArgs>--name StarlightLauncher --app-version 2.0.0 --type app-image --input "${project.build.directory}" --main-jar ${project.build.finalName}-jar-with-dependencies.jar --main-class com.example.starlight.MainApp --runtime-image "${project.build.directory}/runtime" --dest "${project.basedir}/build/StarlightLauncherApp"</commandlineArgs>
+                                    <commandlineArgs>--name StarlightLauncher --app-version ${project.version} --type app-image --input "${project.build.directory}" --main-jar ${project.build.finalName}-jar-with-dependencies.jar --main-class com.example.starlight.MainApp --runtime-image "${project.build.directory}/runtime" --dest "${project.basedir}/build/StarlightLauncherApp"</commandlineArgs>
                                 </configuration>
                             </execution>
                             <!-- jpackage: installer EXE (not the single-file native approach) -->
@@ -451,7 +618,7 @@
                                 </goals>
                                 <configuration>
                                     <executable>jpackage</executable>
-                                    <commandlineArgs>--name StarlightLauncher --app-version 2.0.0 --type exe --input "${project.build.directory}" --main-jar ${project.build.finalName}-jar-with-dependencies.jar --main-class com.example.starlight.MainApp --runtime-image "${project.build.directory}/runtime" --dest "${project.basedir}/build/StarlightLauncher" --win-dir-chooser --win-menu</commandlineArgs>
+                                    <commandlineArgs>--name StarlightLauncher --app-version ${project.version} --type exe --input "${project.build.directory}" --main-jar ${project.build.finalName}-jar-with-dependencies.jar --main-class com.example.starlight.MainApp --runtime-image "${project.build.directory}/runtime" --dest "${project.basedir}/build/StarlightLauncher" --win-dir-chooser --win-menu</commandlineArgs>
                                 </configuration>
                             </execution>
                         </executions>

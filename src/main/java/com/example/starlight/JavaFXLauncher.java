@@ -8,6 +8,7 @@ import com.example.starlight.main.ConsoleMode;
 import com.example.starlight.newui.LauncherView;
 import com.example.starlight.newui.SplashProgress;
 import com.example.starlight.newui.SplashView;
+import com.example.starlight.newui.ui.AppFonts;
 import com.example.starlight.plugin.PluginManager;
 import com.example.starlight.pluginapi.API;
 import com.example.starlight.pluginapi.server.PluginApiServer;
@@ -65,6 +66,9 @@ public class JavaFXLauncher extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception {
+        // 注册 UI 字体：必须在创建任何 Scene 之前，否则 CSS 里的字体家族名匹配不到
+        AppFonts.install();
+
         checkRuntimeEnvironment();
 
         Image icon = loadIcon();
@@ -175,6 +179,8 @@ public class JavaFXLauncher extends Application {
      * 闪屏结束/跳过闪屏后进入主界面
      */
     private void enterMain(Stage stage) {
+        // 闪屏的置顶到这里结束：主界面是正常窗口，不该一直压着别的程序
+        stage.setAlwaysOnTop(false);
         stage.setResizable(true);
         stage.setMinWidth(800);
         stage.setMinHeight(600);
@@ -217,6 +223,8 @@ public class JavaFXLauncher extends Application {
         stage.setResizable(false);
         // 开屏动画始终在屏幕中心显示
         centerStage(stage, SplashView.SPLASH_WIDTH, SplashView.SPLASH_HEIGHT);
+        // 闪屏期间置顶：避免启动过程被其它窗口盖住（进入主界面时会关掉，见 enterMain）
+        stage.setAlwaysOnTop(true);
         stage.show();
 
         // 在闪屏期间异步执行初始化（加载配置、检查环境等）。

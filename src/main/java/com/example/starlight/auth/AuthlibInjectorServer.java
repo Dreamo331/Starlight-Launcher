@@ -1,5 +1,6 @@
 package com.example.starlight.auth;
 
+import com.example.starlight.newui.AppConfig;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
@@ -146,7 +147,7 @@ public class AuthlibInjectorServer {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Accept", "application/json, text/plain, */*")
-                .header("User-Agent", "StarlightLauncher/2.0.0")
+                .header("User-Agent", AppConfig.USER_AGENT)
                 .timeout(Duration.ofSeconds(15))
                 .GET()
                 .build();

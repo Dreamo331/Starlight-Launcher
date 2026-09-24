@@ -1,5 +1,6 @@
 package com.example.starlight.newui;
 
+import com.example.starlight.newui.download.DownloadTaskManager;
 import com.example.starlight.newui.ui.UiService;
 
 import javafx.scene.control.Label;

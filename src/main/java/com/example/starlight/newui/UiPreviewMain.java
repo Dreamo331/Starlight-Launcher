@@ -22,6 +22,9 @@ public class UiPreviewMain extends Application {
     @Override
     public void start(Stage stage) {
         try {
+            // 与正式启动一致：先注册 UI 字体，否则预览里的字体回退到系统字体、看不出真实效果
+            com.example.starlight.newui.ui.AppFonts.install();
+
             LauncherView view = new LauncherView(stage);
 
             Field cacheField = LauncherView.class.getDeclaredField("pageCache");

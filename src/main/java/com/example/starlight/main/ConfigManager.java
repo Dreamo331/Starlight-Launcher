@@ -233,7 +233,10 @@ public class ConfigManager {
         // 高级设置页的下载/显示偏好与开发者页开关（漏登记会导致保存后重启即丢）
         "ModFileNameFormat", "ModDisplayStyle", "IgnoreQuiltLoader",
         "UseHighPerformanceGPU", "JvmPreheat",
-        "DebugMode", "ChineseLog"
+        "DebugMode", "ChineseLog",
+        // 高级设置 → AI 配置（崩溃日志诊断用的 API 地址 / Key / 模型 / 预设服务商，
+        // 未登记的话点「保存」写不进 starlight-client.ini，重启就丢）
+        "AiApi", "Aiapikey", "AiModel", "AiProvider"
     };
 
     public static Map<String, String> readClientConfig() {

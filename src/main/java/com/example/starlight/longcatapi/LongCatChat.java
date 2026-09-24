@@ -1,6 +1,6 @@
 package com.example.starlight.longcatapi;
 
-import com.example.starlight.config.Endpoints;
+import com.example.starlight.config.AiConfig;
 import com.example.starlight.util.DebugLog;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -18,17 +18,65 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+/**
+ * AI 对话客户端（OpenAI 兼容接口，用于分析崩溃 / 错误日志）。
+ *
+ * <p>服务地址、密钥与模型都来自「设置 → 高级设置 → AI 配置」（见 {@link AiConfig}），
+ * <b>默认全部为空</b>：启动器不再内置任何密钥与默认模型，用户点一个预设服务商图标
+ * 填好地址与模型、再贴自己的 API Key 即可。每次调用都重新读配置，改完无需重启；
+ * 调试时可用系统属性覆盖：{@code -Dstarlight.ai.baseUrl=} / {@code -Dstarlight.ai.apiKey=} /
+ * {@code -Dstarlight.ai.model=}。
+ *
+ * <p>请求体只发通用字段（model / messages / max_tokens / temperature / top_p / stream），
+ * NVIDIA NIM 私有的思考参数只对它自己发 —— 别的服务商收到不认识的字段会直接 400。
+ */
 public class LongCatChat {
 
-    // 硬编码配置（NVIDIA NIM API，OpenAI 兼容接口）
-    // 可通过系统属性覆盖：-Dstarlight.ai.apiKey=<key> / -Dstarlight.ai.baseUrl=<url> / -Dstarlight.ai.model=<model>
-    private static final String API_KEY = System.getProperty("starlight.ai.apiKey",
-            Endpoints.nvidiaNimApiKey());
-    private static final String BASE_URL = System.getProperty("starlight.ai.baseUrl",
-            "https://integrate.api.nvidia.com/v1");
-    private static final String MODEL = System.getProperty("starlight.ai.model",
-            "nvidia/nemotron-3.5-lightning-30b-a3b");
-    private static final String CHAT_ENDPOINT = "/chat/completions";
+    private static final String SYSTEM_PROMPT = "You are a helpful assistant.";
+
+    /** 单条消息字符上限：崩溃日志动辄几十万字符，这里截断，避免白白烧 token */
+    private static final int MAX_MESSAGE_CHARS = 120_000;
+
+    // ==================== 配置读取（每次调用实时取，保存后立刻生效） ====================
+
+    private static String apiBase() {
+        return AiConfig.normalizeBaseUrl(AiConfig.baseUrl());
+    }
+
+    private static String apiKey() {
+        return AiConfig.apiKey();
+    }
+
+    private static String model() {
+        return AiConfig.model();
+    }
+
+    /** 还没配好就别发请求了，直接抛一句用户看得懂的话 */
+    private static void requireConfigured() throws IOException {
+        if (apiBase().isEmpty() || model().isEmpty()) {
+            throw new IOException(AiConfig.missingHint());
+        }
+    }
+
+    /** 公共请求头：Key 为空时不发 Authorization（局域网本地推理服务一般不需要） */
+    private static void applyHeaders(HttpURLConnection connection) {
+        connection.setRequestProperty("Content-Type", "application/json");
+        String key = apiKey();
+        if (!key.isEmpty()) {
+            connection.setRequestProperty("Authorization", "Bearer " + key);
+            connection.setRequestProperty("x-api-key", key);        // Anthropic 的 OpenAI 兼容层
+        }
+        if (apiBase().toLowerCase(java.util.Locale.ROOT).contains("anthropic")) {
+            connection.setRequestProperty("anthropic-version", "2023-06-01");
+        }
+    }
+
+    /** NVIDIA NIM / Nemotron 认这几个私有字段，别的服务商不认（会 400），所以只对它发 */
+    private static boolean useNvidiaThinkingParams() {
+        String base = apiBase().toLowerCase(java.util.Locale.ROOT);
+        String m = model().toLowerCase(java.util.Locale.ROOT);
+        return base.contains("nvidia") || m.contains("nemotron");
+    }
 
     public static void main(String[] args) {
         // 通过命令行获取文件路径
@@ -48,7 +96,7 @@ public class LongCatChat {
             // 拼接问题
             String userQuestion = baseQuestion + "\n\n日志内容如下：\n" + logContent;
 
-            // 5. 调用 NVIDIA AI API
+            // 5. 调用配置好的 AI 服务（地址 / Key / 模型见高级设置 → AI 配置）
             String response = chat(userQuestion);
             
             // 去除Markdown代码块标记
@@ -99,21 +147,22 @@ public class LongCatChat {
     }
 
     public static String chat(String userMessage) throws IOException {
+        requireConfigured();
+        String url = apiBase() + AiConfig.CHAT_ENDPOINT;
+
         // 构建请求体
         String requestBody = buildRequestBody(userMessage);
 
         // 创建连接
-        URL url = new URL(BASE_URL + CHAT_ENDPOINT);
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
 
         // 设置请求方法和超时处理
         connection.setRequestMethod("POST");
         connection.setConnectTimeout(10000);  // 连接超时 10 秒
         connection.setReadTimeout(120000);     // 获取log超时 60 秒
 
-        // 设置请求头
-        connection.setRequestProperty("Authorization", "Bearer " + API_KEY);
-        connection.setRequestProperty("Content-Type", "application/json");
+        // 设置请求头（Authorization 跟随配置的 Key，没填就不带）
+        applyHeaders(connection);
         connection.setDoOutput(true); 
 
         // 发送请求体
@@ -124,7 +173,7 @@ public class LongCatChat {
 
         // 读取响应码
         int responseCode = connection.getResponseCode();
-        DebugLog.http(true, "POST", BASE_URL + CHAT_ENDPOINT, 0, requestBody.length(), requestBody, -1);
+        DebugLog.http(true, "POST", url, 0, requestBody.length(), requestBody, -1);
         InputStream inputStream;
         if (responseCode >= 200 && responseCode < 300) {
             inputStream = connection.getInputStream();
@@ -143,7 +192,7 @@ public class LongCatChat {
         }
 
         String responseJson = responseBuilder.toString();
-        DebugLog.http(false, null, BASE_URL + CHAT_ENDPOINT, responseCode, responseJson.length(), responseJson, -1);
+        DebugLog.http(false, null, url, responseCode, responseJson.length(), responseJson, -1);
 
         if (responseCode >= 200 && responseCode < 300) {
             return extractContentFromJson(responseJson);
@@ -157,20 +206,29 @@ public class LongCatChat {
     }
 
     private static String buildRequestBody(String userMessage, boolean stream) {
-        String escapedUserMessage = escapeJson(userMessage);
-        return "{"
-                + "\"model\": \"" + MODEL + "\","
-                + "\"messages\": ["
-                + "{\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},"
-                + "{\"role\": \"user\", \"content\": \"" + escapedUserMessage + "\"}"
-                + "],"
-                + "\"max_tokens\": 8192,"
-                + "\"temperature\": 0.7,"
-                + "\"top_p\": 0.95,"
-                + "\"stream\": " + stream + ","
-                + "\"chat_template_kwargs\": {\"enable_thinking\": true},"
-                + "\"reasoning_budget\": 4096"
-                + "}";
+        String text = userMessage == null ? "" : userMessage;
+        if (text.length() > MAX_MESSAGE_CHARS) {
+            text = text.substring(0, MAX_MESSAGE_CHARS) + "\n...(内容过长已截断)";
+        }
+        String escapedUserMessage = escapeJson(text);
+        StringBuilder sb = new StringBuilder(1024);
+        sb.append("{")
+                .append("\"model\": \"").append(escapeJson(model())).append("\",")
+                .append("\"messages\": [")
+                .append("{\"role\": \"system\", \"content\": \"").append(SYSTEM_PROMPT).append("\"},")
+                .append("{\"role\": \"user\", \"content\": \"").append(escapedUserMessage).append("\"}")
+                .append("],")
+                .append("\"max_tokens\": 8192,")
+                .append("\"temperature\": 0.7,")
+                .append("\"top_p\": 0.95,")
+                .append("\"stream\": ").append(stream);
+        if (useNvidiaThinkingParams()) {
+            // NVIDIA Nemotron：先思考再回答，思考过程走 reasoning_content
+            sb.append(",\"chat_template_kwargs\": {\"enable_thinking\": true}")
+                    .append(",\"reasoning_budget\": 4096");
+        }
+        sb.append("}");
+        return sb.toString();
     }
 
     /**
@@ -187,16 +245,16 @@ public class LongCatChat {
      */
     public static String chatStream(String userMessage, java.util.function.Consumer<String> onDelta,
                                     java.util.function.Consumer<String> onReasoning) throws IOException {
+        requireConfigured();
+        String url = apiBase() + AiConfig.CHAT_ENDPOINT;
         String requestBody = buildRequestBody(userMessage, true);
 
-        URL url = new URL(BASE_URL + CHAT_ENDPOINT);
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setRequestMethod("POST");
         connection.setConnectTimeout(10000);
         // 流式：读超时只作用于「两次数据之间」的间隔，这里给足思考停顿的余量
         connection.setReadTimeout(60000);
-        connection.setRequestProperty("Authorization", "Bearer " + API_KEY);
-        connection.setRequestProperty("Content-Type", "application/json");
+        applyHeaders(connection);
         connection.setRequestProperty("Accept", "text/event-stream");
         connection.setDoOutput(true);
 
@@ -206,7 +264,7 @@ public class LongCatChat {
         }
 
         int responseCode = connection.getResponseCode();
-        DebugLog.http(true, "POST", BASE_URL + CHAT_ENDPOINT, 0, requestBody.length(), requestBody, -1);
+        DebugLog.http(true, "POST", url, 0, requestBody.length(), requestBody, -1);
         if (responseCode < 200 || responseCode >= 300) {
             String err = "";
             try (InputStream es = connection.getErrorStream()) {
