@@ -17,8 +17,8 @@ import javafx.scene.layout.HBox;
 public final class AboutPage {
 
     /** 开源仓库地址：后续把下面两个常量填成真实地址即可，其余代码无需改动 */
-    private static final String GITHUB_URL = "https://github.com/";
-    private static final String GITEE_URL = "https://gitee.com/";
+    private static final String GITHUB_URL = "https://github.com/Dreamo331/Starlight-Launcher";
+    private static final String GITEE_URL = "https://gitee.com/Horses-always-love-to-run/starlight-launcher-cn";
 
     private final LauncherContext ctx;
 
@@ -46,11 +46,6 @@ public final class AboutPage {
         repoButtons.setAlignment(Pos.CENTER_RIGHT);
         root.getChildren().add(PageKit.settingsCard("开源仓库", "查看源代码、提交问题反馈或参与开发", repoButtons));
 
-        // 内测阶段提示
-        Label betaHint = new Label("当前启动器为内测阶段，部分功能尚未完善");
-        betaHint.setStyle("-fx-background-color: #fef3c7; -fx-text-fill: #92400e;" +
-                " -fx-padding: 10 14; -fx-background-radius: 8; -fx-font-size: 12px;");
-        root.getChildren().add(betaHint);
         return root;
     }
 }

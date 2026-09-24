@@ -154,6 +154,23 @@ public final class Endpoints {
         return str("services.communitySiteUrl");
     }
 
+    /**
+     * 启动器开源仓库（GitHub），格式 {@code owner/repo}。
+     * 官方更新接口（communityApiUrl）不可用时，由 UpdateChecker 降级到这里做版本检查。
+     */
+    public static String githubRepo() {
+        return str("services.githubRepo");
+    }
+
+    /**
+     * 启动器开源仓库（Gitee，公开仓库），格式 {@code owner/repo}。
+     * 与 {@link #githubRepo()} 一样只在官方更新接口不可用时作为降级来源；
+     * 两者在 UpdateChecker 里并发竞速，用户所在位置网速快的那家先返回即被采用。
+     */
+    public static String giteeRepo() {
+        return str("services.giteeRepo");
+    }
+
     /** 日志上传接口（随 starlight.ini 的 ServerUrl 可被用户覆盖） */
     public static String logUploadUrl() {
         return str("services.logUploadUrl");

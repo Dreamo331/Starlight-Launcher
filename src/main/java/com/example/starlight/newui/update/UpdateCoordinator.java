@@ -46,7 +46,8 @@ public final class UpdateCoordinator {
     }
 
     /**
-     * 检查更新：委托给 UpdateChecker（星光MC社区更新 API + 版本比对），本类只负责展示结果
+     * 检查更新：委托给 UpdateChecker（官方更新 API 优先，失败后 GitHub/Gitee 竞速 + 版本比对），
+     * 本类只负责展示结果
      */
     public void check() {
         host.ui().toast("正在检查更新...");
@@ -59,14 +60,25 @@ public final class UpdateCoordinator {
             int cmp = UpdateChecker.compareVersions(result.latestVersion, AppConfig.APP_VERSION);
             if (cmp > 0) {
                 showUpdateDialog(result.latestVersion, result.releaseBody,
-                        result.downloadUrl, result.md5, result.forceUpdate);
+                        result.downloadUrl, result.md5, result.forceUpdate, result.releasePageUrl);
             } else if (cmp == 0) {
-                showInfoDialog("检查更新", "当前已是最新版本（" + AppConfig.DISPLAY_VERSION + "）");
+                showInfoDialog("检查更新",
+                        "当前已是最新版本（" + AppConfig.DISPLAY_VERSION + "）" + sourceHint(result));
             } else {
                 showInfoDialog("检查更新",
-                        "当前版本（" + AppConfig.DISPLAY_VERSION + "）不低于最新发布版本（" + result.latestTag + "）");
+                        "当前版本（" + AppConfig.DISPLAY_VERSION + "）不低于最新发布版本（"
+                                + result.latestTag + "）" + sourceHint(result));
             }
         });
+    }
+
+    /**
+     * 降级来源提示：官方服务器正常时不显示；走 GitHub / Gitee 时明确告知，
+     * 便于用户（和排查问题的我们）知道官方更新服务当时不可用。
+     */
+    private static String sourceHint(UpdateChecker.UpdateResult result) {
+        return result.source == null || result.source == UpdateChecker.Source.OFFICIAL
+                ? "" : "\n（官方更新服务不可用，本次版本信息来自 " + result.source.label() + "）";
     }
 
     /**
@@ -87,14 +99,19 @@ public final class UpdateCoordinator {
         // 勾选过「下次自动更新不再提醒」：跳过该版本的自动提示（新版本发布后恢复提醒）
         String skip = host.config().getOrDefault("SkipUpdateVersion", "");
         if (result.latestVersion.equals(skip)) return;
-        showAutoUpdateDialog(result.latestVersion, result.releaseBody, result.downloadUrl, result.md5, result.forceUpdate);
+        showAutoUpdateDialog(result.latestVersion, result.releaseBody, result.downloadUrl,
+                result.md5, result.forceUpdate, result.releasePageUrl);
     }
 
     /**
      * 首页更新提示（集成式弹窗）：「稍后更新 / 立即更新」+ 勾选框「下次自动更新不再提醒」。
      * 勾选后记录 SkipUpdateVersion，该版本后续启动不再自动提醒；强制更新时不提供跳过选项。
+     *
+     * <p>官方服务器不可用时结果来自 GitHub / Gitee：没有安装包直链（发行版未附 .exe）时，
+     * 按钮退化为「打开发布页」，用浏览器打开发行版页面手动下载。
      */
-    private void showAutoUpdateDialog(String latest, String body, String downloadUrl, String md5, boolean forceUpdate) {
+    private void showAutoUpdateDialog(String latest, String body, String downloadUrl, String md5,
+                                      boolean forceUpdate, String releasePageUrl) {
         VBox bodyBox = new VBox(12);
         bodyBox.setPadding(new Insets(8, 4, 0, 4));
 
@@ -125,18 +142,27 @@ public final class UpdateCoordinator {
             });
             btns.getChildren().add(laterBtn);
         }
-        Button updateBtn = AppIcons.button("download", "立即更新");
-        updateBtn.getStyleClass().add("modal-btn-ok");
-        updateBtn.setOnAction(e -> {
-            host.ui().closeModal();
-            if (dontRemind.isSelected()) rememberSkipVersion(latest);
-            if (downloadUrl != null && !downloadUrl.trim().isEmpty()) {
-                startAutoUpdate(latest, downloadUrl.trim(), md5);
-            } else {
-                showErrorDialog("更新失败", "更新包下载地址缺失，请稍后重试或联系官方获取。");
-            }
-        });
-        btns.getChildren().add(updateBtn);
+        boolean hasDirect = downloadUrl != null && !downloadUrl.trim().isEmpty();
+        boolean hasPage = releasePageUrl != null && !releasePageUrl.trim().isEmpty();
+        Button updateBtn = null;
+        // 有直链 → 启动器内下载并自动替换；只有发行版页面 → 浏览器打开手动下载；两者都无 → 不提供按钮
+        if (hasDirect || hasPage) {
+            updateBtn = AppIcons.button(hasDirect ? "download" : "external-link",
+                    hasDirect ? "立即更新" : "打开发布页");
+            updateBtn.getStyleClass().add("modal-btn-ok");
+            updateBtn.setOnAction(e -> {
+                host.ui().closeModal();
+                if (dontRemind.isSelected()) rememberSkipVersion(latest);
+                if (hasDirect) {
+                    startAutoUpdate(latest, downloadUrl.trim(), md5);
+                } else {
+                    openReleasePage(releasePageUrl, latest);
+                }
+            });
+        }
+        if (updateBtn != null) {
+            btns.getChildren().add(updateBtn);
+        }
 
         if (forceUpdate) {
             bodyBox.getChildren().addAll(verLabel, area, btns);
@@ -154,15 +180,20 @@ public final class UpdateCoordinator {
     }
 
     /** 发现新版本面板（集成在启动器内）：展示更新内容，点击「立即更新」下载新版本到启动器目录并自动替换 */
-    private void showUpdateDialog(String latest, String body, String downloadUrl, String md5, boolean forceUpdate) {
+    private void showUpdateDialog(String latest, String body, String downloadUrl, String md5,
+                                  boolean forceUpdate, String releasePageUrl) {
         VBox bodyBox = new VBox(10);
         bodyBox.setPadding(new Insets(8, 4, 0, 4));
 
         StringBuilder text = new StringBuilder();
         text.append("当前版本: ").append(AppConfig.DISPLAY_VERSION)
                 .append("\n最新版本: v").append(latest);
-        if (downloadUrl != null && !downloadUrl.trim().isEmpty()) {
+        boolean hasDirect = downloadUrl != null && !downloadUrl.trim().isEmpty();
+        boolean hasPage = releasePageUrl != null && !releasePageUrl.trim().isEmpty();
+        if (hasDirect) {
             text.append("\n下载地址: ").append(downloadUrl.trim());
+        } else if (hasPage) {
+            text.append("\n发布页地址: ").append(releasePageUrl.trim());
         }
         if (body != null && !body.trim().isEmpty()) {
             text.append("\n\n更新内容:\n")
@@ -180,7 +211,7 @@ public final class UpdateCoordinator {
         closeBtn.getStyleClass().add("modal-btn-cancel");
         closeBtn.setOnAction(e -> host.ui().closeModal());
         btns.getChildren().add(closeBtn);
-        if (downloadUrl != null && !downloadUrl.trim().isEmpty()) {
+        if (hasDirect) {
             Button updateBtn = AppIcons.button("download", "立即更新");
             updateBtn.getStyleClass().add("modal-btn-ok");
             updateBtn.setOnAction(e -> {
@@ -188,9 +219,35 @@ public final class UpdateCoordinator {
                 startAutoUpdate(latest, downloadUrl.trim(), md5);
             });
             btns.getChildren().add(updateBtn);
+        } else if (hasPage) {
+            Button pageBtn = AppIcons.button("external-link", "打开发布页");
+            pageBtn.getStyleClass().add("modal-btn-ok");
+            pageBtn.setOnAction(e -> {
+                host.ui().closeModal();
+                openReleasePage(releasePageUrl, latest);
+            });
+            btns.getChildren().add(pageBtn);
         }
         bodyBox.getChildren().addAll(area, btns);
         host.ui().modal("发现新版本 v" + latest + (forceUpdate ? "（强制更新）" : ""), bodyBox, 460, 380);
+    }
+
+    /**
+     * 降级来源（GitHub / Gitee）没有安装包直链时，用浏览器打开发行版页面让用户手动下载。
+     * 官方服务器正常情况下不会走到这里——官方接口恒给 download_url。
+     */
+    private void openReleasePage(String releasePageUrl, String latest) {
+        if (releasePageUrl == null || releasePageUrl.trim().isEmpty()) {
+            showErrorDialog("更新失败", "更新包下载地址缺失，请稍后重试或联系官方获取。");
+            return;
+        }
+        try {
+            Desktop.getDesktop().browse(java.net.URI.create(releasePageUrl.trim()));
+            host.ui().toast("已打开发布页 v" + latest + "，请手动下载安装包");
+        } catch (Exception ex) {
+            showErrorDialog("更新失败",
+                    "无法打开发布页：" + ex.getMessage() + "\n" + releasePageUrl.trim());
+        }
     }
 
     /**

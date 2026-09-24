@@ -1,6 +1,12 @@
 /* ===== 全局变量与基础 ===== */
 .root {
-    -fx-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    /* UI 主字体：阿里妈妈方圆体 VF。家族名是 JavaFX 报的英文名（不是文件名、也不是中文名），
+       由 AppFonts.install() 在启动时注册；不注册的话这里写了也匹配不到。
+       它是简体字库、对本项目界面用字覆盖 99.8%，基本不触发回退。
+       ⚠ 它是可变字体，JavaFX 17 选不了变体轴，只会渲染 fvar 默认实例（wght=700 / BEVL=100），
+       即偏粗的圆角一档；要常规字重得先用 fonttools 实例化成静态字体，见 AppFonts 注释。
+       等宽区域（日志/代码）在各自样式里单独指定 Consolas，不受这里影响。 */
+    -fx-font-family: "Alimama FangYuanTi VF", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
     -fx-background-color: #bfdbfe;
     -fx-background-radius: 12;
     -fx-border-color: rgba(0,0,0,0.15);

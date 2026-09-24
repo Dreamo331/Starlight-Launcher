@@ -1,5 +1,8 @@
 /* =========================================================
  *  Starlight Launcher · 启动闪屏样式
+ *
+ *  字体：阿里妈妈方圆体 VF（家族名 Alimama FangYuanTi VF，由 AppFonts.install() 注册），
+ *  简体覆盖 99.8%，基本不触发回退。
  * ========================================================= */
 
 /* ---------- 根容器 ---------- */
@@ -32,7 +35,7 @@
 
 /* ---------- 标题 ---------- */
 .title-char {
-    -fx-font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    -fx-font-family: "Alimama FangYuanTi VF", "Segoe UI", "Microsoft YaHei", sans-serif;
     -fx-font-size: 19px;
     -fx-font-weight: 300;
     -fx-fill: linear-gradient(to bottom,
@@ -47,7 +50,7 @@
 
 /* ---------- 副标题 ---------- */
 .sub-char {
-    -fx-font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    -fx-font-family: "Alimama FangYuanTi VF", "Segoe UI", "Microsoft YaHei", sans-serif;
     -fx-font-size: 9px;
     -fx-font-weight: 400;
     -fx-fill: rgba(150, 185, 245, 0.60);
@@ -78,14 +81,14 @@
 
 /* ---------- 状态文字 ---------- */
 .status-text {
-    -fx-font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    -fx-font-family: "Alimama FangYuanTi VF", "Microsoft YaHei", "Segoe UI", sans-serif;
     -fx-font-size: 10px;
     -fx-fill: rgba(155, 190, 245, 0.60);
 }
 
 /* ---------- 版权文字 ---------- */
 .footer-text {
-    -fx-font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    -fx-font-family: "Alimama FangYuanTi VF", "Segoe UI", "Microsoft YaHei", sans-serif;
     -fx-font-size: 9px;
     -fx-fill: rgba(140, 170, 220, 0.36);
     -fx-opacity: 0;

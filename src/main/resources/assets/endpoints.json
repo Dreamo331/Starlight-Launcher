@@ -33,6 +33,8 @@
     "_sources": {
       "communityApiUrl": "CommunityApi.java:49、UpdateChecker.java:31",
       "communitySiteUrl": "CommunityApi.java:362（头像相对路径补全）、CommunityPage.java:146（打开官网按钮）",
+      "githubRepo": "UpdateChecker.java（官方更新接口不可用时的降级来源，GitHub REST API）",
+      "giteeRepo": "UpdateChecker.java（官方更新接口不可用时的降级来源，Gitee API v5）",
       "logUploadUrl": "UIGeneralControlClass.java:102、LogService.java:22、FrpService.java:30（三处相同的兜底默认值）",
       "frpControlHost": "FrpClient.java:14、FrpService.java:24、UIGeneralControlClass.java:1300",
       "frpControlPort": "FrpClient.java:15",
@@ -41,6 +43,8 @@
     },
     "communityApiUrl": "https://slmc.cc.cd/auth.php",
     "communitySiteUrl": "https://slmc.cc.cd",
+    "githubRepo": "Dreamo331/Starlight-Launcher",
+    "giteeRepo": "Horses-always-love-to-run/starlight-launcher-cn",
     "logUploadUrl": "",
     "frpControlHost": "wfrp.starlightmc.top",
     "frpControlPort": 11400,

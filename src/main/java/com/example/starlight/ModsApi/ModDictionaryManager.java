@@ -1,5 +1,7 @@
 package com.example.starlight.ModsApi;
 
+import com.example.starlight.newui.AppConfig;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -275,7 +277,7 @@ public final class ModDictionaryManager {
                 .build();
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                 .timeout(REQUEST_TIMEOUT)
-                .header("User-Agent", "StarlightLauncher/1.0 (ModDictionaryUpdater)")
+                .header("User-Agent", AppConfig.USER_AGENT + " (ModDictionaryUpdater)")
                 .GET()
                 .build();
         HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
