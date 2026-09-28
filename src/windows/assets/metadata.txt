@@ -1,0 +1,20 @@
+# Starlight Launcher EXE metadata
+# 每行格式: Key=Value
+# 空行、以 # 或 ; 开头的行会被忽略
+#
+# 可用键:
+#   Icon            图标路径 (相对于项目根目录, 或绝对路径)
+#   FileDescription 文件说明
+#   ProductName     产品名称
+#   CompanyName     公司/团队
+#   LegalCopyright  版权
+#   FileVersion     文件版本 (四段式, 如 1.0.0.0)
+#   ProductVersion  产品版本 (四段式)
+
+Icon=src\windows\assets\icon.ico
+FileDescription=Starlight Launcher
+ProductName=Starlight Launcher
+CompanyName=Dream Wings Indie Dev Team
+LegalCopyright=Copyright (C) 2026 Dream Wings Indie Dev Team
+FileVersion=1.0.0.0
+ProductVersion=1.0.0.0

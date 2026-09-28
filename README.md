@@ -19,7 +19,7 @@
 <p align="center">
   <a href="https://gitee.com/Horses-always-love-to-run/starlight-launcher-cn">Gitee</a> ·
   <a href="https://github.com/Dreamo331/Starlight-Launcher">GitHub</a> ·
-  <a href="启动器MOD技术文档.md">MOD 开发文档</a>
+  <a href="docs/启动器MOD技术文档.md">MOD 开发文档</a>
 </p>
 
 ---
