@@ -3,7 +3,7 @@ package com.example.starlight.pluginapi.provider;
 import com.example.starlight.model.CallbackInterfaces;
 import com.example.starlight.pluginapi.ApiProvider;
 import com.example.starlight.pluginapi.ApiRequest;
-import com.example.starlight.service.DownloadService;
+import com.example.starlight.download.DownloadService;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;

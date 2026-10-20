@@ -41,12 +41,12 @@ public final class NetworkCheckPage {
         this.host = host;
     }
 
-    // ===== 网络检测页面 =====
+    // 网络检测页面 //
 
     public Node build() {
         VBox root = PageKit.settingsPage(host, "网络检测", "home");
 
-        // ===== 状态卡：下载源 / 延迟 / 连接状态（真实数据，进页面即刷新） =====
+        // 状态卡：下载源 / 延迟 / 连接状态（真实数据，进页面即刷新） //
         VBox statusCard = new VBox(10);
         statusCard.getStyleClass().add("settings-card");
         Label statusTitle = AppIcons.label("globe", "网络状态");
@@ -67,7 +67,7 @@ public final class NetworkCheckPage {
         statusCard.getChildren().addAll(statusTitle, statusRow);
         root.getChildren().add(statusCard);
 
-        // ===== 下载源测速卡 =====
+        // 下载源测速卡 //
         VBox sourceCard = new VBox(10);
         sourceCard.getStyleClass().add("settings-card");
         Label sourceTitle = AppIcons.label("antenna", "下载源测速");
@@ -115,7 +115,7 @@ public final class NetworkCheckPage {
         }
         root.getChildren().add(sourceCard);
 
-        // ===== 一键测速 =====
+        // 一键测速 //
         Button speedTestBtn = AppIcons.button("rocket", "一键网络测速");
         speedTestBtn.getStyleClass().add("home-launch-btn");
         speedTestBtn.setMaxWidth(Double.MAX_VALUE);

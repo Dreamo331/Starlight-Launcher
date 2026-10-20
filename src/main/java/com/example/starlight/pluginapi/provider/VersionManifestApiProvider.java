@@ -2,7 +2,7 @@ package com.example.starlight.pluginapi.provider;
 
 import com.example.starlight.pluginapi.ApiProvider;
 import com.example.starlight.pluginapi.ApiRequest;
-import com.example.starlight.version.VersionManifest;
+import com.example.starlight.download.task.VersionManifest;
 
 import java.util.ArrayList;
 import java.util.List;

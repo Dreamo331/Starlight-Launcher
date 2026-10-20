@@ -1,6 +1,6 @@
 package com.example.starlight.ModsApi;
 
-import com.example.starlight.download.DownloadProvider;
+import com.example.starlight.download.source.DownloadProvider;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -67,15 +67,13 @@ public final class RemoteMod {
     public IMod getData() { return data; }
     public int getDownloads() { return downloads; }
 
-    // ==================== 版本类型 ====================
-
+    // 版本类型 //
     public enum VersionType { Release, Beta, Alpha }
 
-    // ==================== 依赖类型 ====================
-
+    // 依赖类型 //
     public enum DependencyType { REQUIRED, OPTIONAL, TOOL, INCLUDE, EMBEDDED, INCOMPATIBLE, BROKEN }
 
-    // ==================== 依赖 ====================
+    // 依赖 //
 
     public static final class Dependency {
         private final DependencyType type;
@@ -103,7 +101,7 @@ public final class RemoteMod {
         }
     }
 
-    // ==================== MOD 类型 ====================
+    // MOD 类型 //
 
     public enum Type {
         MODRINTH(com.example.starlight.ModsApi.ModrinthRemoteModRepository.MODS),
@@ -114,20 +112,20 @@ public final class RemoteMod {
         public RemoteModRepository getRepo() { return repo; }
     }
 
-    // ==================== IMod 接口 ====================
+    // IMod 接口 //
 
     public interface IMod {
         List<RemoteMod> loadDependencies(RemoteModRepository repo, DownloadProvider dp) throws IOException;
         Stream<Version> loadVersions(RemoteModRepository repo, DownloadProvider dp) throws IOException;
     }
 
-    // ==================== IVersion 接口 ====================
+    // IVersion 接口 //
 
     public interface IVersion {
         Type getType();
     }
 
-    // ==================== 版本 ====================
+    // 版本 //
 
     public static class Version {
         private final IVersion self;
@@ -171,7 +169,7 @@ public final class RemoteMod {
         public List<ModLoaderType> getLoaders() { return loaders; }
     }
 
-    // ==================== 文件 ====================
+    // 文件 //
 
     public static class File {
         private final Map<String, String> hashes;

@@ -4,6 +4,7 @@ import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.Controllers.PageView;
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.config.GameDirManager;
+import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.colorblind.ColorBlindOverlayManager;
 import com.example.starlight.crash.CrashDiagnosticData;
 import com.example.starlight.crash.CrashReportParser;
@@ -12,9 +13,11 @@ import com.example.starlight.launch.LaunchRecordStore;
 import com.example.starlight.listsaves.listsaves;
 import com.example.starlight.download.DownloadSettings;
 import com.example.starlight.download.VerifySettings;
-import com.example.starlight.download.DownloadProvider;
-import com.example.starlight.download.GameResourceCompleter;
-import com.example.starlight.download.HttpDownloadEngine;
+import com.example.starlight.download.mod.DownloadCoordinator;
+import com.example.starlight.download.mod.HostPolicy;
+import com.example.starlight.download.source.DownloadProvider;
+import com.example.starlight.download.task.GameResourceCompleter;
+import com.example.starlight.download.engine.HttpDownloadEngine;
 import com.example.starlight.slan.SLanConfig;
 import com.example.starlight.slan.SLanManager;
 import com.example.starlight.slan.SLanServerChecker;
@@ -45,10 +48,10 @@ import com.example.starlight.ModsApi.ModrinthRemoteModRepository;
 import com.example.starlight.ModsApi.RemoteMod;
 import com.example.starlight.ModsApi.RemoteModDetail;
 import com.example.starlight.ModsApi.RemoteModRepository;
-import com.example.starlight.version.InstallEngine;
-import com.example.starlight.version.LoaderInstallEngine;
+import com.example.starlight.download.task.InstallEngine;
+import com.example.starlight.download.task.LoaderInstallEngine;
 import com.example.starlight.version.VersionDownloadService;
-import com.example.starlight.version.VersionManifest;
+import com.example.starlight.download.task.VersionManifest;
 import com.example.starlight.version.VersionMatcher;
 import com.example.starlight.plugin.PluginManager;
 import com.example.starlight.plugin.PluginMetadata;
@@ -68,7 +71,6 @@ import com.example.starlight.newui.download.DownloadTaskManager;
 import com.example.starlight.newui.ui.IconService;
 import com.example.starlight.newui.page.settings.AboutPage;
 import com.example.starlight.newui.page.settings.AccessibilityPage;
-import com.example.starlight.newui.page.settings.ColorBlindPage;
 import com.example.starlight.newui.page.CommunityPage;
 import com.example.starlight.newui.framegen.FrameGenCoordinator;
 import com.example.starlight.newui.login.LoginCoordinator;
@@ -173,7 +175,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import com.google.gson.*;
-import com.startgame.launcher.LoaderDetector;
+import com.example.starlight.startmc.launcher.LoaderDetector;
 
 /**
  * 新版主界面 —— 独立可调用类，不依赖 FXML
@@ -228,6 +230,8 @@ public class LauncherView implements PageView, LauncherContext {
     /** 内存管理页与内存优化卡片（实现在 newui.page.MemoryPage） */
     private MemoryPage memoryPage;
     private Map<String, String> configCache;
+    /** 当前生效的节日（构造期计算；HomePage 用 FestivalCalendar.current() 独立判定，两者一致） */
+    private com.example.starlight.newui.festival.Festival activeFestival;
     /** 通用界面服务：Toast / 遮罩弹窗 / 确认-提示-输入面板（实现见 newui.ui.UiService） */
     private final UiService ui;
 
@@ -267,7 +271,16 @@ public class LauncherView implements PageView, LauncherContext {
     /** 悬浮按钮显隐巡检：进程可能在启动器不知情时结束（被任务管理器结束等），靠回调不够 */
     private Timeline gameStopFabWatch;
 
-    // ==================== 窗口控制 ====================
+    /**
+     * 「启动器可见性」本次是否已经真的隐藏 / 最小化 / 关闭了启动器。
+     *
+     * <p>游戏退出（或启动失败）时据此决定要不要还原窗口：「立即关闭」策略下若启动失败，
+     * 启动器其实还开着，这时不该被后续回调关掉。
+     */
+    private final java.util.concurrent.atomic.AtomicBoolean launcherHiddenByVisibility =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    // 窗口控制 //
 
     private void handleMaximize() {
         stage.setMaximized(!stage.isMaximized());
@@ -333,7 +346,7 @@ public class LauncherView implements PageView, LauncherContext {
         windowControls.getChildren().forEach(com.example.starlight.newui.ui.NavEffects::installNavButton);
     }
 
-    // ==================== 构造 ====================
+    // 构造 //
 
     public LauncherView(Stage stage) {
         this.stage = stage;
@@ -349,7 +362,7 @@ public class LauncherView implements PageView, LauncherContext {
             @Override public boolean hasVersionPickContext() { return downloadPage != null && downloadPage.hasVersionPickContext(); }
         }, this);
 
-        // ===== 页面实例（共享单例：跨切页保留页面状态与缓存语义） =====
+        // 页面实例（共享单例：跨切页保留页面状态与缓存语义） //
         this.downloadPage = new DownloadCenterPage(this, downloads);
         this.resourcesPage = new ResourcesPage(this);
         this.versionSelectPage = new VersionSelectPage(this);
@@ -372,7 +385,7 @@ public class LauncherView implements PageView, LauncherContext {
         rootPane.setStyle("-fx-background-radius: 12; -fx-border-radius: 12;");
         rootPane.getChildren().add(contentPane);
 
-        // ===== Top: 标题栏 + Tab栏 =====
+        // Top: 标题栏 + Tab栏 //
         VBox topContainer = new VBox();
         topContainer.getStyleClass().add("top-container");
 
@@ -407,7 +420,7 @@ public class LauncherView implements PageView, LauncherContext {
 
         currentTab = homeTab;
 
-        // ===== Center: 主体布局 =====
+        // Center: 主体布局 //
         HBox mainBody = new HBox();
         mainBody.getStyleClass().add("main-body");
 
@@ -478,17 +491,17 @@ public class LauncherView implements PageView, LauncherContext {
             }
         });
 
-        // ===== 右下角统一悬浮操作按钮（FAB）：下载管理 / 关闭游戏进程 都收进它 =====
+        // 右下角统一悬浮操作按钮（FAB）：下载管理 / 关闭游戏进程 都收进它 //
         buildFab();
 
         // 构造期 applyTheme 时 Scene 还没建好，挂不上深色补充样式表；场景就绪后再同步一次
         rootPane.sceneProperty().addListener((o, ov, nv) -> themeMgr.syncDarkExtraStylesheet());
 
-        // ===== 全局界面动效：按钮水波纹 + 下拉框箭头/面板动画 =====
+        // 全局界面动效：按钮水波纹 + 下拉框箭头/面板动画 //
         // 装在根节点上（内部等场景就绪后挂场景级过滤器），各处 new 出来的按钮与下拉框自动生效
         UiEffects.install(rootPane);
 
-        // ===== 初始化页面 =====
+        // 初始化页面 //
         loadConfig();        // 根据「首页快速管理MOD」开关同步顶部导航栏「模组」页显隐
         updateModTabVisibility();
         // 应用语言配置（I18N 资源包；NEWUI 界面文本为硬编码，切换仅对 I18N 体系生效）
@@ -516,17 +529,93 @@ public class LauncherView implements PageView, LauncherContext {
         switchToPage("home");
         homePage.startSystemMonitor();
 
-        // ===== 初始化游戏启动动画弹窗内容 =====
+        // 节日挂饰（中秋测试期写死）：底层夜空压在内容下、顶部灯笼浮在内容上，全窗生效、鼠标穿透。
+        // 用户设置了壁纸/自定义背景色时底层夜空不生效（见 FestivalBackdrop 与壁纸优先级的处理）。
+        installFestivalDecorations();
+
+        // 初始化游戏启动动画弹窗内容 //
         overlay.build();
 
-        // ===== 自动检查更新：进入首页后延迟检测，发现新版本时在首页弹出提示 =====
+        // 自动检查更新：进入首页后延迟检测，发现新版本时在首页弹出提示 //
         autoCheckForUpdates();
 
-        // ===== 帧生成器模块：历史启用过系统托盘或保存过倍率时随启动器常驻；否则首次打开帧生成页时懒加载 =====
+        // 帧生成器模块：历史启用过系统托盘或保存过倍率时随启动器常驻；否则首次打开帧生成页时懒加载 //
         initFrameGenModule();
     }
 
-    // ==================== 色盲辅助 ====================
+    // 色盲辅助 //
+
+    /**
+     * 节日效果入口：计算活动节日 → 按节日加载壁纸（自适应铺满 + 可读性遮罩）
+     * → 挂顶部灯笼（按节日配色）。无节日时保持默认背景。
+     *
+     * <p>壁纸约定：{@code src/main/resources/wallpaper/<id>.png|jpg|jpeg|webp}；
+     * 未命中时回退用户壁纸 / 主题渐变（不报错）。
+     */
+    private void installFestivalDecorations() {
+        if (!com.example.starlight.newui.festival.FestivalCalendar.isEnabled(configCache)) {
+            return; // 开关关闭：不挂任何节日装饰
+        }
+        activeFestival = com.example.starlight.newui.festival.FestivalCalendar.current();
+        if (activeFestival == null) {
+            return; // 无节日：不挂任何节日装饰
+        }
+        // 1) 节日壁纸：优先于默认渐变，但用户自定义壁纸（BackgroundImage）优先
+        applyFestivalWallpaper(activeFestival.id);
+        // 2) 顶部灯笼（按节日配色）
+        rootPane.getChildren().add(
+                com.example.starlight.newui.ui.FestivalDecorations.topOverlay(
+                        activeFestival.lanternA, activeFestival.lanternB));
+    }
+
+    /**
+     * 按节日 id 从 classpath 资源加载壁纸并自适应铺满。
+     *
+     * <p>优先级：用户壁纸（BackgroundImage）> 节日壁纸（wallpaper/）> 主题渐变。
+     * 图片用 preserveRatio=false + 绑定窗口宽高做到「自适应页面」（拉伸铺满），
+     * 与现有 ThemeManager.applyBackgroundImage 的方式一致；叠一层可读性遮罩保证文字对比度。
+     */
+    private void applyFestivalWallpaper(String festivalId) {
+        // 用户已设壁纸时不覆盖
+        String userBg = configCache == null ? "" : configCache.getOrDefault("BackgroundImage", "");
+        if (!userBg.isBlank()) return;
+
+        String[] exts = {"png", "jpg", "jpeg", "webp"};
+        java.io.InputStream in = null;
+        for (String ext : exts) {
+            in = getClass().getResourceAsStream("/wallpaper/" + festivalId + "." + ext);
+            if (in != null) break;
+        }
+        if (in == null) return; // 该节日无壁纸，保持默认背景
+
+        try {
+            Image img = new Image(in);
+            if (img.isError()) return;
+            ImageView view = new ImageView(img);
+            view.setPreserveRatio(false);
+            view.setSmooth(true);
+            view.fitWidthProperty().bind(rootPane.widthProperty());
+            view.fitHeightProperty().bind(rootPane.heightProperty());
+            view.setOpacity(1.0);
+            rootPane.getChildren().add(0, view);
+            view.toBack();
+
+            // 可读性遮罩（浅色提亮 / 深色压暗），保证节日壁纸上的文字清晰
+            javafx.scene.layout.Region overlay = new javafx.scene.layout.Region();
+            overlay.setMouseTransparent(true);
+            overlay.prefWidthProperty().bind(rootPane.widthProperty());
+            overlay.prefHeightProperty().bind(rootPane.heightProperty());
+            boolean dark = "dark".equals(currentTheme());
+            overlay.setStyle(dark
+                    ? "-fx-background-color: rgba(0,0,0,0.30);"
+                    : "-fx-background-color: rgba(255,255,255,0.18);");
+            rootPane.getChildren().add(1, overlay);
+        } catch (Exception ignored) {
+            // 加载失败保持默认背景
+        } finally {
+            try { in.close(); } catch (Exception ignored) {}
+        }
+    }
 
     /**
      * 色盲辅助启动初始化：按「记住当前配置」决定是否把类型/强度/窗口标题重置为默认值，
@@ -541,7 +630,7 @@ public class LauncherView implements PageView, LauncherContext {
         }
     }
 
-    // ==================== 游戏启动动画 ====================
+    // 游戏启动动画 //
 
     /**
      * 标题栏窗口按钮。
@@ -592,7 +681,7 @@ public class LauncherView implements PageView, LauncherContext {
         return btn;
     }
 
-    /** 侧边栏各项图标（键与 buildSidebar 里的 id 一致） */
+    /** 侧边栏各项图标（键与 buildSidebar 里的 id 一致；旧 id 的图标供深链高亮兜底） */
     private static final java.util.Map<String, String> SIDEBAR_ICONS = java.util.Map.ofEntries(
             java.util.Map.entry("sidebarAccount", "user"),
             java.util.Map.entry("sidebarAbout", "help"),
@@ -616,16 +705,117 @@ public class LauncherView implements PageView, LauncherContext {
             java.util.Map.entry("sidebarDev", "code")
     );
 
-    private void buildSidebar() {
-        String[][] sections = {
-                {"通用", "sidebarAccount", "Account", "sidebarAbout", "关于", "sidebarLicense", "版权"},
-                {"游戏", "sidebarGameAccount", "游戏账户档案", "sidebarMod", "模组", "sidebarJvm", "Java虚拟机与内存", "sidebarGameDir", "游戏目录", "sidebarVersionSettings", "版本独立设置", "sidebarAdvanced", "高级设置"},
-                {"个性化", "sidebarTheme", "主题与背景", "sidebarMainUi", "主界面", "sidebarLanguage", "语言", "sidebarAccessibility", "辅助功能", "sidebarColorBlind", "色盲辅助"},
-                {"网络", "sidebarDownload", "下载", "sidebarProxy", "代理"},
-                {"联机", "sidebarMultiplayer", "联机设置"},
-                {"其他", "sidebarFeedback", "服务与反馈", "sidebarSponsor", "赞助我们", "sidebarDev", "开发者选项"}
-        };
+    /** 设置搜索框当前关键词（输入即过滤侧边栏导航项；空 = 不过滤） */
+    private String settingsSearchKeyword = "";
 
+    /** 最近修改的设置项（最多 5 条，key = 导航 id，value = 设置项名）；由各页保存动作上报 */
+    private static final java.util.Deque<String[]> RECENT_SETTINGS = new java.util.ArrayDeque<>();
+    /** 最近修改列表最多保留条数（重构 §4.5） */
+    private static final int RECENT_SETTINGS_MAX = 5;
+
+    /**
+     * 记录一次设置修改（供侧边栏「最近修改」展示）。
+     * 同一导航 id 连续修改只刷新条目位置不重复添加；超出上限移除最旧一条。
+     * 页面类通过 {@code LauncherContext} 不直接持有本列表——由 LauncherView 提供静态入口，
+     * 页面保存时调用 {@link #recordRecentSetting(String, String)} 即可。
+     */
+    public static void recordRecentSetting(String navId, String settingName) {
+        if (navId == null || settingName == null) return;
+        RECENT_SETTINGS.removeIf(e -> e[0].equals(navId) && e[1].equals(settingName));
+        RECENT_SETTINGS.addFirst(new String[]{navId, settingName});
+        while (RECENT_SETTINGS.size() > RECENT_SETTINGS_MAX) {
+            RECENT_SETTINGS.removeLast();
+        }
+    }
+
+    /** 重建侧边栏的导航项显隐（搜索过滤）与「最近修改」列表内容 */
+    private void refreshSidebarSearch() {
+        for (Node n : sidebar.getChildrenUnmodifiable()) {
+            if (!(n instanceof Button btn)) continue;
+            String id = btn.getId();
+            if (id == null || !id.startsWith("sidebar")) continue;
+            boolean visible = settingsSearchKeyword.isEmpty()
+                    || navLabelOf(id).contains(settingsSearchKeyword)
+                    || id.toLowerCase().contains(settingsSearchKeyword.toLowerCase());
+            btn.setVisible(visible);
+            btn.setManaged(visible);
+        }
+        // 分组标题：组内导航项全部被过滤掉时隐藏该组标题
+        int idx = 0;
+        int sectionCount = PageKit.SETTINGS_NAV_SECTIONS.length;
+        for (Node n : sidebar.getChildrenUnmodifiable()) {
+            if (!(n instanceof Label) || !(n.getStyleClass().contains("sidebar-section-title"))) continue;
+            if (idx >= sectionCount) break;
+            int size = PageKit.SETTINGS_NAV_SECTION_SIZES[idx];
+            boolean anyVisible = false;
+            for (int k = 0; k < size; k++) {
+                int itemIndex = sectionOffset(idx) + k;
+                if (itemIndex >= PageKit.SETTINGS_NAV_ITEMS.length) break;
+                String id = PageKit.SETTINGS_NAV_ITEMS[itemIndex][0];
+                Node item = sidebar.lookup("#" + id);
+                if (item != null && item.isVisible()) {
+                    anyVisible = true;
+                    break;
+                }
+            }
+            n.setVisible(anyVisible);
+            n.setManaged(anyVisible);
+            idx++;
+        }
+        Label recentTitle = (Label) sidebar.lookup("#sidebarRecentTitle");
+        if (recentTitle != null) {
+            boolean show = settingsSearchKeyword.isEmpty() && !RECENT_SETTINGS.isEmpty();
+            recentTitle.setVisible(show);
+            recentTitle.setManaged(show);
+        }
+        VBox recentBox = (VBox) sidebar.lookup("#sidebarRecentBox");
+        if (recentBox != null) {
+            recentBox.setVisible(settingsSearchKeyword.isEmpty());
+            recentBox.setManaged(settingsSearchKeyword.isEmpty());
+            rebuildRecentItems(recentBox);
+        }
+    }
+
+    /** 第 sectionIdx 个分组第一个导航项在 SETTINGS_NAV_ITEMS 中的下标（带越界防御） */
+    private static int sectionOffset(int sectionIdx) {
+        int off = 0;
+        int max = Math.min(sectionIdx, PageKit.SETTINGS_NAV_SECTION_SIZES.length);
+        for (int i = 0; i < max; i++) off += PageKit.SETTINGS_NAV_SECTION_SIZES[i];
+        return Math.min(off, PageKit.SETTINGS_NAV_ITEMS.length);
+    }
+
+    /** 导航 id → 显示名（SETTINGS_NAV_ITEMS 查表，查不到回退 id 本身） */
+    private static String navLabelOf(String id) {
+        for (String[] item : PageKit.SETTINGS_NAV_ITEMS) {
+            if (item[0].equals(id)) return item[1];
+        }
+        return id;
+    }
+
+    /** 重绘「最近修改」子列表（保序：最新在上；跳转经 switchToSettings 统一走 NavRouter） */
+    private void rebuildRecentItems(VBox box) {
+        box.getChildren().clear();
+        for (String[] entry : RECENT_SETTINGS) {
+            Button recent = new Button(navLabelOf(entry[0]) + " · " + entry[1]);
+            recent.getStyleClass().addAll("sidebar-item", "sidebar-recent-item");
+            recent.setMaxWidth(Double.MAX_VALUE);
+            recent.setOnAction(e -> switchToSettings(entry[0]));
+            box.getChildren().add(recent);
+        }
+    }
+
+    private void buildSidebar() {
+        // 顶部：设置搜索框（重构 §4.5：输入即过滤导航项） //
+        TextField searchField = PageKit.searchField("搜索设置...", settingsSearchKeyword, kw -> {
+            settingsSearchKeyword = kw == null ? "" : kw;
+            refreshSidebarSearch();
+        });
+        searchField.getStyleClass().add("sidebar-search");
+        searchField.setMaxWidth(Double.MAX_VALUE);
+        sidebar.getChildren().add(searchField);
+
+        // 分组渲染：单一数据源（PageKit.SETTINGS_NAV_ITEMS + 分组切分数组），与下拉导航共用（§7） //
+        String[][] sections = splitSections();
         for (String[] section : sections) {
             Label secTitle = new Label(section[0]);
             secTitle.getStyleClass().add("sidebar-section-title");
@@ -644,17 +834,48 @@ public class LauncherView implements PageView, LauncherContext {
                 sidebar.getChildren().add(btn);
             }
         }
+
+        // 底部：最近修改（重构 §4.5：记录最近 5 项，点击直达） //
+        Label recentTitle = new Label("最近修改");
+        recentTitle.setId("sidebarRecentTitle");
+        recentTitle.getStyleClass().add("sidebar-section-title");
+        VBox recentBox = new VBox(2);
+        recentBox.setId("sidebarRecentBox");
+        sidebar.getChildren().addAll(recentTitle, recentBox);
+        rebuildRecentItems(recentBox);
+    }
+
+    /** 把 SETTINGS_NAV_ITEMS 按分组大小切回「组名 + 键值对」结构（保留 buildSidebar 原消费形态） */
+    private static String[][] splitSections() {
+        // 防御：分组数总和与清单长度不一致时按清单实际长度截断，绝不再越界（启动崩溃兜底）
+        int total = 0;
+        for (int size : PageKit.SETTINGS_NAV_SECTION_SIZES) total += size;
+        int itemCount = Math.min(total, PageKit.SETTINGS_NAV_ITEMS.length);
+        String[][] result = new String[PageKit.SETTINGS_NAV_SECTIONS.length][];
+        int offset = 0;
+        for (int s = 0; s < PageKit.SETTINGS_NAV_SECTIONS.length; s++) {
+            int size = PageKit.SETTINGS_NAV_SECTION_SIZES[s];
+            String[] row = new String[1 + size * 2];
+            row[0] = PageKit.SETTINGS_NAV_SECTIONS[s];
+            for (int k = 0; k < size; k++) {
+                if (offset + k >= itemCount) break;
+                String[] item = PageKit.SETTINGS_NAV_ITEMS[offset + k];
+                row[1 + k * 2] = item[0];
+                row[2 + k * 2] = item[1];
+            }
+            result[s] = row;
+            offset += size;
+        }
+        return result;
     }
 
     private void buildAllPages() {
+        // 只构建启动即需的轻量页面，重页面（资源/社区/联机/版本选择）改为首次访问时懒加载：
+        // 这些页面构建期会同步做磁盘 IO（存档 NBT 解析、版本 JSON 读取）或发起网络请求，
+        // 在启动期一次性同步构建会阻塞 FX 线程，低配机上直接表现为窗口未响应。
         pageCache.put("home", buildHomePage());
-        // 下载页首次访问时延迟构建（避免启动时立即发起 Modrinth/Mojang 网络请求）
         // 设置子页面统一通过 rebuildSettingsPages 构建（侧边栏显隐影响页面导航形态）
         rebuildSettingsPages();
-        pageCache.put("resources", buildResourcesPage());
-        pageCache.put("news", buildNewsPage());
-        pageCache.put("multiplayer", buildMultiplayerPage());
-        pageCache.put("versionSelect", buildVersionSelectPage());
         pageCache.put("networkCheck", buildNetworkCheckPage());
         pageCache.put("memory", buildMemoryPage());
     }
@@ -710,6 +931,31 @@ public class LauncherView implements PageView, LauncherContext {
                 newPage = buildDownloadPage();
                 System.err.println("[DL-PROBE] buildDownloadPage build time: " + ((System.nanoTime() - t0) / 1_000_000) + "ms (FX thread)");
                 pageCache.put("download", newPage);
+            }
+        } else if ("resources".equals(key)) {
+            // 资源页延迟构建：构建期会同步扫描存档（NBT 解析），首次点击时才构建
+            newPage = pageCache.get("resources");
+            if (newPage == null) {
+                newPage = buildResourcesPage();
+                pageCache.put("resources", newPage);
+            }
+        } else if ("news".equals(key)) {
+            newPage = pageCache.get("news");
+            if (newPage == null) {
+                newPage = buildNewsPage();
+                pageCache.put("news", newPage);
+            }
+        } else if ("multiplayer".equals(key)) {
+            newPage = pageCache.get("multiplayer");
+            if (newPage == null) {
+                newPage = buildMultiplayerPage();
+                pageCache.put("multiplayer", newPage);
+            }
+        } else if ("versionSelect".equals(key)) {
+            newPage = pageCache.get("versionSelect");
+            if (newPage == null) {
+                newPage = buildVersionSelectPage();
+                pageCache.put("versionSelect", newPage);
             }
         } else if ("mod".equals(key)) {
             // 顶部导航「模组」页：内容暂空（返回按钮 + 页面名称）
@@ -826,7 +1072,7 @@ public class LauncherView implements PageView, LauncherContext {
         }
     }
 
-    // ==================== 页面构建 ====================
+    // 页面构建 //
 
     /** 重建首页缓存；若用户当前停留在首页则立即刷新显示（存档列表、最近游玩、系统信息等实时数据） */
     @Override
@@ -843,7 +1089,7 @@ public class LauncherView implements PageView, LauncherContext {
         return homePage.build();
     }
 
-    // ==================== 页面脚手架（实现见 newui.ui.PageKit） ====================
+    // 页面脚手架（实现见 newui.ui.PageKit） //
 
     private VBox createSettingsPage(String title) {
         return PageKit.settingsPage(this, title);
@@ -867,20 +1113,19 @@ public class LauncherView implements PageView, LauncherContext {
         devPage.detachLogListener();
         for (String[] item : PageKit.SETTINGS_NAV_ITEMS) {
             switch (item[0]) {
-                case "sidebarAccount" -> pageCache.put(item[0], buildAccountPage());
+                // 账户状态卡并入 GameAccountPage（重构 §6.1）：sidebarAccount 与 sidebarGameAccount 共用一页
+                case "sidebarAccount", "sidebarGameAccount" -> pageCache.put(item[0], buildGameAccountPage());
+                // LicensePage 并入 AboutPage（重构 §6.2）
                 case "sidebarAbout" -> pageCache.put(item[0], buildAboutPage());
-                case "sidebarLicense" -> pageCache.put(item[0], buildLicensePage());
-                case "sidebarGameAccount" -> pageCache.put(item[0], buildGameAccountPage());
-                case "sidebarMod" -> pageCache.put(item[0], buildModPage());
                 case "sidebarJvm" -> pageCache.put(item[0], buildJvmPage());
+                // ModPage 并入 GameDirPage（重构 §6.4）
                 case "sidebarGameDir" -> pageCache.put(item[0], buildGameDirPage());
                 case "sidebarVersionSettings" -> pageCache.put(item[0], versionSettingsPage.build());
                 case "sidebarAdvanced" -> pageCache.put(item[0], buildAdvancedPage());
                 case "sidebarTheme" -> pageCache.put(item[0], buildThemePage());
+                // LanguagePage 并入 MainUiPage（重构 §6.8）
                 case "sidebarMainUi" -> pageCache.put(item[0], buildMainUiPage());
-                case "sidebarLanguage" -> pageCache.put(item[0], buildLanguagePage());
                 case "sidebarAccessibility" -> pageCache.put(item[0], buildAccessibilityPage());
-                case "sidebarColorBlind" -> pageCache.put(item[0], buildColorBlindPage());
                 case "sidebarDownload" -> pageCache.put(item[0], buildDownloadSettingsPage());
                 case "sidebarProxy" -> pageCache.put(item[0], buildProxySettingsPage());
                 case "sidebarMultiplayer" -> pageCache.put(item[0], buildMultiplayerSettingsPage());
@@ -889,10 +1134,22 @@ public class LauncherView implements PageView, LauncherContext {
                 case "sidebarDev" -> pageCache.put(item[0], buildDevPage());
             }
         }
+        // 旧导航 id 的深链兼容缓存：switchToPage(旧id) 时先经 NavRouter 重定向，
+        // 但保险起见也把旧 id 指到目标页缓存，任何直连旧 id 的代码路径都不会踩空
+        pageCache.put("sidebarLicense", pageCache.get("sidebarAbout"));
+        pageCache.put("sidebarMod", pageCache.get("sidebarGameDir"));
+        pageCache.put("sidebarLanguage", pageCache.get("sidebarMainUi"));
+        pageCache.put("sidebarColorBlind", pageCache.get("sidebarAccessibility"));
     }
 
     @Override
     public void switchToSettings(String id) {
+        // NavRouter（重构 §5.2 / §7）：旧导航 id 重定向到新归属页（深链与页内跳转统一入口）
+        String target = com.example.starlight.newui.ui.NavRouter.resolve(id);
+        if (!target.equals(id)) {
+            ui.toast("该设置已移至「" + navLabelOf(target) + "」");
+        }
+        id = target;
         if (currentTab != null) currentTab.getStyleClass().remove("selected");
         settingsTab.getStyleClass().add("selected");
         currentTab = settingsTab;
@@ -903,29 +1160,24 @@ public class LauncherView implements PageView, LauncherContext {
         switchToPage(id);
     }
 
-    // ===== 设置页面 =====
-
-    private Node buildAccountPage() {
-        return new AccountPage(this).build();
-    }
+    // 设置页面 //
+    // 注：AccountPage / LicensePage / ModPage / LanguagePage 已并入其它页面（重构 §6.1/§6.2/§6.4/§6.8），
+    // 对应旧导航 id 由 NavRouter 重定向；AccountPage 等 4 个页面类文件保留但不再被引用，
+    // 后续清理任务可删除。
 
     private Node buildAboutPage() {
         return new AboutPage(this).build();
-    }
-
-    private Node buildLicensePage() {
-        return new LicensePage(this).build();
     }
 
     private Node buildGameAccountPage() {
         return new GameAccountPage(this).build();
     }
 
-    /** 账号数据变化后刷新「游戏账户档案」与「登录状态」页缓存；若用户正停留在账号档案页则原地刷新显示 */
+    /** 账号数据变化后刷新「游戏账户档案」页缓存（账户状态卡已并入本页，重构 §6.1）；停留时原地刷新 */
     @Override
     public void refreshAccountPages() {
         Node oldCached = pageCache.get("sidebarGameAccount");
-        pageCache.put("sidebarAccount", buildAccountPage());
+        pageCache.put("sidebarAccount", buildGameAccountPage());
         pageCache.put("sidebarGameAccount", buildGameAccountPage());
         // 当前显示的正是旧缓存实例（用户停留在此页）时，原地刷新为新页面
         if (oldCached != null && currentPage == oldCached) {
@@ -956,10 +1208,6 @@ public class LauncherView implements PageView, LauncherContext {
 
     private Node buildThemePage() {
         return new ThemePage(this).build();
-    }
-
-    private Node buildModPage() {
-        return new ModPage(this).build();
     }
 
     /** 顶部导航栏「模组」页：上传 .jar 模组文件并复制到 Starlight-Launcher\Mod，展示已安装模组列表 */
@@ -1001,16 +1249,8 @@ public class LauncherView implements PageView, LauncherContext {
         return new MainUiPage(this).build();
     }
 
-    private Node buildLanguagePage() {
-        return new LanguagePage(this).build();
-    }
-
     private Node buildAccessibilityPage() {
         return new AccessibilityPage(this).build();
-    }
-
-    private Node buildColorBlindPage() {
-        return new ColorBlindPage(this).build();
     }
 
     private Node buildDownloadSettingsPage() {
@@ -1021,7 +1261,7 @@ public class LauncherView implements PageView, LauncherContext {
         return new ProxySettingsPage(this).build();
     }
 
-    // ===== 下载中心 =====
+    // 下载中心 //
 
     /**
      * 下载中心主页：左侧分类导航 + 右侧内容区（参考 HMCL DownloadPage 的六类结构）
@@ -1130,7 +1370,7 @@ public class LauncherView implements PageView, LauncherContext {
         return memoryPage.build();
     }
 
-    // ===== 配置管理 =====
+    // 配置管理 //
 
     @Override
     public void loadConfig() {
@@ -1150,12 +1390,14 @@ public class LauncherView implements PageView, LauncherContext {
         // 恢复开发者选项开关：调试模式 / 中文日志（无配置项时使用默认值）
         AppConfig.DEBUG_MODE = "true".equalsIgnoreCase(configCache.getOrDefault("DebugMode", "false"));
         AppConfig.CHINESE_LOG = !"false".equalsIgnoreCase(configCache.getOrDefault("ChineseLog", "true"));
+        DebugLog.applyMode(AppConfig.DEBUG_MODE); // 同步 logback root 级别（DEBUG/INFO）
     }
 
     /**
-     * 将「下载源 / 并发下载数」配置应用到全局下载组件：
+     * 将「下载源 / 并发下载数 / 高级下载设置」配置应用到全局下载组件：
      * 版本清单与安装引擎（VersionDownloadService）、启动资源补全（GameResourceCompleter）、
-     * 加载器安装（LoaderInstallEngine）、分块下载线程数（DownloadSettings）
+     * 加载器安装（LoaderInstallEngine）；线程数、分块阈值、分裂点、最小碎片、慢速触发线、
+     * 限速统一由 {@link DownloadSettings#applyAll(Map)} 一次性压到 download.mod。
      */
     private void applyDownloadConfig() {
         String source = configCache.getOrDefault("DownloadSource", "BMCLAPI");
@@ -1163,8 +1405,16 @@ public class LauncherView implements PageView, LauncherContext {
         GameResourceCompleter.setDownloadProvider(provider);
         LoaderInstallEngine.setDownloadProvider(provider);
         VersionManifest.setDownloadProvider(provider);
-        int threads = PageKit.parseIntSafe(configCache.getOrDefault("DownloadThreads", "4"), DownloadSettings.DEFAULT_THREADS);
-        DownloadSettings.setDownloadThreads(threads);
+        // 下载参数：缺失键回落默认值（老配置文件无需迁移），限速一并压到全局令牌桶
+        DownloadSettings.applyAll(configCache);
+        DownloadCoordinator.getInstance().setThreadLimit(DownloadSettings.getDownloadThreads());
+        // 单线程 Host 黑名单用户片段（开发者选项页持久化）启动即注入，不依赖是否打开过该页
+        String singleThreadHosts = configCache.getOrDefault("SingleThreadHosts", "");
+        if (singleThreadHosts != null && !singleThreadHosts.isBlank()) {
+            for (String frag : singleThreadHosts.split("\\|")) {
+                if (!frag.isBlank()) HostPolicy.addSingleThreadHost(frag.trim());
+            }
+        }
     }
 
     /**
@@ -1201,14 +1451,17 @@ public class LauncherView implements PageView, LauncherContext {
     }
 
     private String getScreenshotDir() {
+        // 隔离按当前版本的有效配置判定（版本独立设置页可单版本开关）
+        String gameDir = configCache.getOrDefault("GameDir", ".minecraft");
+        String version = configCache.getOrDefault("Version", "");
         return ResourceScanner.resolveScreenshotDir(
                 configCache.get("ScreenshotDir"),
-                configCache.getOrDefault("GameDir", ".minecraft"),
-                "true".equalsIgnoreCase(configCache.getOrDefault("VersionIsolation", "false")),
-                configCache.getOrDefault("Version", ""));
+                gameDir,
+                VersionConfigManager.effectiveVersionIsolation(configCache, gameDir, version),
+                version);
     }
 
-    // ==================== 右下角统一悬浮操作按钮（FAB） ====================
+    // 右下角统一悬浮操作按钮（FAB） //
 
     /**
      * 构建右下角统一 FAB：一个 52px 主按钮，展开后飞出「下载管理 / 关闭游戏进程」等子按钮。
@@ -1291,18 +1544,36 @@ public class LauncherView implements PageView, LauncherContext {
         // 检测加载器类型（用于记录）
         String loaderType = detectLoaderForVersion(config.gameDir, config.version);
 
+        // 启动器可见性（高级设置）：策略在启动时读一次，游戏启动与退出两个时机都用它，
+        // 避免中途改配置导致「已经隐藏了却不还原」
+        final String visibilityMode = LauncherVisibility.normalize(
+                configCache.getOrDefault(LauncherVisibility.KEY, LauncherVisibility.KEEP));
+        launcherHiddenByVisibility.set(false);
+        // 上一轮启动若走过「关闭启动器」又没真退出成（极端情况），清掉标记避免本次误判已退出
+        LauncherVisibility.resetExitRequested();
+
         // 显示启动动画
         overlay.show("版本: " + version);
 
         // 实际启动游戏（异步，进度回调驱动真实进度）
         UIGeneralControlClass.launchMinecraftAsync(config,
-                (percent, message) -> Platform.runLater(() -> {
-                    overlay.onProgress(percent, message);
-                }),
+                (percent, message) -> {
+                    // 可见性策略要求游戏启动后关闭启动器：JavaFX 运行时正在/已经关掉，
+                    // 此时后台线程再往界面上刷进度会抛 IllegalStateException（写进崩溃日志），
+                    // 直接跳过——界面已经没人看了
+                    if (LauncherVisibility.isExitRequested()) return;
+                    Platform.runLater(() -> overlay.onProgress(percent, message));
+                },
                 new UIGeneralControlClass.ResultCallback<>() {
                     @Override
                     public void onSuccess(UIGeneralControlClass.LaunchResult result) {
+                        // 「游戏启动后立即关闭」策略下进程早已退出；极端竞态下（退出还没走完
+                        // 游戏就退了）JavaFX 运行时已关闭，再 runLater 会抛异常，直接跳过
+                        if (LauncherVisibility.isExitRequested()) return;
                         Platform.runLater(() -> {
+                            // 启动器可见性：先按策略收尾（隐藏过 / 最小化过要还原，
+                            // 「隐藏后自动关闭」在这里退出启动器），再弹提示与崩溃面板
+                            applyLauncherVisibilityOnExit(visibilityMode);
                             // 游戏进程已结束（无论正常/崩溃/被关）→ 收起「关闭游戏进程」悬浮按钮
                             syncGameStopFab();
                             // 通知帧生成器：游戏进程已退出（权威信号，取消/正常/崩溃退出都执行）
@@ -1329,7 +1600,11 @@ public class LauncherView implements PageView, LauncherContext {
                     }
                     @Override
                     public void onError(String error) {
+                        if (LauncherVisibility.isExitRequested()) return;
                         Platform.runLater(() -> {
+                            // 启动器可见性：启动失败时启动器通常还没被隐藏（隐藏发生在游戏窗口
+                            // 就绪之后），这里只在确实隐藏/最小化过的情况下还原窗口，绝不额外退出
+                            applyLauncherVisibilityOnExit(visibilityMode);
                             // 启动失败：进程没起来（或刚起就死），悬浮按钮不该留在界面上
                             syncGameStopFab();
                             // 色盲辅助：启动失败（含被取消）时游戏窗口不会出现，矫正工具不该留在后台
@@ -1366,11 +1641,28 @@ public class LauncherView implements PageView, LauncherContext {
                         refreshHomePage();
                     }));
                     exitTimer.play();
+
+                    // 启动器可见性（高级设置）：游戏窗口已就绪，按策略隐藏 / 最小化 / 关闭启动器。
+                    // 放在最后：先让启动动画走完自己的收尾，再动窗口
+                    if (LauncherVisibility.onGameStarted(stage, visibilityMode)) {
+                        launcherHiddenByVisibility.set(true);
+                    }
                 })
         );
     }
 
-    // ===== 崩溃诊断面板（集成在启动器内，替代独立 GameCrashWindow / AIDiagnosisWindow） =====
+    /**
+     * 游戏退出 / 启动失败时收尾「启动器可见性」：还原窗口、或按「隐藏后自动关闭」退出启动器。
+     *
+     * <p>只在启动时确实动过窗口（{@link #launcherHiddenByVisibility}）才执行，执行后复位 ——
+     * 「立即关闭」策略下启动失败时启动器其实还开着，不能被这里的回调顺手关掉。
+     */
+    private void applyLauncherVisibilityOnExit(String visibilityMode) {
+        if (!launcherHiddenByVisibility.getAndSet(false)) return;
+        LauncherVisibility.onGameExited(stage, visibilityMode, true);
+    }
+
+    // 崩溃诊断面板（集成在启动器内，替代独立 GameCrashWindow / AIDiagnosisWindow） //
 
     /** 游戏异常退出：收集崩溃数据并弹出诊断面板 */
     private void showGameCrashPanel(UIGeneralControlClass.LaunchResult result) {
@@ -1389,7 +1681,8 @@ public class LauncherView implements PageView, LauncherContext {
                 () -> launchGame(config != null ? config : null),
                 ui::toast,
                 () -> showAIDiagnosisPanel(data),
-                ui::closeModal);
+                ui::closeModal,
+                stage);
         ui.modal("游戏崩溃诊断", panel, 780, 540);
     }
 
@@ -1405,7 +1698,7 @@ public class LauncherView implements PageView, LauncherContext {
         ui.modal("AI 诊断分析", panel, 780, 540);
     }
 
-    // ===== 快捷工具 =====
+    // 快捷工具 //
 
     @Override
     public void handleQuickTool(String toolName) {
@@ -1419,7 +1712,7 @@ public class LauncherView implements PageView, LauncherContext {
         }
     }
 
-    // ===== 系统监控 =====
+    // 系统监控 //
 
     private Node buildSystemStats() {
         return homePage.buildSystemStats();
@@ -1453,7 +1746,7 @@ public class LauncherView implements PageView, LauncherContext {
         login.offlineLogin();
     }
 
-    // ===== 设置页功能 =====
+    // 设置页功能 //
     /** 检查更新：委托给 UpdateChecker（星光MC社区更新 API + 版本比对），本类只负责展示结果 */
     @Override
     public void checkForUpdates() {
@@ -1506,6 +1799,11 @@ public class LauncherView implements PageView, LauncherContext {
     @Override
     public void applyBackgroundImage() {
         themeMgr.applyBackgroundImage();
+    }
+
+    @Override
+    public com.example.starlight.newui.ui.CustomThemeColor customThemeColor() {
+        return themeMgr.customColor();
     }
 
     @Override

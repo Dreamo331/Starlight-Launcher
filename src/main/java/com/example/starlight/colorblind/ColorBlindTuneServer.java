@@ -92,7 +92,17 @@ public final class ColorBlindTuneServer {
         return port > 0 ? "http://127.0.0.1:" + port + "/" : null;
     }
 
-    // ==================== 请求处理 ====================
+    /** 是否运行中（开发者选项页「本地服务状态」查询用） */
+    public static synchronized boolean isRunning() {
+        return server != null;
+    }
+
+    /** 本地监听端口；未启动返回 -1 */
+    public static synchronized int getPort() {
+        return port;
+    }
+
+    // 请求处理 //
 
     private static void handleIndex(HttpExchange exchange) throws IOException {
         send(exchange, 200, "text/html; charset=utf-8", buildHtml().getBytes(StandardCharsets.UTF_8));
@@ -149,7 +159,7 @@ public final class ColorBlindTuneServer {
         sendJson(exchange, 200, json.toString());
     }
 
-    // ==================== 内部实现 ====================
+    // 内部实现 //
 
     private static void register(String path, ThrowingHandler handler) {
         server.createContext(path, exchange -> {

@@ -46,7 +46,7 @@ public final class LaunchOverlay {
 
     private final LauncherContext host;
 
-    // ==================== 游戏启动动画组件 ====================
+    // 游戏启动动画组件 //
     private VBox launchPanel;                    // 启动动画弹窗内容面板（集成式弹窗展示）
     private StackPane launchModalOverlayRef;      // 启动动画对应的弹窗 overlay（安全关闭时校验）
     private Label launchStatusLabel;
@@ -62,7 +62,7 @@ public final class LaunchOverlay {
     /** 玫瑰线动画帧驱动（show 时恢复、hide 时停止） */
     private AnimationTimer roseTimer;
 
-    // ==================== 玫瑰线加载动画规格常量（硬编码，勿调） ====================
+    // 玫瑰线加载动画规格常量（硬编码，勿调） //
     /** 脉冲周期 ms：细节缩放 s 波动一次的时长 */
     private static final double ROSE_PULSE_T = 5800;
     /** 旋转周期 ms：整体旋转一圈的时长（顺时针） */
@@ -191,7 +191,7 @@ public final class LaunchOverlay {
 
         Color fg = Color.rgb(2, 112, 225);   // 前景色：与原三方块同色系
 
-        // ---- 曲线：481 点玫瑰线折线（预建节点，每帧只改坐标） ----
+        // 曲线：481 点玫瑰线折线（预建节点，每帧只改坐标） //
         Path curve = new Path();
         curve.setStroke(fg);
         curve.setStrokeWidth(4.5);
@@ -206,7 +206,7 @@ public final class LaunchOverlay {
             curve.getElements().add(seg);
         }
 
-        // ---- 粒子拖尾：31 个圆，半径/透明度建时已定（fade 只依赖尾距），每帧只改圆心 ----
+        // 粒子拖尾：31 个圆，半径/透明度建时已定（fade 只依赖尾距），每帧只改圆心 //
         Circle[] particles = new Circle[ROSE_PARTICLES];
         double[] tailOffsets = new double[ROSE_PARTICLES];
         for (int i = 0; i < ROSE_PARTICLES; i++) {
@@ -241,7 +241,7 @@ public final class LaunchOverlay {
         holder.setScaleY(0.9);
 
 
-        // ---- 动画循环：逐帧更新曲线、粒子和旋转 ----
+        // 动画循环：逐帧更新曲线、粒子和旋转 //
         final Rotate spinRef = spin;
         roseTimer = new AnimationTimer() {
             private final long startNanos = System.nanoTime();

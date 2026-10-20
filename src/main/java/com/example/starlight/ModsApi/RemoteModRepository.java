@@ -1,6 +1,6 @@
 package com.example.starlight.ModsApi;
 
-import com.example.starlight.download.DownloadProvider;
+import com.example.starlight.download.source.DownloadProvider;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -68,7 +68,7 @@ public interface RemoteModRepository {
 
     Stream<Category> getCategories() throws IOException;
 
-    // ==================== 下载中心扩展（加载器/分类筛选、详情） ====================
+    // 下载中心扩展（加载器/分类筛选、详情） //
 
     /**
      * 带完整筛选条件的搜索（加载器 + 分类 + 游戏版本 + 排序 + 来源）。

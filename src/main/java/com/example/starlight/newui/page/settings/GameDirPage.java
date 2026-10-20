@@ -5,6 +5,7 @@ import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.PageKit;
 import com.example.starlight.util.FormatUtils;
 import com.example.starlight.util.ResourceScanner;
+import com.example.starlight.gui.UIGeneralControlClass;
 
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -44,7 +45,7 @@ public final class GameDirPage {
         this.host = host;
     }
 
-    // ===== 设置：游戏目录（多目录管理） =====
+    // 设置：游戏目录（多目录管理） //
 
     /**
      * 设置 - 游戏目录：上层「当前游戏目录」入口 + 下层「多目录管理」列表。
@@ -58,7 +59,7 @@ public final class GameDirPage {
         List<GameDirManager.GameDirEntry> entries = GameDirManager.load(host.config());
         String activePath = GameDirManager.activePath(host.config());
 
-        // ---- 当前游戏目录：输入框 + 浏览 + 应用（保留原来单目录的使用习惯，浏览即添加并切换）----
+        // 当前游戏目录：输入框 + 浏览 + 应用（保留原来单目录的使用习惯，浏览即添加并切换） //
         TextField dirField = new TextField(activePath);
         dirField.getStyleClass().add("input-field");
         dirField.setPrefWidth(300);
@@ -79,7 +80,7 @@ public final class GameDirPage {
         root.getChildren().add(PageKit.settingsCard("当前游戏目录",
                 "游戏数据存储位置（.minecraft）；启动、下载与资源管理均使用该目录", row));
 
-        // ---- 多目录管理：列表头（数量 + 添加）----
+        // 多目录管理：列表头（数量 + 添加） //
         HBox listHeader = new HBox(10);
         listHeader.setAlignment(Pos.CENTER_LEFT);
         Label listTitle = new Label("已保存的目录 (" + entries.size() + ")");
@@ -96,12 +97,44 @@ public final class GameDirPage {
         listHeader.getChildren().addAll(listTitle, addBtn);
         root.getChildren().add(listHeader);
 
-        // ---- 每个目录一张卡片：设为当前 / 重命名 / 打开 / 移除 ----
+        // 每个目录一张卡片：设为当前 / 重命名 / 打开 / 移除 //
         for (GameDirManager.GameDirEntry entry : entries) {
             root.getChildren().add(buildGameDirCard(entry,
                     GameDirManager.samePath(entry.getPath(), activePath)));
         }
+
+        // 模组管理折叠卡（重构 §6.4：原 ModPage 并入本页，旧导航 id sidebarMod 由 NavRouter 重定向） //
+        root.getChildren().add(buildModSectionCard());
         return root;
+    }
+
+    /** 「模组管理」折叠卡：内测警告 + 首页快速管理 MOD 开关（内容来自原 ModPage，逐字保留） */
+    private Node buildModSectionCard() {
+        VBox content = new VBox(10);
+
+        // 内测功能标注（原 ModPage 横幅）
+        Label betaNotice = AppIcons.label("warning",
+                "模组（启动器扩展）功能当前为内测版，可能存在缺陷或行为变更，请谨慎使用。");
+        betaNotice.setStyle("-fx-font-size: 12px; -fx-text-fill: #b45309;"
+                + " -fx-background-color: rgba(245,158,11,0.12); -fx-background-radius: 8; -fx-padding: 8 12;");
+        betaNotice.setWrapText(true);
+        content.getChildren().add(betaNotice);
+
+        // 「首页快速管理MOD」开关（原 ModPage 卡片内容，配置键不变）
+        CheckBox quickModToggle = PageKit.toggle(
+                "true".equalsIgnoreCase(host.config().getOrDefault("HomeQuickManageMod", "false")));
+        quickModToggle.setOnAction(e -> {
+            host.config().put("HomeQuickManageMod", String.valueOf(quickModToggle.isSelected()));
+            host.saveConfig();
+            host.updateModTabVisibility();
+            host.toast("首页快速管理MOD: " + (quickModToggle.isSelected() ? "开启" : "关闭"));
+        });
+        content.getChildren().add(PageKit.settingsCard("首页快速管理MOD",
+                "开启后在顶部导航栏显示「模组」页，便于快速管理模组（将用户上传的 .jar 模组文件复制到指定位置）",
+                quickModToggle));
+
+        return PageKit.collapsibleSection("模组管理",
+                "内测功能 · 首页快速管理 MOD 开关", content, false, null);
     }
 
     /**
@@ -116,12 +149,15 @@ public final class GameDirPage {
         info.getStyleClass().add("settings-card-info");
         Label nameLabel = new Label(entry.getName());
         nameLabel.getStyleClass().add("settings-card-title");
-        Label descLabel = new Label(gameDirDesc(entry));
+        Label descLabel = new Label();
         descLabel.getStyleClass().add("settings-card-desc");
         // 路径超长/窗口变窄时换行收缩，而不是把按钮挤变形
         descLabel.setWrapText(true);
         info.getChildren().addAll(nameLabel, descLabel);
         card.getChildren().add(info);
+
+        // 版本数统计是磁盘 IO：先显示路径占位，后台统计后回填（缓存 TTL 内不重复扫）
+        fillGameDirDescAsync(entry, descLabel);
 
         HBox actions = new HBox(6);
         actions.setAlignment(Pos.CENTER_RIGHT);
@@ -161,16 +197,26 @@ public final class GameDirPage {
         return card;
     }
 
-    /** 目录卡片的说明文字：完整路径 + 版本数量 / 目录缺失提示 */
-    private String gameDirDesc(GameDirManager.GameDirEntry entry) {
-        StringBuilder desc = new StringBuilder(entry.getDisplayPath());
-        if (entry.exists()) {
-            int versions = entry.countVersions();
-            desc.append(versions > 0 ? "  ·  已安装 " + versions + " 个版本" : "  ·  未发现已安装版本");
-        } else {
-            desc.append("  ·  目录不存在");
+    /** 异步填充目录卡片的说明文字：路径立即显示，版本数后台统计后回填（缓存 TTL 内直接同步返回） */
+    private void fillGameDirDescAsync(GameDirManager.GameDirEntry entry, Label descLabel) {
+        String displayPath = entry.getDisplayPath();
+        if (!entry.exists()) {
+            descLabel.setText(displayPath + "  ·  目录不存在");
+            return;
         }
-        return desc.toString();
+        Integer cached = GameDirManager.cachedVersionCount(entry.getPath());
+        if (cached != null) {
+            descLabel.setText(displayPath + (cached > 0 ? "  ·  已安装 " + cached + " 个版本" : "  ·  未发现已安装版本"));
+            return;
+        }
+        // 缓存未命中：先显示路径占位，后台统计后回填
+        descLabel.setText(displayPath + "  ·  统计版本中…");
+        UIGeneralControlClass.ASYNC_POOL.submit(() -> {
+            int versions = entry.countVersions();
+            GameDirManager.putVersionCount(entry.getPath(), versions);
+            Platform.runLater(() -> descLabel.setText(displayPath
+                    + (versions > 0 ? "  ·  已安装 " + versions + " 个版本" : "  ·  未发现已安装版本")));
+        });
     }
 
     /** 加入列表并切换为当前游戏目录（已存在则只切换）；设置页调用，返回提示文案 */

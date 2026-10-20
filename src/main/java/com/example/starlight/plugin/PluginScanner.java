@@ -29,8 +29,8 @@ import java.util.stream.Stream;
  */
 public final class PluginScanner {
 
-    /** 默认插件目录（用户指定）：{@code <启动器根目录>/Starlight-Launcher/mod}。 */
-    public static final String DEFAULT_PLUGINS_DIR = "Starlight-Launcher/mod";
+    /** 插件目录名（相对数据根；实际路径一律走 AppDirs）。 */
+    public static final String DEFAULT_PLUGINS_DIR = "mod";
 
     private static final Logger LOGGER = Logger.getLogger(PluginScanner.class.getName());
 
@@ -39,9 +39,9 @@ public final class PluginScanner {
 
     private final Path pluginsDir;
 
-    /** 基于启动器根目录构造扫描器，插件目录固定为 {@code <launcherRoot>/Starlight-Launcher/mod}。 */
+    /** 基于启动器根目录构造扫描器（插件目录现已统一到用户数据目录，见 {@code AppDirs#pluginsDir()}）。 */
     public static PluginScanner forLauncherRoot(Path launcherRoot) {
-        return new PluginScanner(launcherRoot.resolve(DEFAULT_PLUGINS_DIR));
+        return new PluginScanner(com.example.starlight.config.AppDirs.pluginsDir());
     }
 
     /**

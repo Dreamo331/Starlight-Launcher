@@ -31,10 +31,10 @@ import java.util.regex.Pattern;
  */
 public class SLanManager {
 
-    // ==================== 常量配置 ====================
+    // 常量配置 //
 
-    /** 模块基础路径 */
-    private static final String DEFAULT_BASE_PATH = "Starlight-Launcher\\slan\\1.0";
+    /** 模块基础路径（统一走 AppDirs：默认 ~/.starlight，--portable 回落工作目录） */
+    private static final String DEFAULT_BASE_PATH = "slan\\1.0";
 
     /** 可执行文件名 */
     private static final String EXECUTABLE_NAME = "SL-MinecraftLAN.exe";
@@ -42,7 +42,7 @@ public class SLanManager {
     // 注意：模块下载地址、中继服务器等远端服务器配置一律从 Starlight-Launcher/multiplayer.json
     // 读取（见 SLanConfig），不再在此硬编码。
 
-    // ==================== 成员变量 ====================
+    // 成员变量 //
 
     /** SL-MinecraftLAN.exe 的完整路径 */
     private final Path executablePath;
@@ -59,14 +59,15 @@ public class SLanManager {
     /** 进程退出监听器（进程退出时回调，参数为退出码；在后台线程触发） */
     private volatile Consumer<Integer> processExitListener;
 
-    // ==================== 构造方法 ====================
+    // 构造方法 //
 
     /**
      * 使用默认路径创建管理器
      * 默认路径: 当前工作目录\Starlight-Launcher\slan\1.0\SL-MinecraftLAN.exe
      */
     public SLanManager() {
-        this(Paths.get(System.getProperty("user.dir"), DEFAULT_BASE_PATH, EXECUTABLE_NAME), null);
+        this(com.example.starlight.config.AppDirs.slanDir().resolve("1.0").resolve(EXECUTABLE_NAME)
+                .toAbsolutePath().normalize(), null);
     }
 
     /**
@@ -92,7 +93,7 @@ public class SLanManager {
         validateExecutable();
     }
 
-    // ==================== 静态工厂方法 ====================
+    // 静态工厂方法 //
 
     /**
      * 使用自定义基础目录创建管理器
@@ -115,7 +116,7 @@ public class SLanManager {
         return fromBaseDirectory(Paths.get(baseDirectory));
     }
 
-    // ==================== 配置方法 ====================
+    // 配置方法 //
 
     /**
      * 设置是否启用调试模式（打印详细日志）
@@ -148,7 +149,7 @@ public class SLanManager {
         pb.environment().put("PYTHONUNBUFFERED", "1");
     }
 
-    // ==================== 核心功能：创建房间 ====================
+    // 核心功能：创建房间 //
 
     /**
      * 创建联机房间（同步阻塞）
@@ -200,7 +201,7 @@ public class SLanManager {
         return startLongRunningProcess(args, outputListener, new HostResultParser());
     }
 
-    // ==================== 核心功能：加入房间 ====================
+    // 核心功能：加入房间 //
 
     /**
      * 加入联机房间（同步阻塞）
@@ -256,7 +257,7 @@ public class SLanManager {
         return startLongRunningProcess(args, outputListener, new JoinResultParser());
     }
 
-    // ==================== 原始命令执行（高级用法） ====================
+    // 原始命令执行（高级用法） //
 
     /**
      * 执行原始命令（同步）
@@ -267,7 +268,7 @@ public class SLanManager {
         return executeSync(command, null);
     }
 
-    // ==================== 参数构建 ====================
+    // 参数构建 //
 
     private List<String> buildHostArgs(String password) {
         List<String> args = new ArrayList<>();
@@ -293,7 +294,7 @@ public class SLanManager {
         return args;
     }
 
-    // ==================== 进程执行引擎 ====================
+    // 进程执行引擎 //
 
     private ProcessResult executeSync(List<String> command, Consumer<String> outputListener) throws SLanException {
         if (debugMode) {
@@ -363,7 +364,7 @@ public class SLanManager {
         });
     }
 
-    // ==================== 长驻进程执行引擎 ====================
+    // 长驻进程执行引擎 //
 
     /**
      * 启动长驻进程并逐行解析输出。
@@ -503,7 +504,7 @@ public class SLanManager {
         return sb.toString().trim();
     }
 
-    // ==================== 输出行解析器 ====================
+    // 输出行解析器 //
 
     /**
      * 输出行解析器接口：逐行喂入进程输出，满足条件后完成
@@ -611,7 +612,7 @@ public class SLanManager {
         }
     }
 
-    // ==================== 结果解析 ====================
+    // 结果解析 //
 
     private HostResult parseHostResult(ProcessResult result) {
         HostResult hostResult = new HostResult();
@@ -711,7 +712,7 @@ public class SLanManager {
         return line.trim();
     }
 
-    // ==================== 验证与工具 ====================
+    // 验证与工具 //
 
     private void validateExecutable() {
         File exe = executablePath.toFile();
@@ -839,7 +840,7 @@ public class SLanManager {
         return executablePath;
     }
 
-    // ==================== 结果数据类 ====================
+    // 结果数据类 //
 
     /**
      * 进程执行原始结果
@@ -934,7 +935,7 @@ public class SLanManager {
         }
     }
 
-    // ==================== 异常类 ====================
+    // 异常类 //
 
     /**
      * SLan 模块专用异常

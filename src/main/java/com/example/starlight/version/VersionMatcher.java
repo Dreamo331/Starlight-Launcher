@@ -3,7 +3,7 @@ package com.example.starlight.version;
 import com.example.starlight.ModsApi.RemoteMod;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.startgame.launcher.LoaderDetector;
+import com.example.starlight.startmc.launcher.LoaderDetector;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

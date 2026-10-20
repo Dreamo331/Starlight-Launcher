@@ -19,8 +19,15 @@ import java.util.function.Consumer;
  */
 public final class DebugLog {
 
-    /** 内存环形缓冲上限（超出丢弃最旧条目，防止长时间运行内存膨胀） */
-    private static final int MAX_ENTRIES = 500;
+    /** 内存环形缓冲默认上限（超出丢弃最旧条目，防止长时间运行内存膨胀）；开发者选项页可调 */
+    private static final int DEFAULT_MAX_ENTRIES = 500;
+
+    /** 当前环形缓冲上限（volatile：开发者选项页可运行中调整） */
+    private static volatile int maxEntries = DEFAULT_MAX_ENTRIES;
+
+    /** 缓冲上限的可调范围 */
+    public static final int MIN_MAX_ENTRIES = 100;
+    public static final int MAX_MAX_ENTRIES = 20_000;
 
     /** 单条内容最大展示长度（超长截断，防止下载/大响应刷屏） */
     private static final int MAX_CONTENT_LEN = 600;
@@ -49,11 +56,43 @@ public final class DebugLog {
         return new ArrayList<>(buffer);
     }
 
+    /** 调整环形缓冲上限（100~20000 条；调小时立即裁掉最旧条目） */
+    public static void setMaxEntries(int entries) {
+        int capped = Math.max(MIN_MAX_ENTRIES, Math.min(MAX_MAX_ENTRIES, entries));
+        maxEntries = capped;
+        synchronized (buffer) {
+            while (buffer.size() > capped) {
+                buffer.remove(0);
+            }
+        }
+    }
+
+    /** 当前环形缓冲上限 */
+    public static int getMaxEntries() {
+        return maxEntries;
+    }
+
     /** 记录底层事件日志（如页面刷新）；调试模式关闭时忽略 */
     public static void log(String msg) {
         if (!AppConfig.DEBUG_MODE || msg == null || msg.isEmpty()) return;
         String tag = AppConfig.CHINESE_LOG ? "[内部] " : "[APP] ";
         emit(tag + msg);
+    }
+
+    /**
+     * 调试模式开关：同步 logback root 级别（开启=DEBUG，关闭=INFO）。
+     * 调试日志统一以 DEBUG 级别输出（蓝色标识），与开关联动。
+     */
+    public static void applyMode(boolean debug) {
+        try {
+            ch.qos.logback.classic.Logger root = (ch.qos.logback.classic.Logger)
+                    org.slf4j.LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+            root.setLevel(debug
+                    ? ch.qos.logback.classic.Level.DEBUG
+                    : ch.qos.logback.classic.Level.INFO);
+        } catch (Throwable ignored) {
+            // 级别切换失败不影响主流程
+        }
     }
 
     /**
@@ -69,6 +108,7 @@ public final class DebugLog {
      */
     public static void http(boolean direction, String method, String url,
                             int status, long bytes, String content, long costMs) {
+        NetTrafficStats.onHttp(direction, status, bytes); // 全程统计（开发者悬浮窗），与调试开关无关
         if (!AppConfig.DEBUG_MODE) return;
         boolean zh = AppConfig.CHINESE_LOG;
         String dir = direction
@@ -112,17 +152,18 @@ public final class DebugLog {
                 "$1***");
     }
 
-    /** 统一输出：带时间戳写入缓冲 + SLF4J 落盘 + 推送给监听器 */
+    /** 统一输出：缓冲/监听器行带 [DEBUG] 级别（UI 实时区可见），SLF4J 落盘走 logback（pattern 自带时间戳+级别+颜色） */
     private static void emit(String line) {
-        String entry = "[" + LocalTime.now().format(TS) + "] " + line;
+        String ts = "[" + LocalTime.now().format(TS) + "] [DEBUG] " + line;
         synchronized (buffer) {
-            buffer.add(entry);
-            if (buffer.size() > MAX_ENTRIES) buffer.remove(0);
+            buffer.add(ts);
+            int cap = maxEntries;
+            while (buffer.size() > cap) buffer.remove(0);
         }
-        log.info(entry);
+        log.debug(line);
         for (Consumer<String> l : listeners) {
             try {
-                l.accept(entry);
+                l.accept(ts);
             } catch (Exception ignored) {
                 // 监听器异常不影响日志主流程
             }

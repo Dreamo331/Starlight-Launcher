@@ -1,7 +1,7 @@
 package com.example.starlight.newui.ui;
 
 import com.example.starlight.version.VersionDownloadService;
-import com.startgame.launcher.LoaderDetector;
+import com.example.starlight.startmc.launcher.LoaderDetector;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;

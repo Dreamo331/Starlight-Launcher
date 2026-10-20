@@ -113,9 +113,7 @@ public class ModService {
         }
     }
 
-    // ================================================================
-    //  内部
-    // ================================================================
+    // 内部 //
 
     private static void scanModDir(Path dir, String origin, List<ModInfo> list) {
         try (Stream<Path> stream = Files.list(dir)) {

@@ -47,7 +47,7 @@ import javafx.util.Duration;
  */
 public final class NavEffects {
 
-    // ===== 指示条（设计稿数值）=====
+    // 指示条（设计稿数值） //
     private static final double INDICATOR_H = 2.5;
     private static final Duration MOVE = Duration.millis(420);
     private static final Duration WIDTH = Duration.millis(320);
@@ -56,19 +56,19 @@ public final class NavEffects {
     /** 宽度：均匀曲线，更快到位 */
     private static final Interpolator EVEN = new CubicBezierInterpolator(0.40, 0.0, 0.20, 1.0);
 
-    // ===== 页签水波纹 =====
+    // 页签水波纹 //
     private static final Duration TAB_RIPPLE = Duration.millis(550);
     private static final double TAB_RIPPLE_SCALE = 2.4;
     private static final Interpolator RIPPLE_EASE = new CubicBezierInterpolator(0.0, 0.0, 0.58, 1.0);
 
-    // ===== 滚动收缩 =====
+    // 滚动收缩 //
     private static final Duration SHRINK = Duration.millis(320);
     /** 收缩高度：设计稿 64 → 54 */
     private static final double SHRINK_PX = 10;
     /** 触发阈值：scrollY > 20 */
     private static final double SCROLL_THRESHOLD = 20;
 
-    // ===== 图标微交互 =====
+    // 图标微交互 //
     private static final Duration TAB_ICON = Duration.millis(350);
     private static final Duration NAV_BTN = Duration.millis(300);
     private static final Duration LOGO = Duration.millis(400);
@@ -128,7 +128,7 @@ public final class NavEffects {
         if (installed != null) installed.applyScrolled(offset > SCROLL_THRESHOLD);
     }
 
-    // ==================== 组装 ====================
+    // 组装 //
 
     private void attach() {
         installed = this;
@@ -259,7 +259,7 @@ public final class NavEffects {
         shrink.play();
     }
 
-    // ==================== 页签交互 ====================
+    // 页签交互 //
 
     private void installTabInteractions(Button tab) {
         // 图标 hover：放大 1.18 + 上移 1px，带回弹
@@ -332,7 +332,7 @@ public final class NavEffects {
         grow.play();
     }
 
-    // ==================== 其它导航控件的静态工具 ====================
+    // 其它导航控件的静态工具 //
 
     /** 右侧图标按钮：hover 上移 1px + 放大 1.06，按下缩到 0.94 再回弹（幂等） */
     public static void installNavButton(Node button) {

@@ -78,13 +78,24 @@ public class Skin {
     private final TextureModel textureModel;
     private final String localSkinPath;
     private final String localCapePath;
+    /** 本地皮肤文件应用前是否去背景（PngBgRemover） */
+    private final boolean removeSkinBg;
+    /** 本地披风文件应用前是否去背景（PngBgRemover） */
+    private final boolean removeCapeBg;
 
     public Skin(Type type, String cslApi, TextureModel textureModel, String localSkinPath, String localCapePath) {
+        this(type, cslApi, textureModel, localSkinPath, localCapePath, false, false);
+    }
+
+    public Skin(Type type, String cslApi, TextureModel textureModel, String localSkinPath, String localCapePath,
+                boolean removeSkinBg, boolean removeCapeBg) {
         this.type = type;
         this.cslApi = cslApi;
         this.textureModel = textureModel;
         this.localSkinPath = localSkinPath;
         this.localCapePath = localCapePath;
+        this.removeSkinBg = removeSkinBg;
+        this.removeCapeBg = removeCapeBg;
     }
 
     public Type getType() { return type; }
@@ -92,10 +103,29 @@ public class Skin {
     public TextureModel getTextureModel() { return textureModel == null ? TextureModel.WIDE : textureModel; }
     public String getLocalSkinPath() { return localSkinPath; }
     public String getLocalCapePath() { return localCapePath; }
+    public boolean isRemoveSkinBg() { return removeSkinBg; }
+    public boolean isRemoveCapeBg() { return removeCapeBg; }
 
     /** 是否为 slim 模型 */
     public boolean isSlim() {
         return getTextureModel() == TextureModel.SLIM;
+    }
+
+    /** 是否为内置皮肤类型（Steve/Alex/ARI…ZURI） */
+    public boolean isBuiltin() {
+        return type.ordinal() >= Type.ALEX.ordinal() && type.ordinal() <= Type.ZURI.ordinal();
+    }
+
+    /**
+     * 内置皮肤对应的官方模型：slim 皮肤（细手臂）用 Alex 模型，wide 皮肤用 Steve 模型。
+     * 供启动时按模型调整 UUID（对应 PCL2 的 LaunchSkinSlim 判定）。
+     */
+    public boolean isSlimBuiltin() {
+        return switch (type) {
+            case ALEX, ARI, KAI, NOOR, ZURI -> true;
+            case STEVE, EFE, MAKENA, SUNNY -> false;
+            default -> isSlim();
+        };
     }
 
     /**
@@ -126,13 +156,21 @@ public class Skin {
                     if (localSkinPath != null && !localSkinPath.isEmpty()) {
                         Path skinPath = Paths.get(localSkinPath);
                         if (Files.exists(skinPath)) {
-                            skin = SkinTexture.loadTexture(Files.newInputStream(skinPath));
+                            byte[] bytes = Files.readAllBytes(skinPath);
+                            if (removeSkinBg) {
+                                bytes = com.example.starlight.util.PngBgRemover.removeBackgroundToPngBytes(bytes, 32, false, false);
+                            }
+                            skin = SkinTexture.loadTexture(new java.io.ByteArrayInputStream(bytes));
                         }
                     }
                     if (localCapePath != null && !localCapePath.isEmpty()) {
                         Path capePath = Paths.get(localCapePath);
                         if (Files.exists(capePath)) {
-                            cape = SkinTexture.loadTexture(Files.newInputStream(capePath));
+                            byte[] bytes = Files.readAllBytes(capePath);
+                            if (removeCapeBg) {
+                                bytes = com.example.starlight.util.PngBgRemover.removeBackgroundToPngBytes(bytes, 32, false, false);
+                            }
+                            cape = SkinTexture.loadTexture(new java.io.ByteArrayInputStream(bytes));
                         }
                     }
                     return new LoadedSkin(getTextureModel(), skin, cape);
@@ -249,6 +287,8 @@ public class Skin {
         obj.addProperty("textureModel", getTextureModel().modelName);
         if (localSkinPath != null) obj.addProperty("localSkinPath", localSkinPath);
         if (localCapePath != null) obj.addProperty("localCapePath", localCapePath);
+        if (removeSkinBg) obj.addProperty("removeSkinBg", true);
+        if (removeCapeBg) obj.addProperty("removeCapeBg", true);
         return obj;
     }
 
@@ -264,7 +304,9 @@ public class Skin {
         TextureModel model = "slim".equals(texModel) ? TextureModel.SLIM : TextureModel.WIDE;
         String localSkin = getString(obj, "localSkinPath");
         String localCape = getString(obj, "localCapePath");
-        return new Skin(type, cslApi, model, localSkin, localCape);
+        boolean removeSkinBg = getBoolean(obj, "removeSkinBg");
+        boolean removeCapeBg = getBoolean(obj, "removeCapeBg");
+        return new Skin(type, cslApi, model, localSkin, localCape, removeSkinBg, removeCapeBg);
     }
 
     /** 兼容 toStorage() / fromStorage() 的 Map 接口 */
@@ -275,6 +317,8 @@ public class Skin {
         map.put("textureModel", getTextureModel().modelName);
         if (localSkinPath != null) map.put("localSkinPath", localSkinPath);
         if (localCapePath != null) map.put("localCapePath", localCapePath);
+        if (removeSkinBg) map.put("removeSkinBg", true);
+        if (removeCapeBg) map.put("removeCapeBg", true);
         return map;
     }
 
@@ -293,7 +337,9 @@ public class Skin {
         TextureModel model = "slim".equals(texModel) ? TextureModel.SLIM : TextureModel.WIDE;
         String localSkin = (String) map.get("localSkinPath");
         String localCape = (String) map.get("localCapePath");
-        return new Skin(type, cslApi, model, localSkin, localCape);
+        boolean removeSkinBg = Boolean.TRUE.equals(map.get("removeSkinBg"));
+        boolean removeCapeBg = Boolean.TRUE.equals(map.get("removeCapeBg"));
+        return new Skin(type, cslApi, model, localSkin, localCape, removeSkinBg, removeCapeBg);
     }
 
     private static String getString(JsonObject obj, String key) {
@@ -303,12 +349,16 @@ public class Skin {
         return null;
     }
 
+    private static boolean getBoolean(JsonObject obj, String key) {
+        return obj.has(key) && obj.get(key).isJsonPrimitive() && obj.get(key).getAsBoolean();
+    }
+
     @Override
     public String toString() {
         return "Skin{type=" + type + ", model=" + textureModel + "}";
     }
 
-    // ========== 静态内置皮肤枚举 ==========
+    // 静态内置皮肤枚举 //
 
     /** 获取所有内置皮肤类型（用于UI选择） */
     public static Type[] getBuiltinTypes() {

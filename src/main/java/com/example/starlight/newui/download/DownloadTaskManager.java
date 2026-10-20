@@ -128,15 +128,17 @@ public final class DownloadTaskManager {
      * <p>列出全部下载任务卡片，支持逐个取消，以及一键清空已完成任务。
      */
     public Node buildManagerPage() {
-        VBox root = new VBox(12);
-        root.setPadding(new Insets(8, 8, 8, 0));
+        VBox root = new VBox(16);
+        // 页面根统一 (0,4,0,0)：外层 .main-content 已有 18/22 内边距，见 DownloadCenterPage 同类注释
+        root.setPadding(new Insets(0, 4, 0, 0));
         VBox.setVgrow(root, Priority.ALWAYS);
 
         Button backBtn = AppIcons.button("back", "返回");
         backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> goBack());
         Label titleLabel = new Label("下载管理");
-        titleLabel.getStyleClass().add("home-card-title");
+        // 页面级标题统一用 content-title（19px）；home-card-title 是卡片内小节标题（12px）
+        titleLabel.getStyleClass().add("content-title");
         Region headerSpacer = new Region();
         HBox.setHgrow(headerSpacer, Priority.ALWAYS);
         long running = tasks.stream().filter(t -> t.status() == DownloadTaskStatus.RUNNING).count();
@@ -182,7 +184,7 @@ public final class DownloadTaskManager {
         return root;
     }
 
-    // ==================== 右下角「下载管理」悬浮入口（统一 FAB 的子按钮） ====================
+    // 右下角「下载管理」悬浮入口（统一 FAB 的子按钮） //
 
     /**
      * 把「下载管理」挂到统一 FAB（{@link FabMenu}）的左子按钮位。

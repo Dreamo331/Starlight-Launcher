@@ -118,8 +118,6 @@ public final class ProgressBars {
         private Region fill;
         private double shownProgress = Double.NaN;
         private Timeline widthAnim;
-        /** 补间期间忽略自身的进度变化，避免「动画写回 → 监听再动画」的自激 */
-        private boolean tweening;
 
         Bar(ProgressBar bar) {
             this.bar = bar;
@@ -148,10 +146,7 @@ public final class ProgressBars {
             fill.layoutBoundsProperty().addListener((o, a, b) -> sync());
             bar.widthProperty().addListener((o, a, b) -> sync());
             bar.heightProperty().addListener((o, a, b) -> sync());
-            bar.progressProperty().addListener((o, a, b) -> {
-                if (tweening) return;
-                tweenTo(b.doubleValue());
-            });
+            bar.progressProperty().addListener((o, a, b) -> tweenTo(b.doubleValue()));
             shownProgress = bar.getProgress();
             sync();
             // 刚显示时填充还没有真实宽度，多同步两拍
@@ -169,19 +164,49 @@ public final class ProgressBars {
             loop.play();
         }
 
-        /** 填充宽度变化 0.4s cubic-bezier(0.4,0,0.2,1)：从当前显示值补间到新值 */
+        /**
+         * 填充宽度变化 0.4s cubic-bezier(0.4,0,0.2,1)：从<b>当前实际显示值</b>补间到新值。
+         *
+         * <h3>这里修掉的两个 bug（「进度条不会被填满 / 下载越快越短」的根因）</h3>
+         * <ol>
+         *   <li><b>{@code Timeline.stop()} 不会触发 {@code setOnFinished}</b>（已实测确认）。
+         *       原先用 {@code tweening} 标志 + {@code setOnFinished} 复位：一旦某次进度变化
+         *       打断上一段动画，{@code tweening} 就<b>永久</b>留在 {@code true}，
+         *       此后监听器里 {@code if (tweening) return;} 把所有进度更新全部丢弃
+         *       —— 包括收尾时 {@code finish()} 设的 100%。进度条于是永远停在半路。
+         *       现在不再用标志位，改为直接用「当前 progress 值」作为补间起点，天然可重入。</li>
+         *   <li><b>补间起点用错</b>：原先从 {@code shownProgress}（目标值）起补，
+         *       而实际可见值是上一条动画被打断时的中间值。连续高频回调下（下载每 64KB 一次），
+         *       动画永远只跑最前面一小段，显示值严重滞后于真实进度
+         *       —— 这就是「下载越快、进度条越短」（快下载回调更密集、动画更没机会跑完）。</li>
+         * </ol>
+         *
+         * <p>判定「进度已到终值」时直接跳到 1.0 并跳过动画，保证收尾一定满格。
+         */
         private void tweenTo(double target) {
             if (Double.isNaN(shownProgress)) {
                 shownProgress = target;
                 return;
             }
-            if (Math.abs(target - shownProgress) < 0.001) return;
+            // 目标已到 100%：直接落到终值，不让 0.4s 动画拖住「满格」这个终态
+            if (target >= 1.0) {
+                if (widthAnim != null) {
+                    widthAnim.stop();
+                    widthAnim = null;
+                }
+                shownProgress = 1.0;
+                bar.setProgress(1.0);
+                return;
+            }
+            double from = bar.getProgress();      // 当前真实可见值（可能是上一段动画的中间态）
+            if (Math.abs(target - from) < 0.001) {
+                shownProgress = target;
+                return;
+            }
             if (widthAnim != null) widthAnim.stop();
             shownProgress = target;
-            tweening = true;
             widthAnim = new Timeline(new KeyFrame(WIDTH_EASE,
                     new KeyValue(bar.progressProperty(), target, EVEN)));
-            widthAnim.setOnFinished(e -> tweening = false);
             widthAnim.play();
         }
 

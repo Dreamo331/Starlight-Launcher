@@ -1,5 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  日志格式对齐 PCL（Plain Craft Launcher 2）标准：[HH:mm:ss.SSS] [级别] 消息
+  （PCL 界面启动日志为 [HH:mm:ss.fff] 文本，文件日志带级别前缀，此处取两者结合）
+  控制台带颜色（TRACE 青 / DEBUG 蓝 / INFO 绿 / WARN 黄 / ERROR 红 / FATAL 红底加粗），
+  文件落盘为纯文本。
+-->
 <configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>[%d{HH:mm:ss.SSS}] [%highlight(%-5level){TRACE=cyan,DEBUG=blue,INFO=green,WARN=yellow,ERROR=red,FATAL=bg:red,bold}] %msg%n</pattern>
+        </encoder>
+    </appender>
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>logs/starlight.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
@@ -9,10 +21,12 @@
             <totalSizeCap>500MB</totalSizeCap>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+            <pattern>[%d{HH:mm:ss.SSS}] [%-5level] %msg%n</pattern>
         </encoder>
     </appender>
     <root level="INFO">
+        <appender-ref ref="CONSOLE" />
         <appender-ref ref="FILE" />
     </root>
 </configuration>

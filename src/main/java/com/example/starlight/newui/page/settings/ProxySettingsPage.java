@@ -46,7 +46,7 @@ public final class ProxySettingsPage {
         Map<String, String> cfg = ctx.config();
         ProxyConfig.ProxyType curMode = ProxyConfig.type(cfg);
 
-        // ===== 模式选择（单选）=====
+        // 模式选择（单选） //
         RadioButton directRadio = new RadioButton("关闭代理（直连）");
         RadioButton systemRadio = new RadioButton("系统代理");
         RadioButton httpRadio = new RadioButton("HTTP 代理");
@@ -65,7 +65,7 @@ public final class ProxySettingsPage {
                 modeOption(httpRadio, "手动填写主机与端口"));
         modeRow.setAlignment(Pos.TOP_LEFT);
 
-        // ===== HTTP 参数区（网格对齐）=====
+        // HTTP 参数区（网格对齐） //
         TextField hostField = textInput(cfg.getOrDefault(ProxyConfig.KEY_HOST, ""), "如 127.0.0.1");
         TextField portField = textInput(cfg.getOrDefault(ProxyConfig.KEY_PORT, ""), "如 7890");
         portField.getStyleClass().add("input-field-sm");
@@ -89,7 +89,7 @@ public final class ProxySettingsPage {
         // 未选择 HTTP 代理时整组置灰（值保留，切回来还能看到上次填的地址）
         httpGrid.setDisable(!httpRadio.isSelected());
 
-        // ===== 当前状态徽标（三态）+ 未保存提示 =====
+        // 当前状态徽标（三态）+ 未保存提示 //
         Label statusBadge = new Label();
         // 徽标是固定文案，不许被压缩（否则会变成「当前: 已...」）
         statusBadge.setMinWidth(Region.USE_PREF_SIZE);
@@ -146,7 +146,7 @@ public final class ProxySettingsPage {
             f.textProperty().addListener((o, a, b) -> syncDirty.run());
         }
 
-        // ===== 保存按钮 =====
+        // 保存按钮 //
         Button saveBtn = AppIcons.button("save", "保存并应用");
         saveBtn.getStyleClass().add("btn-primary");
         saveBtn.setOnAction(e -> {
@@ -180,7 +180,7 @@ public final class ProxySettingsPage {
             ctx.toast("代理设置已保存并应用: " + modeTitle(mode));
         });
 
-        // ===== 组装：模式选择 / HTTP 配置 / 应用 各自独立卡片 =====
+        // 组装：模式选择 / HTTP 配置 / 应用 各自独立卡片 //
         root.getChildren().add(PageKit.settingsCardStacked(
                 "代理模式", "选择代理方式：关闭代理（直连）/ 系统代理 / HTTP 代理", modeRow));
 

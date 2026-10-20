@@ -33,7 +33,7 @@ public final class MultiplayerSettingsPage {
     public Node build() {
         VBox root = PageKit.settingsPage(ctx, "联机设置");
 
-        // ===== 中继服务器地址（读写 Starlight-Launcher/multiplayer.json）=====
+        // 中继服务器地址（读写 Starlight-Launcher/multiplayer.json） //
         TextField relayServerField = new TextField(SLanConfig.relayServer());
         relayServerField.getStyleClass().add("input-field");
         relayServerField.setPromptText("如 ws://your.server:8080（可省略 ws://）");
@@ -44,7 +44,7 @@ public final class MultiplayerSettingsPage {
         relayEffectiveLabel.setWrapText(true);
         relayEffectiveLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
 
-        // ===== 检测结果状态：与按钮同一行，宽度自适应换行 =====
+        // 检测结果状态：与按钮同一行，宽度自适应换行 //
         Label checkStatusLabel = new Label("尚未检测。");
         checkStatusLabel.setWrapText(true);
         checkStatusLabel.setMaxWidth(Double.MAX_VALUE);
@@ -119,7 +119,7 @@ public final class MultiplayerSettingsPage {
                 "SLAN 联机使用的房间中继服务器（自建服务器填自己的地址，可省略 ws:// 前缀）；保存后重新建房/加房生效",
                 relayServerBody));
 
-        // ===== 联机模块状态（SL-MinecraftLAN.exe 是否已安装）=====
+        // 联机模块状态（SL-MinecraftLAN.exe 是否已安装） //
         boolean moduleInstalled;
         String modulePath;
         try {
@@ -135,15 +135,22 @@ public final class MultiplayerSettingsPage {
                 + (moduleInstalled ? "#10b981" : "#f59e0b") + ";");
         Label modulePathLabel = new Label(moduleInstalled
                 ? modulePath
-                : "首次使用请到「联机 → SLAN 联机」页点击「下载安装」");
+                : "首次使用需要下载联机模块（SL-MinecraftLAN.exe）");
         modulePathLabel.setWrapText(true);
         modulePathLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #94a3b8;");
         VBox moduleBody = new VBox(6, moduleStatusLabel, modulePathLabel);
+        if (!moduleInstalled) {
+            // 未安装：跳转到「联机 → SLAN 联机」页完成下载安装（安装流程由该页负责，设置页只做导航）
+            Button goInstallBtn = PageKit.cardActionButton("去安装 ›");
+            goInstallBtn.setOnAction(e -> ctx.switchToPage("multiplayer"));
+            moduleBody.getChildren().add(goInstallBtn);
+        }
         moduleBody.setPrefWidth(PageKit.SETTINGS_CONTROL_WIDTH);
         moduleBody.setMaxWidth(PageKit.SETTINGS_CONTROL_WIDTH);
         moduleBody.setMinWidth(0);
         root.getChildren().add(PageKit.settingsCard("联机模块",
-                "SL-MinecraftLAN 联机模块（负责与中继服务器通信、转发 Minecraft 局域网数据）", moduleBody));
+                "SL-MinecraftLAN 联机模块（负责与中继服务器通信、转发 Minecraft 局域网数据）；"
+                        + "未安装时点「去安装」跳转到联机页完成下载", moduleBody));
 
         Label hint = new Label("提示：检测会与中继服务器建立一次 WebSocket 连接并发送协议探测帧，"
                 + "成功即说明服务器可用且协议匹配；检测不会创建房间、不影响正在进行的联机。");

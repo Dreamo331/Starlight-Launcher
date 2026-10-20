@@ -6,11 +6,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
+import com.example.starlight.download.engine.TerracottaBundleStub;
+import com.example.starlight.download.task.AbstractTerracottaProvider;
+import com.example.starlight.download.task.GeneralProvider;
+import com.example.starlight.download.task.MacOSProvider;
 import com.example.starlight.newui.AppConfig;
-import org.starlight.terracotta.provider.AbstractTerracottaProvider;
-import org.starlight.terracotta.provider.GeneralProvider;
-import org.starlight.terracotta.provider.MacOSProvider;
-import org.starlight.terracotta.provider.TerracottaBundleStub;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,8 +26,8 @@ public final class TerracottaMetadata {
     private TerracottaMetadata() {
     }
 
-    /** Terracotta 组件的安装根目录（用户工作目录下） */
-    private static final Path DEPENDENCIES_DIR = Path.of(System.getProperty("user.dir", "."), "Starlight-Launcher", "terracotta");
+    /** Terracotta 组件的安装根目录（统一走 AppDirs：默认 ~/.starlight，--portable 回落工作目录） */
+    private static final Path DEPENDENCIES_DIR = com.example.starlight.config.AppDirs.terracottaDir();
 
     private record Options(String version, String classifier) {
         public String replace(String value) {

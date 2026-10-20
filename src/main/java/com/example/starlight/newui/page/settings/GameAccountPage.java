@@ -30,6 +30,16 @@ public final class GameAccountPage {
 
     public Node build() {
         VBox root = PageKit.settingsPage(ctx, "游戏账户档案");
+
+        // 页头账户状态卡（原 AccountPage 内容并入，重构 §6.1：登录状态不再单独成页） //
+        Account currentForHeader = AccountManager.getCurrentAccount();
+        boolean headerLoggedIn = currentForHeader != null;
+        String headerStatus = headerLoggedIn
+                ? (currentForHeader.name + " (" + currentForHeader.getTypeLabel() + ")")
+                : "当前未登录";
+        root.getChildren().add(PageKit.settingsCard("登录状态", headerStatus,
+                PageKit.primaryButton(ctx, headerLoggedIn ? "切换账号" : "登录", "sidebarGameAccount")));
+
         Account current = AccountManager.getCurrentAccount();
         List<Account> accounts = AccountManager.listAccounts();
         if (accounts.isEmpty()) {
@@ -63,13 +73,18 @@ public final class GameAccountPage {
                 Button removeBtn = AppIcons.button("trash", "删除");
                 removeBtn.setStyle("-fx-background-color: #fee2e2; -fx-text-fill: #dc2626;");
                 removeBtn.setOnAction(e -> {
-                    boolean ok = AccountManager.removeAccount(a.id);
-                    if (ok) {
-                        ctx.refreshAccountPages();
-                        ctx.toast("已删除 " + a.displayName());
-                    } else {
-                        ctx.toast("删除失败: " + a.displayName());
-                    }
+                    // 危险操作二次确认（重构 §4.4）：说明影响范围后执行
+                    ctx.confirmDelete(
+                            "确定要删除账号 \"" + a.displayName() + "\" 吗？\n删除后需要重新登录才能使用该账号。",
+                            () -> {
+                                boolean ok = AccountManager.removeAccount(a.id);
+                                if (ok) {
+                                    ctx.refreshAccountPages();
+                                    ctx.toast("已删除 " + a.displayName());
+                                } else {
+                                    ctx.toast("删除失败: " + a.displayName());
+                                }
+                            });
                 });
                 btnBox.getChildren().add(removeBtn);
                 // 离线/第三方账号支持自定义皮肤：集成式皮肤设置面板（替代独立 SkinSettingsController 窗口）

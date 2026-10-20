@@ -3,11 +3,11 @@ package org.starlight.terracotta;
 
 import com.google.gson.JsonParseException;
 import com.google.gson.annotations.SerializedName;
+import com.example.starlight.download.task.AbstractTerracottaProvider;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.property.ReadOnlyDoubleWrapper;
 import javafx.beans.value.ObservableDoubleValue;
 import org.starlight.terracotta.profile.TerracottaProfile;
-import org.starlight.terracotta.provider.AbstractTerracottaProvider;
 // HMCL dependencies removed: JsonSubtype, JsonType, TolerableValidationException, Validation
 
 import java.util.List;
@@ -81,7 +81,7 @@ public abstract sealed class TerracottaState {
     }
 
     public static final class Launching extends TerracottaState {
-        Launching() {
+        public Launching() {
         }
     }
 

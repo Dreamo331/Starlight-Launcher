@@ -10,6 +10,9 @@ import com.example.starlight.config.StarlightConfig;
  *   <li>ParallelVerify  并行文件校验：多线程校验已存在的资源文件，加快启动校验速度（默认开启）</li>
  *   <li>StreamingSha1   流式哈希校验：分块读取计算 SHA-1，降低大文件内存占用（默认开启）</li>
  *   <li>FastVerify      快速校验：文件大小一致即视为完整，不计算哈希；下载后的完整性校验不受影响（默认关闭）</li>
+ *   <li>VerifyStateCache 校验状态缓存：记住「上次校验通过且之后没被改动」的文件，跳过重复哈希计算
+ *       （默认开启；只在 FastVerify 关闭时生效，见
+ *       {@link com.example.starlight.download.mod.VerifyStateCache}）</li>
  * </ul>
  */
 public final class VerifySettings {
@@ -20,6 +23,8 @@ public final class VerifySettings {
     public static final String KEY_STREAMING = "StreamingSha1";
     /** 配置键：快速校验（跳过哈希） */
     public static final String KEY_FAST = "FastVerify";
+    /** 配置键：校验状态缓存（M2，跳过重复哈希计算） */
+    public static final String KEY_STATE_CACHE = "VerifyStateCache";
 
     private VerifySettings() {}
 
@@ -36,5 +41,15 @@ public final class VerifySettings {
     /** 快速校验（跳过哈希）是否开启（默认关闭，仅显式配置为 true 时开启） */
     public static boolean isFastVerifyEnabled() {
         return "true".equalsIgnoreCase(StarlightConfig.get(KEY_FAST));
+    }
+
+    /**
+     * 校验状态缓存是否开启（默认开启，仅显式配置为 false 时关闭）。
+     *
+     * <p>开启后，上次校验通过且之后未被修改的文件不再重算 SHA-1 —— 二次补全的校验阶段
+     * 可从"读完全部文件"降到"只 stat 一遍"。关闭则每次补全都做完整哈希校验。
+     */
+    public static boolean isStateCacheEnabled() {
+        return !"false".equalsIgnoreCase(StarlightConfig.get(KEY_STATE_CACHE));
     }
 }

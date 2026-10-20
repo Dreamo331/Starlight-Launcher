@@ -3,8 +3,8 @@ package org.starlight.terracotta;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.example.starlight.download.task.AbstractTerracottaProvider;
 import javafx.application.Platform;
-import org.starlight.terracotta.provider.AbstractTerracottaProvider;
 
 import java.io.IOException;
 import java.nio.file.Files;

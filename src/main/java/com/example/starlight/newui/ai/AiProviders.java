@@ -107,7 +107,7 @@ public final class AiProviders {
                     "baichuan.png",
                     List.of("Baichuan4", "Baichuan3-Turbo", "Baichuan3-Turbo-128k")));
 
-    // ==================== 查询 ====================
+    // 查询 //
 
     /** 按 id 取服务商；没有匹配返回 null */
     public static Provider byId(String id) {
@@ -163,7 +163,7 @@ public final class AiProviders {
         return new ArrayList<>(set);
     }
 
-    // ==================== 图标 ====================
+    // 图标 //
 
     /** 已解码的图标缓存：文件名 → Image（缺失记 null，避免反复读盘） */
     private static final Map<String, Image> LOGO_CACHE = new ConcurrentHashMap<>();

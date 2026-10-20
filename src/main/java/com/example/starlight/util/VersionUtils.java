@@ -31,9 +31,7 @@ public class VersionUtils {
     /** 隐藏标记文件名 */
     private static final String HIDDEN_MARKER = ".hidden";
 
-    // ================================================================
-    //  隐藏 / 显示版本
-    // ================================================================
+    // 隐藏 / 显示版本 //
 
     /**
      * 标记版本为隐藏（创建 .hidden 标记文件）
@@ -133,9 +131,7 @@ public class VersionUtils {
         return versions;
     }
 
-    // ================================================================
-    //  合并版本 JSON（创建自包含版本）
-    // ================================================================
+    // 合并版本 JSON（创建自包含版本） //
 
     /**
      * 创建加载器版本 ID
@@ -188,7 +184,7 @@ public class VersionUtils {
                 return true;
             }
 
-            // ---- 构建合并后的 JSON ----
+            // 构建合并后的 JSON //
             JsonObject merged = new JsonObject();
 
             // ID
@@ -244,14 +240,14 @@ public class VersionUtils {
             // 保留原版的 minimumLauncherVersion
             inheritJsonField(merged, mcJson, "minimumLauncherVersion");
 
-            // ---- 删除 inheritsFrom 字段（自包含版本不需要） ----
+            // 删除 inheritsFrom 字段（自包含版本不需要） //
             merged.remove("inheritsFrom");
 
-            // ---- 写入合并后的 JSON ----
+            // 写入合并后的 JSON //
             Files.writeString(loaderJsonPath, GSON.toJson(merged), StandardCharsets.UTF_8);
             LOG.info("Created merged version JSON: {} (merged from {} + {})", loaderVersionId, mcVersion, loaderVersionId);
 
-            // ---- 复制客户端 JAR（如果不存在） ----
+            // 复制客户端 JAR（如果不存在） //
             Path mcJarPath = mcDir.resolve(mcVersion + ".jar");
             Path loaderJarPath = loaderDir.resolve(loaderVersionId + ".jar");
             if (Files.exists(mcJarPath) && !Files.exists(loaderJarPath)) {
@@ -320,7 +316,7 @@ public class VersionUtils {
 
         JsonObject merged = json.deepCopy();
 
-        // ---- 合并 libraries：父版本在前、子版本在后 ----
+        // 合并 libraries：父版本在前、子版本在后 //
         JsonArray libs = new JsonArray();
         if (parent.has("libraries") && parent.get("libraries").isJsonArray()) {
             parent.getAsJsonArray("libraries").forEach(libs::add);
@@ -330,7 +326,7 @@ public class VersionUtils {
         }
         if (libs.size() > 0) merged.add("libraries", libs);
 
-        // ---- 关键字段：子版本缺省时继承父版本 ----
+        // 关键字段：子版本缺省时继承父版本 //
         // downloads 也一并继承：壳 JSON 没有 downloads.client，客户端 jar 下载依赖它
         for (String key : new String[]{"assetIndex", "assets", "javaVersion", "complianceLevel",
                 "mainClass", "minecraftArguments", "downloads"}) {
@@ -396,7 +392,7 @@ public class VersionUtils {
             if (!element.isJsonObject()) continue;
             JsonObject lib = element.getAsJsonObject();
             if (!lib.has("name") || !lib.get("name").isJsonPrimitive()) continue;
-            byArtifact.put(libraryKey(lib.get("name").getAsString()), element);
+            byArtifact.put(libraryKey(lib.get("name").getAsString(), lib), element);
         }
         if (byArtifact.size() == original) return original;   // 无重复，保持原样不动
 
@@ -408,15 +404,52 @@ public class VersionUtils {
     }
 
     /**
-     * libraries 去重键：{@code group:artifact} + 可选的 {@code :classifier}，<b>去掉版本号</b>。
-     * 坐标形如 {@code group:artifact:version[:classifier][@ext]}，取不到版本的退化为整串。
+     * libraries 去重键：{@code group:artifact} + 可选的 {@code :classifier} + 平台规则指纹，
+     * <b>去掉版本号</b>（保留「同一 artifact 后版本覆盖前版本」语义），但<b>区分平台规则</b>。
+     *
+     * <p>坐标形如 {@code group:artifact:version[:classifier][@ext]}，取不到版本的退化为整串。
+     * 平台规则指纹用于避免「同 artifact、不同版本但按 OS 规则分流」的合法条目被误合并：
+     * 例如 {@code org.lwjgl.lwjgl:lwjgl:2.9.0}（rules 仅 allow，Windows 通用）与
+     * {@code org.lwjgl.lwjgl:lwjgl:2.9.1-nightly}（rules 仅 allow osx 10.5）若只按
+     * {@code group:artifact} 去重，后者会覆盖前者，导致 Windows 上 LWJGL 主 jar 被删、
+     * 游戏报 {@code NoClassDefFoundError: org/lwjgl/LWJGLException}。
      */
-    private static String libraryKey(String coordinate) {
+    private static String libraryKey(String coordinate, JsonObject lib) {
+        String base;
         String[] parts = coordinate.split(":");
-        if (parts.length < 3) return coordinate;
-        StringBuilder key = new StringBuilder(parts[0]).append(':').append(parts[1]);
-        for (int i = 3; i < parts.length; i++) key.append(':').append(parts[i]);
-        return key.toString();
+        if (parts.length < 3) {
+            base = coordinate;
+        } else {
+            StringBuilder key = new StringBuilder(parts[0]).append(':').append(parts[1]);
+            for (int i = 3; i < parts.length; i++) key.append(':').append(parts[i]);
+            base = key.toString();
+        }
+        // 平台规则指纹：取 rules 中 os 相关的规范化串；无 rules/无 os → 空（通用，可互相覆盖）
+        return base + "|" + rulesPlatformFingerprint(lib);
+    }
+
+    /** 提取 library rules 中平台（os.name/version）相关的规范化指纹；无平台约束返回空串 */
+    private static String rulesPlatformFingerprint(JsonObject lib) {
+        if (lib == null || !lib.has("rules") || !lib.get("rules").isJsonArray()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (com.google.gson.JsonElement ruleElem : lib.getAsJsonArray("rules")) {
+            if (!ruleElem.isJsonObject()) continue;
+            JsonObject rule = ruleElem.getAsJsonObject();
+            String action = rule.has("action") && rule.get("action").isJsonPrimitive()
+                    ? rule.get("action").getAsString() : "";
+            if (!rule.has("os") || !rule.get("os").isJsonObject()) {
+                // 无平台约束的 allow/disallow 属于通用规则，也纳入指纹（影响适用性）
+                sb.append(action).append(';');
+                continue;
+            }
+            JsonObject os = rule.getAsJsonObject("os");
+            String osName = os.has("name") && os.get("name").isJsonPrimitive()
+                    ? os.get("name").getAsString() : "";
+            String osVersion = os.has("version") && os.get("version").isJsonPrimitive()
+                    ? os.get("version").getAsString() : "";
+            sb.append(action).append('|').append(osName).append('|').append(osVersion).append(';');
+        }
+        return sb.toString();
     }
 
     /**
@@ -430,9 +463,7 @@ public class VersionUtils {
         }
     }
 
-    // ================================================================
-    //  内部工具
-    // ================================================================
+    // 内部工具 //
 
     /**
      * 如果目标 JSON 缺少某字段，从源 JSON 继承

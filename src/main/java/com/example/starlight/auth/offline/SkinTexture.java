@@ -155,4 +155,25 @@ public final class SkinTexture {
     public static void clearCache() {
         textures.clear();
     }
+
+    /**
+     * 将 JavaFX Image 编码为 PNG 字节（用于把 CSL API 等下载的皮肤纹理
+     * 写入离线皮肤资源包；PNG 无损，重编码不影响像素内容）。
+     */
+    public static byte[] toPngBytes(javafx.scene.image.Image fxImage) throws java.io.IOException {
+        if (fxImage == null) return null;
+        int width = (int) fxImage.getWidth();
+        int height = (int) fxImage.getHeight();
+        java.awt.image.BufferedImage buf =
+                new java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        PixelReader reader = fxImage.getPixelReader();
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                buf.setRGB(x, y, reader.getArgb(x, y));
+            }
+        }
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(buf, "png", baos);
+        return baos.toByteArray();
+    }
 }

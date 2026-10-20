@@ -138,8 +138,9 @@ public final class UpdateChecker {
      * - md5              安装包 MD5（校验完整性；仅官方服务器提供，降级来源为空）
      * - forceUpdate      是否强制更新（true=必须更新；仅官方服务器能给出）
      * - error            失败原因（非空表示检查失败）
-     * - source           本次结果来自哪个来源（失败时为 null）
+     * - source           版本信息来自哪个来源（失败时为 null）
      * - releasePageUrl   发行版页面地址（浏览器打开手动下载用，可能为空）
+     * - downloadSourceLabel 实际安装包下载源（"Gitee" / "GitHub"；仍用官方直链时为空）
      */
     public static final class UpdateResult {
         public final String latestTag;
@@ -151,16 +152,24 @@ public final class UpdateChecker {
         public final String error;
         public final Source source;
         public final String releasePageUrl;
+        public final String downloadSourceLabel;
 
         /** 兼容旧签名（无来源信息）的结果；来源与发行版页面按缺省值填充 */
         public UpdateResult(String latestTag, String latestVersion, String releaseBody,
                             String downloadUrl, String md5, boolean forceUpdate, String error) {
-            this(latestTag, latestVersion, releaseBody, downloadUrl, md5, forceUpdate, error, null, "");
+            this(latestTag, latestVersion, releaseBody, downloadUrl, md5, forceUpdate, error, null, "", "");
         }
 
         public UpdateResult(String latestTag, String latestVersion, String releaseBody,
                             String downloadUrl, String md5, boolean forceUpdate, String error,
                             Source source, String releasePageUrl) {
+            this(latestTag, latestVersion, releaseBody, downloadUrl, md5, forceUpdate, error,
+                    source, releasePageUrl, "");
+        }
+
+        public UpdateResult(String latestTag, String latestVersion, String releaseBody,
+                            String downloadUrl, String md5, boolean forceUpdate, String error,
+                            Source source, String releasePageUrl, String downloadSourceLabel) {
             this.latestTag = latestTag;
             this.latestVersion = latestVersion;
             this.releaseBody = releaseBody;
@@ -170,6 +179,7 @@ public final class UpdateChecker {
             this.error = error;
             this.source = source;
             this.releasePageUrl = releasePageUrl == null ? "" : releasePageUrl;
+            this.downloadSourceLabel = downloadSourceLabel == null ? "" : downloadSourceLabel;
         }
     }
 
@@ -182,9 +192,15 @@ public final class UpdateChecker {
         final boolean forceUpdate;
         final String pageUrl;
         final Source source;
+        final String downloadSource;
 
         Candidate(String version, String notes, String downloadUrl, String md5,
                   boolean forceUpdate, String pageUrl, Source source) {
+            this(version, notes, downloadUrl, md5, forceUpdate, pageUrl, source, "");
+        }
+
+        Candidate(String version, String notes, String downloadUrl, String md5,
+                  boolean forceUpdate, String pageUrl, Source source, String downloadSource) {
             this.version = version;
             this.notes = notes == null ? "" : notes;
             this.downloadUrl = downloadUrl == null ? "" : downloadUrl;
@@ -192,6 +208,7 @@ public final class UpdateChecker {
             this.forceUpdate = forceUpdate;
             this.pageUrl = pageUrl == null ? "" : pageUrl;
             this.source = source;
+            this.downloadSource = downloadSource == null ? "" : downloadSource;
         }
     }
 
@@ -231,10 +248,12 @@ public final class UpdateChecker {
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
 
-        // ① 官方服务器优先（连通即可用，不必再问降级来源）
+        // ① 官方服务器优先（连通即可用，不必再问降级来源）。
+        //    版本 / md5 / force_update 以官方为准，安装包直链再替换为国内更快的镜像源。
         String officialError;
         try {
-            return toResult(fetchOfficial(client, currentVersion));
+            Candidate official = fetchOfficial(client, currentVersion);
+            return toResult(attachPreferredMirror(client, official, currentVersion));
         } catch (Exception ex) {
             officialError = describe(ex);
         }
@@ -280,7 +299,7 @@ public final class UpdateChecker {
         }
     }
 
-    // ==================== 各来源的版本获取 ====================
+    // 各来源的版本获取 //
 
     /** 官方服务器：slmc.cc.cd/auth.php?action=launcher_update（唯一提供 md5 / force_update 的来源） */
     private static Candidate fetchOfficial(HttpClient client, String currentVersion) throws Exception {
@@ -310,6 +329,63 @@ public final class UpdateChecker {
                 "",                       // 官方总是给直链，不需要发行版页面
                 Source.OFFICIAL);
     }
+
+    /**
+     * 把官方给的安装包直链替换为国内更快的镜像源：<b>Gitee 优先</b>（国内直连最快），
+     * 失败或未同步再试 GitHub，两者都不可用时保留官方 {@code download_url} 兜底。
+     *
+     * <p>替换条件（两个都满足才替换，避免下到错的包）：
+     * <ol>
+     *   <li>镜像仓库的最新版本与官方 {@code version} <b>完全一致</b>
+     *       （{@code compareVersions == 0}，含 {@code 1.0.1} 与 {@code 1.0.1-RELEASE} 这类同号转正）；</li>
+     *   <li>该发行版附了 {@code .exe} 安装包直链（{@link #findGiteeInstallerAsset} /
+     *       {@link #findInstallerAsset} 能找到）。</li>
+     * </ol>
+     *
+     * <p>{@code md5} / {@code force_update} / 更新说明保持官方值不变，镜像只贡献下载地址；
+     * 返回的 Candidate 用 {@link Candidate#downloadSource} 记录实际下载源供界面提示与排查。
+     * 串行尝试（Gitee 命中即短路，不再问 GitHub），每次请求超时 8 秒，最坏情况多花约 16 秒，
+     * 但正常情况 Gitee 一次请求即命中。
+     */
+    private static Candidate attachPreferredMirror(HttpClient client, Candidate official,
+                                                   String currentVersion) {
+        if (official == null) return null;
+
+        // ① Gitee 优先：国内访问最快，命中即返回
+        try {
+            Candidate gitee = fetchGitee(client, currentVersion);
+            if (isSameVersion(gitee.version, official.version) && !isBlank(gitee.downloadUrl)) {
+                DebugLog.log("更新下载源切换为 Gitee（官方服务器仅检查更新）");
+                return new Candidate(official.version, official.notes, gitee.downloadUrl,
+                        official.md5, official.forceUpdate, official.pageUrl,
+                        official.source, Source.GITEE.label());
+            }
+        } catch (Exception ignored) {
+            // Gitee 不可用 / 仓库未同步 / 无 .exe 附件：继续尝试 GitHub
+        }
+
+        // ② GitHub 备用：Gitee 拿不到直链时再试
+        try {
+            Candidate github = fetchGitHub(client, currentVersion);
+            if (isSameVersion(github.version, official.version) && !isBlank(github.downloadUrl)) {
+                DebugLog.log("更新下载源切换为 GitHub（Gitee 不可用，官方服务器仅检查更新）");
+                return new Candidate(official.version, official.notes, github.downloadUrl,
+                        official.md5, official.forceUpdate, official.pageUrl,
+                        official.source, Source.GITHUB.label());
+            }
+        } catch (Exception ignored) {
+            // GitHub 不可用 / 未同步：保留官方直链兜底
+        }
+
+        // ③ 兜底：镜像都拿不到直链，用官方 download_url（与旧行为一致）
+        return official;
+    }
+
+    /** 两个版本号是否一致（{@code null} / 空白视为不一致，避免空值误判相等） */
+    private static boolean isSameVersion(String a, String b) {
+        return !isBlank(a) && !isBlank(b) && compareVersions(a, b) == 0;
+    }
+
 
     /**
      * GitHub 版本获取，三级降级：
@@ -544,7 +620,7 @@ public final class UpdateChecker {
         return fallback;
     }
 
-    // ==================== HTTP 与 JSON 工具 ====================
+    // HTTP 与 JSON 工具 //
 
     /** 发一次 GET（带 User-Agent 与耗时日志），网络层异常原样抛出 */
     private static HttpResponse<String> send(HttpClient client, String url, String userAgent)
@@ -676,11 +752,11 @@ public final class UpdateChecker {
         // latestTag 仅用于界面显示（补 v 前缀）
         String tag = c.version != null && !c.version.startsWith("v") ? "v" + c.version : c.version;
         return new UpdateResult(tag, c.version, c.notes, c.downloadUrl, c.md5,
-                c.forceUpdate, null, c.source, c.pageUrl);
+                c.forceUpdate, null, c.source, c.pageUrl, c.downloadSource);
     }
 
     private static UpdateResult failure(String message) {
-        return new UpdateResult(null, null, "", "", "", false, message, null, "");
+        return new UpdateResult(null, null, "", "", "", false, message, null, "", "");
     }
 
     /**

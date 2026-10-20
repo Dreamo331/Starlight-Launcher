@@ -25,6 +25,10 @@ public class LaunchConfig {
     public String gameArgs = "";
     public String preLaunchCommand = "";
     public String postExitCommand = "";
+    /** 自定义游戏窗口标题（空 = 保持游戏默认标题，见 GameProcessTweaks） */
+    public String windowTitle = "";
+    /** 游戏进程优先级（low / below_normal / normal / above_normal / high / realtime） */
+    public String processPriority = "normal";
 
     /** 从 ini 配置 Map 构建 */
     public static LaunchConfig fromIni(Map<String, String> ini) {
@@ -46,6 +50,8 @@ public class LaunchConfig {
         c.gameArgs = ini.getOrDefault("GameArgs", "");
         c.preLaunchCommand = ini.getOrDefault("PreLaunchCommand", "");
         c.postExitCommand  = ini.getOrDefault("PostExitCommand", "");
+        c.windowTitle = ini.getOrDefault("GameWindowTitle", "");
+        c.processPriority = ini.getOrDefault("GameProcessPriority", "normal");
         return c;
     }
 

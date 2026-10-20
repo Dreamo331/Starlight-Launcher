@@ -53,8 +53,8 @@ public final class ModDictionaryManager {
     /** 整合包字典的缓存文件名 */
     public static final String MODPACK_CACHE_FILE = "modpack_data.txt";
 
-    /** 运行时更新缓存的存放目录（相对启动器工作目录） */
-    public static final Path DICTIONARY_DIR = Path.of("Starlight-Launcher", "mod-dictionary");
+    /** 运行时更新缓存的存放目录（统一走 AppDirs：默认 ~/.starlight，--portable 回落工作目录） */
+    public static final Path DICTIONARY_DIR = com.example.starlight.config.AppDirs.modDictionaryDir();
 
     /** 配置项：模组字典更新地址 */
     public static final String CONFIG_URL_MOD = "ModDictionaryUrl";
@@ -79,7 +79,7 @@ public final class ModDictionaryManager {
     private ModDictionaryManager() {
     }
 
-    // ==================== 加载 ====================
+    // 加载 //
 
     /**
      * 读取字典原始行（含注释行，由调用方决定是否过滤）。
@@ -147,7 +147,7 @@ public final class ModDictionaryManager {
         return fields == FIELD_COUNT;
     }
 
-    // ==================== 状态 ====================
+    // 状态 //
 
     /** 字典来源与规模，用于设置页展示 */
     public record DictionaryStatus(boolean fromCache, int entryCount, Instant updatedAt, Path path) {
@@ -187,7 +187,7 @@ public final class ModDictionaryManager {
         return DICTIONARY_DIR.resolve(cacheFileName);
     }
 
-    // ==================== 更新 ====================
+    // 更新 //
 
     /** 更新结果 */
     public record UpdateResult(boolean success, int entryCount, String message) {
@@ -268,7 +268,7 @@ public final class ModDictionaryManager {
         return value == null || value.trim().isEmpty() ? defaultUrl : value.trim();
     }
 
-    // ==================== 内部：网络 ====================
+    // 内部：网络 //
 
     private static String download(String url) throws IOException, InterruptedException {
         HttpClient client = HttpClient.newBuilder()

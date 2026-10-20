@@ -9,8 +9,8 @@ import com.example.starlight.main.NativesManager;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
-import com.startgame.LaunchInfo;
-import com.startgame.launcher.VanillaLauncher;
+import com.example.starlight.startmc.LaunchInfo;
+import com.example.starlight.startmc.launcher.VanillaLauncher;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -25,9 +25,7 @@ import java.util.stream.Stream;
  */
 public class FileService {
 
-    // ================================================================
-    //  原生库管理
-    // ================================================================
+    // 原生库管理 //
 
     /** 检查原生库状态 */
     public static NativesStatus checkNativesStatus(String gameDir, String version) {
@@ -69,7 +67,10 @@ public class FileService {
                 info.setGameDirPath(Path.of(gameDir));
                 info.setVersion(version);
                 info.setJavaPath("java");
-                info.setVersionIsolation(false);
+                // 隔离开关按该版本的有效配置读取，与正式启动链路同源
+                info.setVersionIsolation(com.example.starlight.config.VersionConfigManager
+                        .effectiveVersionIsolation(com.example.starlight.main.ConfigManager
+                                .readConfig(), gameDir, version));
                 VanillaLauncher launcher = new VanillaLauncher(info);
                 launcher.initPaths();
                 launcher.setVersionJson(versionJson);
@@ -97,9 +98,7 @@ public class FileService {
         return NativesManager.checkAndCompleteNatives(gameDir, version, versionJson, false);
     }
 
-    // ================================================================
-    //  options.txt 管理
-    // ================================================================
+    // options.txt 管理 //
 
     /** 读取 options.txt */
     public static Map<String, String> readOptionsTxt(String gameDir) {
@@ -139,9 +138,7 @@ public class FileService {
         }
     }
 
-    // ================================================================
-    //  launcher_profiles.json 管理
-    // ================================================================
+    // launcher_profiles.json 管理 //
 
     /** 读取启动器档案信息 */
     public static LauncherProfileInfo readLauncherProfiles(String gameDir) {
@@ -178,9 +175,7 @@ public class FileService {
         }
     }
 
-    // ================================================================
-    //  文件系统工具
-    // ================================================================
+    // 文件系统工具 //
 
     /** 打开文件/目录（操作系统默认程序） */
     public static ActionResult openInExplorer(String path) {
@@ -225,9 +220,7 @@ public class FileService {
         }
     }
 
-    // ================================================================
-    //  内部
-    // ================================================================
+    // 内部 //
 
     private static void runNativeCleanup(String gameDir, String version) {
         Path verDir = Paths.get(gameDir, "versions", version);

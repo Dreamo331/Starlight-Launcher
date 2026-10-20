@@ -1,6 +1,6 @@
 package com.example.starlight.util;
 
-import com.example.starlight.download.HttpDownloadEngine;
+import com.example.starlight.download.engine.HttpDownloadEngine;
 import com.example.starlight.newui.AppConfig;
 
 import java.io.ByteArrayInputStream;
@@ -178,7 +178,17 @@ public final class RemoteImageLoader {
         return null;
     }
 
-    /** 下载远程图片字节：HTTP/2 → HTTP/1.1 降级，带 UA 与超时；成功返回非空字节数组，否则 null */
+    /**
+     * 下载远程图片字节：HTTP/2 → HTTP/1.1 降级，带 UA 与超时；成功返回非空字节数组，否则 null。
+     *
+     * <p><b>必须手动跟随 3xx</b>：这里用的 {@link HttpDownloadEngine#HTTP_CLIENT} 出于「MCIM 302 的
+     * Location 带未编码中文会导致 URI.create 抛异常」的原因配成了
+     * {@code followRedirects(NEVER)}，而 MCIM 镜像对<b>每一个</b>图标请求都回 302
+     * （实测 cdn.modrinth.com 的图标走镜像时 198/198 全是 302）。
+     * 不跟随就一个字节都拿不到，镜像候选全部白付一次请求 → 只能靠官方 CDN 兜底，
+     * 国内直连被墙时该候选也失败，界面就退化成字符占位头像。
+     * 跟随之后镜像才真正可用（实测 197/198 可解码，与官方直连持平）。
+     */
     private static byte[] fetchRemoteImageBytes(String url) {
         java.net.http.HttpClient[] clients = {HttpDownloadEngine.HTTP_CLIENT, HttpDownloadEngine.HTTP_CLIENT_FALLBACK};
         int timeoutSec = isMcimMirrorUrl(url) ? MIRROR_ICON_TIMEOUT_SEC : MODRINTH_ICON_TIMEOUT_SEC;
@@ -191,18 +201,51 @@ public final class RemoteImageLoader {
                         .header("Accept", "image/png,image/jpeg,image/gif,image/bmp,image/*;q=0.8,*/*;q=0.5")
                         .GET()
                         .build();
-                java.net.http.HttpResponse<byte[]> resp = client.send(req,
-                        java.net.http.HttpResponse.BodyHandlers.ofByteArray());
-                if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
-                    byte[] body = resp.body();
-                    if (body != null && body.length > 0) return body;
-                }
+                byte[] body = sendFollowingRedirects(client, req, timeoutSec);
+                if (body != null && body.length > 0) return body;
             } catch (Exception ignored) {
                 // 尝试 HTTP/1.1 客户端或下一候选
             }
         }
         return null;
     }
+
+    /**
+     * 发送请求并手动跟随最多 3 跳 3xx，返回最终 2xx 的正文；非 2xx / 无正文返回 null。
+     *
+     * <p>Location 先过 {@link HttpDownloadEngine#sanitizeUrl}：MCIM 的 302 会带未编码的中文
+     * 文件名，直接 {@code URI.create} 会抛 {@code Illegal character in path}。
+     */
+    private static byte[] sendFollowingRedirects(java.net.http.HttpClient client,
+                                                 java.net.http.HttpRequest request,
+                                                 int timeoutSec) {
+        java.net.http.HttpRequest current = request;
+        for (int hop = 0; hop <= MAX_ICON_REDIRECTS; hop++) {
+            try {
+                java.net.http.HttpResponse<byte[]> resp =
+                        client.send(current, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+                int code = resp.statusCode();
+                if (code >= 200 && code < 300) return resp.body();
+                if (code < 300 || code >= 400) return null;          // 非重定向的错误码，换下一个候选/客户端
+                String location = resp.headers().firstValue("Location").orElse(null);
+                if (location == null || location.isBlank()) return null;
+                java.net.URI next = resp.uri().resolve(HttpDownloadEngine.sanitizeUrl(location));
+                current = java.net.http.HttpRequest.newBuilder()
+                        .uri(next)
+                        .timeout(java.time.Duration.ofSeconds(timeoutSec))
+                        .header("User-Agent", AppConfig.USER_AGENT)
+                        .header("Accept", "image/png,image/jpeg,image/gif,image/bmp,image/*;q=0.8,*/*;q=0.5")
+                        .GET()
+                        .build();
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /** 图标请求最多跟随的重定向跳数（MCIM 镜像目前是 1 跳，留余量） */
+    private static final int MAX_ICON_REDIRECTS = 3;
 
     /** 是否为 MCIM 镜像域名的 URL（镜像候选用更短的读取超时） */
     private static boolean isMcimMirrorUrl(String url) {

@@ -37,7 +37,7 @@ public class LongCatChat {
     /** 单条消息字符上限：崩溃日志动辄几十万字符，这里截断，避免白白烧 token */
     private static final int MAX_MESSAGE_CHARS = 120_000;
 
-    // ==================== 配置读取（每次调用实时取，保存后立刻生效） ====================
+    // 配置读取（每次调用实时取，保存后立刻生效） //
 
     private static String apiBase() {
         return AiConfig.normalizeBaseUrl(AiConfig.baseUrl());

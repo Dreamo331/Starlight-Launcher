@@ -4,6 +4,7 @@ package com.example.starlight.util;
 import com.example.starlight.auth.AccountManager.Account;
 import com.example.starlight.auth.AccountManager.AccountType;
 import com.example.starlight.auth.offline.SkinTexture;
+import com.example.starlight.config.AppDirs;
 import com.example.starlight.newui.AppConfig;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -36,7 +37,7 @@ import java.util.Map;
  *   <li>第二步：GET sessionserver.mojang.com/session/minecraft/profile/&lt;无连字符UUID&gt;
  *       → properties[textures]（Base64）解码 → textures.SKIN.url</li>
  * </ol>
- * 获取到的皮肤图片缓存在本地（~/.starlight-launcher/avatars/{uuid}.png，24 小时有效），
+ * 获取到的皮肤图片缓存在本地（~/.starlight/avatars/{uuid}.png，24 小时有效），
  * 下次显示时直接读缓存，避免重复网络请求。
  */
 public final class MojangAvatarFetcher {
@@ -46,9 +47,8 @@ public final class MojangAvatarFetcher {
     private static final String USERS_API = "https://api.mojang.com/users/profiles/minecraft/";
     private static final String SESSION_API = "https://sessionserver.mojang.com/session/minecraft/profile/";
 
-    /** 皮肤缓存目录（与账号配置同目录） */
-    private static final Path CACHE_DIR = Paths.get(System.getProperty("user.home"),
-            ".starlight-launcher", "avatars");
+    /** 皮肤缓存目录（与账号配置同目录，统一走 AppDirs） */
+    private static final Path CACHE_DIR = AppDirs.avatarsDir();
 
     /** 本地文件缓存有效期（毫秒）：24 小时，过期后重新拉取（皮肤可能更换） */
     private static final long CACHE_TTL_MILLIS = 24 * 60 * 60 * 1000L;

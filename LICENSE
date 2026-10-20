@@ -25,3 +25,14 @@ SOFTWARE.
 第三方组件与其许可证见启动器内「设置 → 版权 → 开源许可」页面及发行包内的第三方声明。
 Starlight Launcher 按「AS IS」提供，与 Mojang Studios / Microsoft 无隶属关系；
 Minecraft 是 Mojang Studios 的商标，启动器不是 Minecraft 的官方产品。
+
+---
+
+补充说明（不改变上述 MIT 条款）：
+
+MIT 许可协议仅授予代码权利，不授予本项目的名称、图标、美术素材与原作者名义的使用权。
+未经作者明确书面许可，任何二次修改、衍生版本均不得使用本启动器的原名、原图标或原作者名义进行发布或宣传。
+完整条款见 docs/LICENSE-ZH.md（中文）与 docs/LICENSE-EN.md（英文正本）；
+用户使用行为另见 docs/用户服务协议.md、docs/免责声明.md、docs/隐私政策.md。
+The MIT license above grants rights in the code only, not in the project's name, icon or the original author's identity.
+The complete terms are in docs/LICENSE-EN.md.

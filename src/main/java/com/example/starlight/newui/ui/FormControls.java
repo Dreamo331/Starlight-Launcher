@@ -139,7 +139,7 @@ public final class FormControls {
         }
     }
 
-    // ==================== 单选框 ====================
+    // 单选框 //
 
     /** 单选框：蓝点 scale 0 → 1 弹入（幂等） */
     public static void prepare(RadioButton radio) {
@@ -161,7 +161,7 @@ public final class FormControls {
         });
     }
 
-    // ==================== 复选框 ====================
+    // 复选框 //
 
     /** 复选框：白色勾描边画出 + 方块回弹 + 按下缩到 0.9（幂等） */
     public static void prepare(CheckBox check) {
@@ -277,7 +277,7 @@ public final class FormControls {
         animateScale(node, scale, ip, BOX_POP);
     }
 
-    // ==================== 滑块 ====================
+    // 滑块 //
 
     /** 滑块：悬停 1.18、拖动 1.35 + 8px 光晕，并自绘一条正常长度的 5px 滑道（幂等） */
     public static void prepare(Slider slider) {

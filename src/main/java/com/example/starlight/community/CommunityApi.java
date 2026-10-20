@@ -1,5 +1,6 @@
 package com.example.starlight.community;
 
+import com.example.starlight.config.AppDirs;
 import com.example.starlight.config.Endpoints;
 import com.example.starlight.util.DebugLog;
 import com.google.gson.Gson;
@@ -63,7 +64,7 @@ public class CommunityApi {
     private final HttpClient httpClient;
     private final Gson gson;
 
-    // ==================== 登录态（内存 + 本地持久化） ====================
+    // 登录态（内存 + 本地持久化） //
     private volatile String token;
     private volatile CommunityUser currentUser;
     /** 最近一次成功签到日期（yyyy-MM-dd），用于恢复今日签到状态 */
@@ -80,7 +81,7 @@ public class CommunityApi {
         loadTokenFromDisk();
     }
 
-    // ==================== 对外公开方法 ====================
+    // 对外公开方法 //
 
     /** 是否已持有 Token（不代表 Token 一定有效，可用 profile() 校验） */
     public boolean hasToken() {
@@ -384,7 +385,7 @@ public class CommunityApi {
         }
     }
 
-    // ==================== 内部请求方法 ====================
+    // 内部请求方法 //
 
     /**
      * 每日签到（需登录 + API Key）
@@ -516,17 +517,16 @@ public class CommunityApi {
         return url + (url.contains("?") ? "&" : "?") + key + "=" + encode(value);
     }
 
-    // ==================== Token 本地持久化 ====================
+    // Token 本地持久化 //
 
-    private static final String CONFIG_DIR = "Starlight-Launcher";
-    private static final String TOKEN_FILE = CONFIG_DIR + "/.community.dat";
+    private static final String TOKEN_FILE = AppDirs.communityTokenFile().toString();
     // 独立于 CredentialStore 的轻量混淆密钥（非强加密，仅防明文扫描）
     private static final byte[] XOR_KEY = {(byte) 0x7C, (byte) 0x2A, (byte) 0x5E, (byte) 0x91, (byte) 0x4D, (byte) 0x63, (byte) 0x8F, (byte) 0x1B};
 
     private void saveTokenToDisk() {
         if (token == null || token.isEmpty()) return;
         try {
-            Path dir = Paths.get(CONFIG_DIR);
+            Path dir = AppDirs.root();
             if (!Files.exists(dir)) Files.createDirectories(dir);
             StringBuilder sb = new StringBuilder("token=").append(token);
             if (checkinDate != null) {
@@ -572,7 +572,7 @@ public class CommunityApi {
         return result;
     }
 
-    // ==================== 统一返回包装 ====================
+    // 统一返回包装 //
 
     /**
      * API 调用结果包装
@@ -632,7 +632,7 @@ public class CommunityApi {
         }
     }
 
-    // ==================== 数据模型 ====================
+    // 数据模型 //
 
     /** 社区用户 */
     public static class CommunityUser {

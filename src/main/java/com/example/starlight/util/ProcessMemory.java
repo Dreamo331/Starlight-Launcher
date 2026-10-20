@@ -64,7 +64,7 @@ public final class ProcessMemory {
         }
     }
 
-    // ==================== 以下为 JNA 实现（仅 JVM 模式可达） ====================
+    // 以下为 JNA 实现（仅 JVM 模式可达） //
     // 注意：这些类成员只在 workingSetBytes 的非 native 分支中被触碰，native 模式下
     // 类初始化链不会走到这里（方法体未执行就不会触发接口/嵌套类的初始化）。
 

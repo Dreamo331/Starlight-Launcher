@@ -124,7 +124,7 @@ public final class UiService {
         ft.play();
     }
 
-    // ===== Toast =====
+    // Toast //
 
     /** 普通提示（默认 info 蓝点） */
     public void toast(String message) {
@@ -262,7 +262,7 @@ public final class UiService {
         ft.play();
     }
 
-    // ===== 通用遮罩面板（集成弹窗：替代独立 Stage / Dialog / Alert） =====
+    // 通用遮罩面板（集成弹窗：替代独立 Stage / Dialog / Alert） //
 
     /** 在 rootPane 上弹出居中卡片面板：半透明遮罩 + 标题栏 + 关闭按钮。
      *  content 负责内部布局，传入 VBox/ScrollPane 时会自动拉伸填充；width/height 为卡片尺寸 */

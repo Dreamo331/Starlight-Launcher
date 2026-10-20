@@ -2,6 +2,7 @@ package com.example.starlight.newui.framegen;
 
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.gui.UIGeneralControlClass;
+import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.PageKit;
 
@@ -38,7 +39,7 @@ public final class FrameGenCoordinator {
 
     private final LauncherContext host;
 
-    // ==================== 帧生成器（伴生模块，原独立版整合进启动器） ====================
+    // 帧生成器（伴生模块，原独立版整合进启动器） //
     // 说明：原 INS 键全局热键与悬浮控制页（OverlayMenu/GlobalKeyHook/FrameGenApp）已随整合移除，
     //       帧生成控制页内置于本启动器，系统托盘由「帧生成器」页内开关控制。
     private org.framegen.AppConfig fgConfig;                 // 帧生成配置（%APPDATA%\StarlightFrameGen\config.properties）
@@ -235,8 +236,10 @@ public final class FrameGenCoordinator {
             gameDir = ".minecraft";
         }
         gameDir = gameDir.trim();
-        boolean isolated = "true".equalsIgnoreCase(host.config().getOrDefault("VersionIsolation", "false"));
         String version = host.config().getOrDefault("Version", "");
+        // 隔离按当前版本的有效配置判定（版本独立设置页可单版本开关）
+        boolean isolated = VersionConfigManager.effectiveVersionIsolation(
+                host.config(), gameDir, version);
         String versionDir = "";
         if (version != null && !version.trim().isEmpty()) {
             versionDir = gameDir + File.separator + "versions" + File.separator + version.trim();
@@ -381,7 +384,8 @@ public final class FrameGenCoordinator {
     /** 构建「帧生成器」页面（构建时懒启动帧生成引擎） */
     public Node buildPage() {
         ensureFrameGenEngine();
-        VBox root = new VBox(12);
+        // 页面根统一 VBox(16) + (0,4,0,0)，与 PageKit.settingsPage 的基线一致
+        VBox root = new VBox(16);
         root.setPadding(new Insets(0, 4, 0, 0));
 
         // 标题行：← 返回首页
@@ -395,7 +399,7 @@ public final class FrameGenCoordinator {
         header.getChildren().addAll(backBtn, titleLabel);
         root.getChildren().add(header);
 
-        // ===== 运行状态 =====
+        // 运行状态 //
         VBox statusCard = new VBox(10);
         statusCard.getStyleClass().add("settings-card");
         Label statusTitle = AppIcons.label("desktop", "运行状态");
@@ -428,7 +432,7 @@ public final class FrameGenCoordinator {
         statusCard.getChildren().addAll(statusTitle, statusCols, modeHint, fgOptionsLabel);
         root.getChildren().add(statusCard);
 
-        // ===== 倍率选择 =====
+        // 倍率选择 //
         VBox rateCard = new VBox(10);
         rateCard.getStyleClass().add("settings-card");
         Label rateTitle = AppIcons.label("bolt", "帧生成倍率");
@@ -461,7 +465,7 @@ public final class FrameGenCoordinator {
         rateCard.getChildren().addAll(rateTitle, rateDesc, rateRow);
         root.getChildren().add(rateCard);
 
-        // ===== Lossless Scaling（可选 · 自主配置）=====
+        // Lossless Scaling（可选 · 自主配置） //
         VBox lsCard = new VBox(10);
         lsCard.getStyleClass().add("settings-card");
         Label lsTitle = new Label("Lossless Scaling（可选）");
@@ -508,7 +512,7 @@ public final class FrameGenCoordinator {
         lsCard.getChildren().addAll(lsTitle, lsDesc, lsRow, fgLsStatusLabel);
         root.getChildren().add(lsCard);
 
-        // ===== 系统托盘 =====
+        // 系统托盘 //
         fgTrayToggle = PageKit.toggle(false);
         boolean trayActive = fgTray != null && fgTray.isActive();
         fgTrayToggle.setSelected(trayActive);
@@ -528,7 +532,7 @@ public final class FrameGenCoordinator {
         trayRow.setAlignment(Pos.CENTER_LEFT);
         root.getChildren().add(PageKit.settingsCard("系统托盘", "在系统托盘显示帧生成图标：左键打开本页面，右键快捷切换倍率（原 INS 键全局呼出方式已移除）", trayRow));
 
-        // ===== 定时刷新（1s） =====
+        // 定时刷新（1s） //
         Timeline fgRefresh = new Timeline(new KeyFrame(Duration.seconds(1), e -> refreshFrameGenUi()));
         fgRefresh.setCycleCount(Animation.INDEFINITE);
         fgRefresh.play();

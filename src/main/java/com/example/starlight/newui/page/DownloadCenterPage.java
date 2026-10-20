@@ -12,10 +12,11 @@ import com.example.starlight.ModsApi.RemoteMod;
 import com.example.starlight.ModsApi.RemoteModDetail;
 import com.example.starlight.ModsApi.ModTranslations;
 import com.example.starlight.ModsApi.RemoteModRepository;
-import com.example.starlight.download.DownloadProvider;
+import com.example.starlight.download.source.DownloadProvider;
 import com.example.starlight.download.DownloadSettings;
-import com.example.starlight.download.GameResourceCompleter;
-import com.example.starlight.download.HttpDownloadEngine;
+import com.example.starlight.download.task.GameResourceCompleter;
+import com.example.starlight.download.engine.HttpDownloadEngine;
+import com.example.starlight.download.task.ContentDownloader;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.main.ConfigManager;
 import com.example.starlight.modpack.ModpackManifestParser;
@@ -35,12 +36,13 @@ import com.example.starlight.newui.ui.InertiaScrollSupport;
 import com.example.starlight.newui.ui.IconService;
 import com.example.starlight.newui.ui.PageKit;
 import com.example.starlight.newui.ui.SkeletonFactory;
+import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.util.ArchiveUtils;
 import com.example.starlight.util.FormatUtils;
 import com.example.starlight.util.GameDirInitializer;
 import com.example.starlight.util.ResourceScanner;
-import com.example.starlight.version.InstallEngine;
-import com.example.starlight.version.LoaderInstallEngine;
+import com.example.starlight.download.task.InstallEngine;
+import com.example.starlight.download.task.LoaderInstallEngine;
 import com.example.starlight.version.VersionDownloadService;
 import com.example.starlight.version.VersionMatcher;
 import com.google.gson.Gson;
@@ -113,6 +115,60 @@ public final class DownloadCenterPage {
     /** 下载中心远程数据缓存（搜索结果 / 项目版本列表 / 项目详情） */
     private final RemoteCacheService remoteCache = new RemoteCacheService();
 
+    /**
+     * 各内容面板的「首次激活」动作：面板<b>只在第一次被选中时</b>才发网络请求。
+     *
+     * <p>此前 {@code buildContentPanel} 在构造时就无条件 {@code load.run()}，而 {@code buildCenter}
+     * 会把 7 个面板全部构造一遍 —— 于是刚点开下载中心就同时打出十几个搜索/分类请求，
+     * 每个请求还要先付一次镜像超时，首屏要等十几秒。改为激活时加载后，打开下载中心只发
+     * 「游戏版本」这一个请求，其余面板各自在被点开时才加载。
+     *
+     * <p>用 {@link java.util.IdentityHashMap} 按节点身份索引（面板之间不做 equals 比较）。
+     */
+    private final Map<Node, Runnable> panelActivators =
+            new java.util.IdentityHashMap<>();
+
+    /** 注册一个面板的首次激活动作（同一个节点重复注册时后者覆盖） */
+    private void registerPanelActivator(Node panel, Runnable activator) {
+        if (panel != null && activator != null) panelActivators.put(panel, activator);
+    }
+
+    /** 把 {@code from} 上的激活动作转挂到 {@code to}（外层容器包装内层面板时用，如「世界」面板） */
+    private void transferPanelActivator(Node from, Node to) {
+        Runnable activator = panelActivators.remove(from);
+        if (activator != null) registerPanelActivator(to, activator);
+    }
+
+    /** 触发某个面板的首次激活动作；每个面板只执行一次（执行后即移除，后续切回不再重复请求） */
+    private void activatePanel(Node panel) {
+        Runnable activator = panelActivators.remove(panel);
+        if (activator != null) {
+            try {
+                activator.run();
+            } catch (Exception e) {
+                System.err.println("[DL] 面板首次加载失败: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 预热中文字典索引：{@code mod_data.txt} 有 1.6MB / 2.8 万行，首次反查中文名要在同步路径上
+     * 建 4 张索引表（modId / 英文名 / CurseForge slug / 归一化标题）。
+     * 那一步此前发生在 FX 线程首次渲染列表行时，会造成一次明显的界面冻结，
+     * 这里提前丢到后台线程构建，让首屏只做「查表」。
+     */
+    private static void warmUpModDictionaries() {
+        UIGeneralControlClass.ASYNC_POOL.submit(() -> {
+            try {
+                // 触发 getTitleMap()（最重的一张索引表）；查不到也无所谓，目的是建表
+                ModTranslations.MOD.getModByTitle("__starlight_warmup__");
+                ModTranslations.MODPACK.getModByTitle("__starlight_warmup__");
+            } catch (Exception e) {
+                System.err.println("[DL] 字典预热失败: " + e.getMessage());
+            }
+        });
+    }
+
     /** 下载中心左侧分类按钮引用（供资源页“搜索资源”跳转到对应分类） */
     private final List<Button> downloadNavButtons = new ArrayList<>();
     /** 下载页「分类」下拉的选项缓存：key = 仓库标签 + 资源类型，避免每次切页都重新请求分类接口 */
@@ -181,11 +237,11 @@ public final class DownloadCenterPage {
         Label importHint = new Label("支持 Modrinth .mrpack 与 CurseForge 整合包 zip（.zip）");
         importHint.setStyle("-fx-font-size: 11px; -fx-text-fill: -sl-text-dim;");
         importRow.getChildren().addAll(importBtn, importHint);
-        modpackPanel.getChildren().add(
-                buildContentPanel("整合包", RemoteModRepository.Type.MODPACK,
-                        List.of(new ModSource("Modrinth", ModrinthRemoteModRepository.MODPACKS),
-                                new ModSource("CurseForge", CurseForgeRemoteModRepository.MODPACKS)),
-                        importRow));
+        Node modpackContent = buildContentPanel("整合包", RemoteModRepository.Type.MODPACK,
+                List.of(new ModSource("Modrinth", ModrinthRemoteModRepository.MODPACKS),
+                        new ModSource("CurseForge", CurseForgeRemoteModRepository.MODPACKS)),
+                importRow);
+        modpackPanel.getChildren().add(modpackContent);
 
         Node[] panels = {
                 buildDownloadVersionsPanel(),
@@ -204,6 +260,15 @@ public final class DownloadCenterPage {
                                 new ModSource("CurseForge", CurseForgeRemoteModRepository.SHADER_PACKS))),
                 buildDownloadWorldsPanel()
         };
+
+        // 「整合包」与「世界」面板外面各套了一层壳（导入入口 / 提示文案），
+        // 激活动作登记在内部内容面板上，需转挂到 panels 数组里的外层节点，
+        // 否则侧边栏点中的外层节点永远查不到激活动作、面板一直空着。
+        transferPanelActivator(modpackContent, panels[2]);
+        transferPanelActivator(worldsContentPanel, panels[6]);
+        // 「游戏版本」面板构建时就已经自己发起了清单加载（见 buildDownloadVersionsPanel），
+        // 这里不再给它注册激活动作，避免重复请求。
+        warmUpModDictionaries();
 
         ScrollPane contentScroll = new ScrollPane(contentArea);
         // 统一挂接惯性滚动（阻尼 + fling）；「游戏版本」固定页的 vbar 策略与 fitToHeight 逻辑保持不变
@@ -235,6 +300,8 @@ public final class DownloadCenterPage {
                         .filter(n -> n instanceof Button)
                         .forEach(n -> n.getStyleClass().remove("selected"));
                 btn.getStyleClass().add("selected");
+                // 首次选中该面板时才发起它的网络请求（此前是 7 个面板构建时一起发）
+                activatePanel(panels[idx]);
             });
             downloadNavButtons.add(btn);
             nav.getChildren().add(btn);
@@ -250,8 +317,7 @@ public final class DownloadCenterPage {
         return layout;
     }
 
-    // ==================== 下载中心：游戏版本 ====================
-
+    // 下载中心：游戏版本 //
     private List<VersionDownloadService.VersionInfo> lastVersionInfos;
 
     /** 版本页分类标签：key + 显示名（顺序与 VersePc2 版本页一致） */
@@ -436,7 +502,10 @@ public final class DownloadCenterPage {
                     onLoaded.accept(infos);
                     // 加载完成后换成空态提示：列表为空是因为「没有匹配」，而不是还在加载
                     versionList.setPlaceholder(skeletonHint("没有匹配的版本"));
-                    VersionDownloadService.preloadPopularVersions(infos);
+                    // 不再预加载热门版本：这批 21 个请求只在版本清单加载后立即发起，
+                    // 与配置页的加载器查询时间重叠，抢带宽且配置页的列表查询不读 LOADER_CACHE
+                    //（见 VersionDownloadService.fetchAllLoaderVersionsListAsync），纯属无效预热。
+                    // VersionDownloadService.preloadPopularVersions(infos);
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> versionList.setPlaceholder(
@@ -612,8 +681,10 @@ public final class DownloadCenterPage {
     public Node buildVersionConfig() {
         VersionDownloadService.VersionInfo v = currentVersionConfig;
 
-        VBox root = new VBox(12);
-        root.setPadding(new Insets(8, 8, 8, 0));
+        VBox root = new VBox(16);
+        // 页面根统一 (0,4,0,0)：外层 .main-content 已有 18/22 内边距，这里再写 8 会导致
+        // 本页比其它页多缩进一圈（顶部 26 vs 18、右侧 30 vs 26）
+        root.setPadding(new Insets(0, 4, 0, 0));
         VBox.setVgrow(root, Priority.ALWAYS);
 
         Button backBtn = AppIcons.button("back", "返回");
@@ -622,7 +693,8 @@ public final class DownloadCenterPage {
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
         Label titleLabel = new Label(v == null ? "下载配置" : "下载配置 - " + v.getId());
-        titleLabel.getStyleClass().add("home-card-title");
+        // 页面级标题统一用 content-title（19px）；home-card-title 是卡片内小节标题（12px）
+        titleLabel.getStyleClass().add("content-title");
         header.getChildren().addAll(backBtn, titleLabel);
         root.getChildren().add(header);
 
@@ -691,7 +763,7 @@ public final class DownloadCenterPage {
                                            VersionDownloadService.LoaderVersion[] selectionOut) {
         VBox body = new VBox(12);
 
-        // ==================== 版本信息 ====================
+        // 版本信息 //
         HBox head = new HBox(12);
         head.setAlignment(Pos.CENTER_LEFT);
         StackPane iconBox = new StackPane(IconService.versionIconView(v.getCategory(), 40));
@@ -708,7 +780,7 @@ public final class DownloadCenterPage {
         head.getChildren().addAll(iconBox, headInfo);
         body.getChildren().add(head);
 
-        // ==================== 版本文件夹名 ====================
+        // 版本文件夹名 //
         HBox dirRow = new HBox(8);
         dirRow.setAlignment(Pos.CENTER_LEFT);
         Label dirLabel = new Label("版本文件夹名:");
@@ -736,7 +808,7 @@ public final class DownloadCenterPage {
 
         body.getChildren().add(new Separator());
 
-        // ==================== 组件列表（PCL2 式：一行一个加载器，点开展开版本列表） ====================
+        // 组件列表（PCL2 式：一行一个加载器，点开展开版本列表） //
         Label sectionTitle = new Label("选择要安装的组件");
         sectionTitle.getStyleClass().add("config-section-title");
 
@@ -754,6 +826,10 @@ public final class DownloadCenterPage {
         /** 加载器名 → 该加载器的可用版本；null 表示还没查询回来 */
         final Map<String, List<VersionDownloadService.LoaderVersion>> groups = new LinkedHashMap<>();
         final boolean[] queried = {false};
+        /** 本轮因超时未查到的加载器名（用于把状态显示成「重试」而不是「无」） */
+        final java.util.Set<String> timedOutLoaders = new java.util.LinkedHashSet<>();
+        /** 可重入的查询动作：首查与「重试」按钮共用 */
+        final Runnable[] queryLoaders = new Runnable[1];
 
         final Runnable[] render = new Runnable[1];
         render[0] = () -> {
@@ -779,13 +855,15 @@ public final class DownloadCenterPage {
                 List<VersionDownloadService.LoaderVersion> versions = groups.get(name);
                 boolean known = versions != null && !versions.isEmpty();
 
-                // 状态文案：已选 → 版本号；已安装 → 已安装；未查到 → 正在查询；无用版本 → 无；否则 → 可以添加
+                // 状态文案：已选 → 版本号；已安装 → 已安装；未查到 → 正在查询；超时 → 重试；无用版本 → 无；否则 → 可以添加
                 String status;
                 boolean isChosen = selected[0] != null && name.equals(selected[0].getLoaderName());
                 if (isChosen) {
                     status = selected[0].getVersion();
                 } else if (!queried[0]) {
                     status = "正在查询…";
+                } else if (timedOutLoaders.contains(name)) {
+                    status = "查询超时，点击重试";
                 } else if (VersionMatcher.matchesInstalledLoader(installedLoader[0], name)) {
                     status = "已安装";
                 } else if (known) {
@@ -794,11 +872,18 @@ public final class DownloadCenterPage {
                     status = "无";
                 }
 
-                // versionCount 传 -1 表示「数量未知（查询中）」，此时也允许点开看进度
-                int count = known ? versions.size() : (queried[0] ? 0 : -1);
+                // versionCount 传 -1 表示「数量未知（查询中/超时）」，此时也允许点开；
+                // 超时的加载器点击即触发重新查询（而不是展开一个空列表）
+                boolean timedOutRow = timedOutLoaders.contains(name);
+                int count = known ? versions.size() : (queried[0] && !timedOutRow ? 0 : -1);
                 final String loaderName = name;
                 final boolean isExpanded = loaderName.equals(expanded[0]);
                 VBox row = buildComponentRow(loaderName, count, status, isChosen, true, isExpanded, () -> {
+                    if (timedOutRow) {
+                        // 超时行：点击 = 重试整个查询（单行重试的粒度已够用，避免只重试一个还要传参）
+                        queryLoaders[0].run();
+                        return;
+                    }
                     expanded[0] = loaderName.equals(expanded[0]) ? null : loaderName;
                     render[0].run();
                 });
@@ -842,42 +927,60 @@ public final class DownloadCenterPage {
         // 先渲染一次：加载器行（含原版）立刻出现，版本列表随后异步填充
         render[0].run();
 
-        // ==================== 异步查询组件清单 ====================
-        VersionDownloadService.fetchAllLoaderVersionsListAsync(v.getId())
-                .thenAcceptAsync(list -> {
-                    // 按加载器分组并按固定顺序排列（与原版启动器的习惯一致）
-                    Map<String, List<VersionDownloadService.LoaderVersion>> byName = new LinkedHashMap<>();
-                    if (list != null) {
-                        for (VersionDownloadService.LoaderVersion lv : list) {
-                            byName.computeIfAbsent(lv.getLoaderName(), k -> new ArrayList<>()).add(lv);
+        // 异步查询组件清单（可重入：首查与「重试」按钮共用）
+        queryLoaders[0] = () -> {
+            componentHint.setText("正在查询各加载器的可用版本...");
+            componentHint.setStyle(null);
+            timedOutLoaders.clear();
+            VersionDownloadService.fetchAllLoaderVersionsListAsync(v.getId())
+                    .thenAcceptAsync(res -> {
+                        // 按加载器分组并按固定顺序排列（与原版启动器的习惯一致）
+                        Map<String, List<VersionDownloadService.LoaderVersion>> byName = new LinkedHashMap<>();
+                        if (res != null && res.versions() != null) {
+                            for (VersionDownloadService.LoaderVersion lv : res.versions()) {
+                                byName.computeIfAbsent(lv.getLoaderName(), k -> new ArrayList<>()).add(lv);
+                            }
                         }
-                    }
-                    Map<String, List<VersionDownloadService.LoaderVersion>> ordered = new LinkedHashMap<>();
-                    // 先放固定名单里的加载器（即便这次没查到也保留一行，显示为「无」）
-                    for (String want : KNOWN_LOADERS) {
-                        List<VersionDownloadService.LoaderVersion> got = byName.remove(want);
-                        ordered.put(want, got == null ? List.of() : got);
-                    }
-                    ordered.putAll(byName);   // 其余加载器（Quilt / OptiFine / FabricAPI…）追加在后面
-                    groups.clear();
-                    groups.putAll(ordered);
-                    queried[0] = true;
-
-                    long withVersions = ordered.values().stream().filter(l -> !l.isEmpty()).count();
-                    componentHint.setText(withVersions == 0
-                            ? "该版本暂无可用加载器，可直接下载原版"
-                            : "选择一个加载器展开版本列表，或直接下载原版");
-                    render[0].run();
-                }, Platform::runLater)
-                .exceptionally(ex -> {
-                    Platform.runLater(() -> {
-                        componentHint.setText("组件查询失败（" + ex.getMessage() + "），仍可直接下载原版");
-                        componentHint.setStyle("-fx-text-fill: #ef4444;");
+                        Map<String, List<VersionDownloadService.LoaderVersion>> ordered = new LinkedHashMap<>();
+                        // 先放固定名单里的加载器（即便这次没查到也保留一行，显示为「无」）
+                        for (String want : KNOWN_LOADERS) {
+                            List<VersionDownloadService.LoaderVersion> got = byName.remove(want);
+                            ordered.put(want, got == null ? List.of() : got);
+                        }
+                        ordered.putAll(byName);   // 其余加载器（Quilt / OptiFine / FabricAPI…）追加在后面
+                        groups.clear();
+                        groups.putAll(ordered);
+                        timedOutLoaders.clear();
+                        if (res != null && res.timedOutLoaders() != null) {
+                            timedOutLoaders.addAll(res.timedOutLoaders());
+                        }
                         queried[0] = true;
+
+                        long withVersions = ordered.values().stream().filter(l -> !l.isEmpty()).count();
+                        if (!timedOutLoaders.isEmpty()) {
+                            componentHint.setText(withVersions == 0
+                                    ? "部分加载器查询超时，点「查询超时」的行可单独重试"
+                                    : "部分加载器查询超时，点「查询超时」的行可单独重试（已查到的可直接用）");
+                            componentHint.setStyle("-fx-text-fill: #b45309;");
+                        } else {
+                            componentHint.setText(withVersions == 0
+                                    ? "该版本暂无可用加载器，可直接下载原版"
+                                    : "选择一个加载器展开版本列表，或直接下载原版");
+                            componentHint.setStyle(null);
+                        }
                         render[0].run();
+                    }, Platform::runLater)
+                    .exceptionally(ex -> {
+                        Platform.runLater(() -> {
+                            componentHint.setText("组件查询失败（" + ex.getMessage() + "），仍可直接下载原版");
+                            componentHint.setStyle("-fx-text-fill: #ef4444;");
+                            queried[0] = true;
+                            render[0].run();
+                        });
+                        return null;
                     });
-                    return null;
-                });
+        };
+        queryLoaders[0].run();
 
         return body;
     }
@@ -1141,9 +1244,11 @@ public final class DownloadCenterPage {
     /**
      * 安装完成后按「版本隔离」开关预建 versions/&lt;dirName&gt;/ 下的隔离目录树
      * （mods/saves/config 等），对齐 PCL2：隔离环境开箱可见，可先放模组存档再启动。
+     * 开关取新装版本自身的有效值（此时覆盖文件尚未写入，结果等同全局值；
+     * 与其他调用点同一入口，避免再散落一份直读全局的判据）。
      */
     private void initIsolationAfterInstall(String gameDir, String dirName, DownloadTaskCard dialog) {
-        if (!"true".equalsIgnoreCase(host.config().getOrDefault("VersionIsolation", "false"))) return;
+        if (!VersionConfigManager.effectiveVersionIsolation(host.config(), gameDir, dirName)) return;
         GameDirInitializer.InitResult init =
                 GameDirInitializer.initializeVersionIsolation(Path.of(gameDir), dirName);
         if (init.created() > 0) {
@@ -1152,7 +1257,7 @@ public final class DownloadCenterPage {
         if (!init.ok()) dialog.logLine(init.summary(), false);
     }
 
-    // ==================== 下载中心：远程内容（Modrinth / CurseForge） ====================
+    // 下载中心：远程内容（Modrinth / CurseForge） //
 
     /**
      * 下载中心的数据源选项：显示名 + 对应的远程仓库实现。
@@ -1281,7 +1386,7 @@ public final class DownloadCenterPage {
         titleLabel.getStyleClass().add("content-title");
         root.getChildren().add(titleLabel);
 
-        // ==================== ① 搜索栏 ====================
+        // ① 搜索栏 //
         TextField searchField = new TextField();
         searchField.setPromptText(supportsChinese
                 ? "搜索" + panelTitle + "（支持中英文，如「机械动力」）"
@@ -1299,7 +1404,7 @@ public final class DownloadCenterPage {
         searchBar.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(searchField, Priority.ALWAYS);
 
-        // ==================== ② 筛选行 ====================
+        // ② 筛选行 //
         ComboBox<String> sourceCombo = new ComboBox<>();
         sourceCombo.getItems().add("全部");
         for (ModSource s : effectiveSources) sourceCombo.getItems().add(s.label());
@@ -1348,7 +1453,7 @@ public final class DownloadCenterPage {
         toolbarRows[extraToolbarRows.length + 1] = filterRow;
         root.getChildren().add(PageKit.toolbarCard(toolbarRows));
 
-        // ==================== ③ 结果列表 + 分页 ====================
+        // ③ 结果列表 + 分页 //
         VBox listContainer = new VBox(6);
         root.getChildren().add(listContainer);
 
@@ -1363,7 +1468,7 @@ public final class DownloadCenterPage {
         pager.getChildren().addAll(prevBtn, pageLabel, nextBtn);
         root.getChildren().add(pager);
 
-        // ==================== 状态 ====================
+        // 状态 //
         final ModSearchQuery query = new ModSearchQuery().setPageSize(REMOTE_PAGE_SIZE);
         final int[] pageOffset = {0};
         /**
@@ -1382,7 +1487,7 @@ public final class DownloadCenterPage {
         Runnable reloadCategories = () -> loadCategoryOptions(sourceCombo, effectiveSources, type,
                 categoryCombo, categoryOptions);
 
-        // ==================== 搜索执行 ====================
+        // 搜索执行 //
         /** 点「刷新」时置位，用于绕过内存缓存强制重新拉取 */
         final boolean[] forceRefresh = {false};
 
@@ -1423,23 +1528,43 @@ public final class DownloadCenterPage {
 
             UIGeneralControlClass.ASYNC_POOL.submit(() -> {
                 try {
-                    // 每个来源各取一页，再交错合并 —— 这样「来源=全部」时两个站点的结果都能进首屏
-                    List<List<ModHit>> buckets = new ArrayList<>();
+                    // 各来源<b>并行</b>各取一页，再交错合并 —— 这样「来源=全部」时两个站点的结果
+                    // 都能进首屏，且首屏延迟是 max(两个站点) 而不是两者之和。
+                    // 此前是 for 循环里阻塞串行 search，Modrinth 慢时 CurseForge 要排队等它。
+                    List<java.util.concurrent.CompletableFuture<SourcePage>> futures = new ArrayList<>();
+                    for (ModSource src : repos) {
+                        futures.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                            try {
+                                RemoteModRepository.SearchResult r =
+                                        src.repo().search(VersionDownloadService.getDownloadProvider(), snapshot);
+                                List<RemoteMod> items = r.getResults().collect(Collectors.toList());
+                                List<ModHit> bucket = new ArrayList<>(items.size());
+                                for (RemoteMod m : items) bucket.add(new ModHit(m, src.repo()));
+                                return new SourcePage(bucket, r.getTotalPages(), null);
+                            } catch (Exception e) {
+                                return new SourcePage(List.of(), 1, e);
+                            }
+                        }, UIGeneralControlClass.ASYNC_POOL));
+                    }
                     int pages = 1;
                     int failed = 0;
-                    for (ModSource src : repos) {
+                    List<List<ModHit>> buckets = new ArrayList<>();
+                    // 按 repos 的顺序取回结果（保持「交错合并」的稳定交错次序），每个 future 有独立超时
+                    for (int i = 0; i < futures.size(); i++) {
+                        SourcePage page;
                         try {
-                            RemoteModRepository.SearchResult r =
-                                    src.repo().search(VersionDownloadService.getDownloadProvider(), snapshot);
-                            List<RemoteMod> items = r.getResults().collect(Collectors.toList());
-                            List<ModHit> bucket = new ArrayList<>(items.size());
-                            for (RemoteMod m : items) bucket.add(new ModHit(m, src.repo()));
-                            buckets.add(bucket);
-                            pages = Math.max(pages, r.getTotalPages());
+                            page = futures.get(i).get(60, java.util.concurrent.TimeUnit.SECONDS);
                         } catch (Exception e) {
-                            failed++;
-                            System.err.println("[DL] " + src.label() + " 搜索失败: " + e.getMessage());
+                            page = new SourcePage(List.of(), 1, e);
                         }
+                        if (page.error() != null) {
+                            failed++;
+                            System.err.println("[DL] " + repos.get(i).label() + " 搜索失败: "
+                                    + page.error().getMessage());
+                            continue;
+                        }
+                        buckets.add(page.hits());
+                        pages = Math.max(pages, page.totalPages());
                     }
                     List<ModHit> merged = new ArrayList<>();
                     if (buckets.size() <= 1) {
@@ -1481,12 +1606,12 @@ public final class DownloadCenterPage {
         };
         loadRef[0] = load;
 
-        // ==================== 事件绑定 ====================
+        // 事件绑定 //
         searchField.setOnAction(e -> searchBtn.fire());
         searchBtn.setOnAction(e -> { pageOffset[0] = 0; load.run(); });
         refreshBtn.setOnAction(e -> {
-            // 刷新 = 清掉当前面板的搜索缓存并强制重新拉取
-            remoteCache.clear();
+            // 刷新 = 清掉当前面板的搜索缓存并强制重新拉取（只清本面板，不波及其它 6 个面板）
+            remoteCache.clearSearchByPanel(panelTitle);
             forceRefresh[0] = true;
             load.run();
         });
@@ -1521,9 +1646,18 @@ public final class DownloadCenterPage {
             load.run();
         });
 
-        reloadCategories.run();
-        load.run();
+        // 延迟到面板第一次被选中时才发起请求：buildCenter 会把 7 个面板全部构造一遍，
+        // 在这里直接 load.run() 会导致刚打开下载中心就同时打出十几个请求（每个还要先付镜像超时）。
+        // 分类选项与首屏搜索都由 activatePanel 在激活时触发。
+        registerPanelActivator(root, () -> {
+            reloadCategories.run();
+            load.run();
+        });
         return root;
+    }
+
+    /** 单一来源的一页搜索结果：命中列表 + 总页数 + 失败原因（并行搜索的返回载体） */
+    private record SourcePage(List<ModHit> hits, int totalPages, Exception error) {
     }
 
     /** 搜索结果来源徽章文案（CF / MR），未知来源返回空串 */
@@ -1787,7 +1921,7 @@ public final class DownloadCenterPage {
         return row;
     }
 
-    // ==================== 远程图标加载（实现见 newhost.ui().host.ui().IconService） ====================
+    // 远程图标加载（实现见 newhost.ui().host.ui().IconService） //
 
     /** 远程图标/头像加载（下载源取自当前配置） */
     private void loadRemoteIconAsync(ImageView iconView, String originalUrl, double size, String fallbackText) {
@@ -1863,8 +1997,9 @@ public final class DownloadCenterPage {
      */
     public Node buildVersionPicker() {
         VersionPickContext ctx = currentVersionPick;
-        VBox root = new VBox(12);
-        root.setPadding(new Insets(8, 8, 8, 0));
+        VBox root = new VBox(16);
+        // 页面根统一 (0,4,0,0)：外层 .main-content 已有 18/22 内边距，见 buildVersionConfig 注释
+        root.setPadding(new Insets(0, 4, 0, 0));
         VBox.setVgrow(root, Priority.ALWAYS);
 
         Button backBtn = AppIcons.button("back", "返回");
@@ -1875,7 +2010,7 @@ public final class DownloadCenterPage {
         if (ctx != null) {
             Label titleLabel = new Label("选择版本 - "
                     + LocalizedRemoteModRepository.localizedTitle(ctx.mod(), ctx.type()));
-            titleLabel.getStyleClass().add("home-card-title");
+            titleLabel.getStyleClass().add("content-title");
             header.getChildren().addAll(backBtn, titleLabel);
         } else {
             header.getChildren().add(backBtn);
@@ -2151,7 +2286,9 @@ public final class DownloadCenterPage {
                                       RemoteModRepository.Type type, String panelTitle,
                                       String gameDir, String currentVersion, Path modsDir) {
         if (ver.getFile() == null || ver.getFile().getUrl() == null) {
-            // CurseForge 上作者可关闭「允许第三方分发」，此时接口不会返回直链
+            // CurseForge 上作者可关闭「允许第三方分发」，此时接口不会返回直链。
+            // 列表阶段已不再逐文件补查（50 个文件 = 50 次串行请求、约 32 秒，
+            // 实测补查对这类项目 0/3 命中，纯属白等），因此这里直接给明确提示。
             host.ui().toast("该版本没有可下载的文件（CurseForge 资源若未开放第三方分发，请前往官网下载）");
             return;
         }
@@ -2229,16 +2366,16 @@ public final class DownloadCenterPage {
                 dialog.beginFile(safeFilename);
 
                 // 先探测文件大小，进度弹窗据此把百分比换算成实时速度
-                long size = HttpDownloadEngine.probeFileSize(HttpDownloadEngine.HTTP_CLIENT, ver.getFile().getUrl());
+                long size = ContentDownloader.probeSize(ver.getFile().getUrl());
                 dialog.totalBytes(size);
                 if (size > 0) dialog.logLine("文件大小: " + FormatUtils.formatFileSize(size), true);
 
-                HttpDownloadEngine.downloadContentFile(finalVer, dest, dialog::progress, dialog.cancelFlag());
+                ContentDownloader.downloadContent(finalVer, dest, dialog::progress, dialog.cancelFlag());
                 dialog.finishFile(true);
                 dialog.finish(true, panelTitle + "「" + finalVer.getName() + "」已安装到 " + destDir, null);
                 Platform.runLater(() -> host.ui().toast(panelTitle + "「" + finalVer.getName() + "」安装完成"));
             } catch (Exception ex) {
-                boolean cancelled = HttpDownloadEngine.CANCELLED_MESSAGE.equals(ex.getMessage());
+                boolean cancelled = ContentDownloader.CANCELLED_MESSAGE.equals(ex.getMessage());
                 dialog.finishFile(false);
                 dialog.logLine("失败: " + ex, false);
                 if (ex.getCause() != null) dialog.logLine("原因: " + ex.getCause(), false);
@@ -2248,7 +2385,7 @@ public final class DownloadCenterPage {
     }
 
 
-    // ==================== 下载中心：详情页（描述 / 图库 / 版本 / 依赖） ====================
+    // 下载中心：详情页（描述 / 图库 / 版本 / 依赖） //
 
     /** 详情页图片灯箱的遮罩层（与详情弹窗并存，点击任意处关闭） */
     private StackPane lightboxOverlay;
@@ -2309,23 +2446,26 @@ public final class DownloadCenterPage {
             return cached != null ? cached : buildCenter();
         }
 
-        VBox root = new VBox(12);
-        root.setPadding(new Insets(8, 8, 8, 0));
+        VBox root = new VBox(16);
+        // 本页有外层 ScrollPane（.main-content 的 18/22 内边距已生效），
+        // 再叠加 8 会让顶部 26、右侧 30，比其它页多缩进一圈
+        root.setPadding(new Insets(0, 4, 0, 0));
         VBox.setVgrow(root, Priority.ALWAYS);
 
-        // ===== 顶部：返回 + 面包屑 =====
+        // 顶部：返回 + 面包屑 //
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
         Button backBtn = AppIcons.button("back", "返回下载中心");
-        backBtn.getStyleClass().add("community-action-btn");
-        backBtn.setStyle("-fx-padding: 6 14; -fx-font-size: 12px;");
+        // 页面级返回按钮统一用 back-btn（胶囊形），与 PageKit.settingsPage 的返回按钮一致；
+        // community-action-btn 是社区页的操作按钮样式，不属于页面导航
+        backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> host.switchToPage("download"));
         Label crumb = new Label(ctx.panelTitle() + " / 详情");
-        crumb.getStyleClass().add("home-card-title");
+        crumb.getStyleClass().add("content-title");
         header.getChildren().addAll(backBtn, crumb);
         root.getChildren().add(header);
 
-        // ===== 主体：加载中用骨架屏微光占位 → 数据到达后填充头部与标签页 =====
+        // 主体：加载中用骨架屏微光占位 → 数据到达后填充头部与标签页 //
         VBox body = new VBox(10);
         VBox.setVgrow(body, Priority.ALWAYS);
         body.getChildren().add(SkeletonFactory.buildDetailSkeleton());
@@ -2354,7 +2494,7 @@ public final class DownloadCenterPage {
                                           RemoteModDetail detail, List<RemoteMod.Version> versions) {
         body.getChildren().clear();
 
-        // ==================== 头部：图标 + 简介（上行），操作按钮（下行横向） ====================
+        // 头部：图标 + 简介（上行），操作按钮（下行横向） //
         HBox headerTop = new HBox(14);
         headerTop.setAlignment(Pos.TOP_LEFT);
 
@@ -2471,7 +2611,7 @@ public final class DownloadCenterPage {
 
         body.getChildren().add(new Separator());
 
-        // ==================== 标签页 ====================
+        // 标签页 //
         StackPane tabContent = new StackPane();
         tabContent.setAlignment(Pos.TOP_LEFT);
         tabContent.setMinHeight(Region.USE_PREF_SIZE);
@@ -2522,8 +2662,18 @@ public final class DownloadCenterPage {
             return empty;
         }
         boolean dark = "dark".equalsIgnoreCase(host.currentTheme());
-        javafx.scene.web.WebView web = new javafx.scene.web.WebView();        web.setPrefHeight(400);
+        javafx.scene.web.WebView web = new javafx.scene.web.WebView();
         web.setContextMenuEnabled(false);
+        // 透明背景：WebView 默认会画一层白底，在卡片上是一块突兀的白砖。
+        // JavaFX 侧要显式关掉（否则即使文档设了 transparent，控件本身仍铺白），
+        // 文档侧 body/html 也设了 transparent，两者一起才能让卡片底色透上来。
+        web.setStyle("-fx-background-color: transparent;");
+        // 描述区自己是一块独立的滚动视口：给个可读的最大高度，正文超长时在框内滚动，
+        // 不再把整个详情页撑得很长（也避免和版本列表比长度）。
+        web.setPrefHeight(DESCRIPTION_VIEW_HEIGHT);
+        web.setMinHeight(DESCRIPTION_MIN_HEIGHT);
+        web.setMaxHeight(DESCRIPTION_VIEW_HEIGHT);
+        web.getStyleClass().add("mod-description-view");
         // 正文里的链接一律交给系统浏览器打开，避免在 WebView 里跳走丢失详情页
         web.getEngine().locationProperty().addListener((o, ov, nv) -> {
             if (nv != null && (nv.startsWith("http://") || nv.startsWith("https://"))) {
@@ -2533,9 +2683,15 @@ public final class DownloadCenterPage {
         String html = detail.getBodyFormat() == RemoteModDetail.BodyFormat.HTML
                 ? MarkdownRenderer.htmlDocument(detail.getBody(), dark)
                 : MarkdownRenderer.toDocument(detail.getBody(), dark);
-        web.getEngine().loadContent(html);
+        // 用 base64 data URI 投喂：engine.loadContent(String) 会把 emoji / 生僻字
+        // 这类增补平面字符（U+10000 以上）损坏成一串 U+FFFD（显示为「�」），见 MarkdownRenderer.loadInto。
+        MarkdownRenderer.loadInto(web.getEngine(), html);
         return web;
     }
+
+    /** 描述视口高度：足够显示十几行正文，超出后在框内滚动 */
+    private static final double DESCRIPTION_VIEW_HEIGHT = 420;
+    private static final double DESCRIPTION_MIN_HEIGHT = 220;
 
     /** 「图库」标签页：缩略图网格，点击放大查看（不套内层滚动条，滚整个页面） */
     private Node buildModGalleryTab(RemoteModDetail detail) {
@@ -2831,12 +2987,12 @@ public final class DownloadCenterPage {
                         }
                         dialog.stage("依赖 " + index + "/" + required.size() + "：" + depMod.getTitle());
                         dialog.beginFile(fileName);
-                        dialog.totalBytes(HttpDownloadEngine.probeFileSize(HttpDownloadEngine.HTTP_CLIENT, pick.getFile().getUrl()));
-                        HttpDownloadEngine.downloadContentFile(pick, modsDir.resolve(fileName), dialog::progress, dialog.cancelFlag());
+                        dialog.totalBytes(ContentDownloader.probeSize(pick.getFile().getUrl()));
+                        ContentDownloader.downloadContent(pick, modsDir.resolve(fileName), dialog::progress, dialog.cancelFlag());
                         dialog.finishFile(true);
                         ok++;
                     } catch (Exception e) {
-                        if (HttpDownloadEngine.CANCELLED_MESSAGE.equals(e.getMessage())) throw e;
+                        if (ContentDownloader.CANCELLED_MESSAGE.equals(e.getMessage())) throw e;
                         dialog.finishFile(false);
                         dialog.logLine("依赖 " + index + " 失败: " + e.getMessage(), false);
                         failed++;
@@ -2846,7 +3002,7 @@ public final class DownloadCenterPage {
                         + (failed > 0 ? "，失败 " + failed + " 个" : ""), null);
                 Platform.runLater(() -> host.ui().toast("依赖已下载到 " + modsDir));
             } catch (Exception ex) {
-                boolean cancelled = HttpDownloadEngine.CANCELLED_MESSAGE.equals(ex.getMessage());
+                boolean cancelled = ContentDownloader.CANCELLED_MESSAGE.equals(ex.getMessage());
                 dialog.finish(false, cancelled ? "已取消下载" : "依赖下载失败: " + ex.getMessage(), null);
             }
         });
@@ -2868,7 +3024,7 @@ public final class DownloadCenterPage {
         return candidates.get(0);
     }
 
-    // ==================== 下载中心：世界（CurseForge） ====================
+    // 下载中心：世界（CurseForge） //
 
     /**
      * 安装世界存档：下载 zip → 解压 → 复制到 {@code saves/<世界名>}。
@@ -2882,54 +3038,30 @@ public final class DownloadCenterPage {
                               DownloadTaskCard dialog) {
         dialog.stage("下载世界存档...");
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
-            Path tempDir = null;
             try {
-                tempDir = Files.createTempDirectory("sl-world-");
-                Path zipFile = tempDir.resolve("world.zip");
                 String zipName = ver.getFile() != null && ver.getFile().getFilename() != null
                         ? ver.getFile().getFilename() : "world.zip";
                 dialog.beginFile(zipName);
                 dialog.totalBytes(ver.getFile() == null ? -1
-                        : HttpDownloadEngine.probeFileSize(HttpDownloadEngine.HTTP_CLIENT, ver.getFile().getUrl()));
-                HttpDownloadEngine.downloadContentFile(ver, zipFile, dialog::progress, dialog.cancelFlag());
+                        : ContentDownloader.probeSize(ver.getFile().getUrl()));
+                // 下载 zip → 解压 → 复制到 saves/（临时目录由 ContentDownloader 内部清理）
+                Path dest = ContentDownloader.installWorld(ver, gameDir, dialog::progress,
+                        dialog.cancelFlag(), dialog::stage);
                 dialog.finishFile(true);
-
-                dialog.stage("正在解压...");
-                Path extractDir = tempDir.resolve("extracted");
-                Files.createDirectories(extractDir);
-                ArchiveUtils.unzipTo(zipFile, extractDir);
-
-                // 定位世界根目录：单层包裹时下钻一层
-                Path worldRoot = extractDir;
-                try (var list = Files.list(extractDir)) {
-                    List<Path> children = list.collect(Collectors.toList());
-                    if (children.size() == 1 && Files.isDirectory(children.get(0))) {
-                        worldRoot = children.get(0);
-                    }
-                }
-
-                Path savesDir = Paths.get(gameDir, "saves");
-                Files.createDirectories(savesDir);
-                Path dest = ArchiveUtils.uniqueDir(savesDir, ArchiveUtils.sanitizeWorldName(ver.getName()));
-                ArchiveUtils.copyDirectory(worldRoot, dest);
 
                 final boolean hasLevelDat = Files.exists(dest.resolve("level.dat"));
                 dialog.finish(true, panelTitle + "「" + ver.getName() + "」已解压到 " + dest
                         + (hasLevelDat ? "" : "（未发现 level.dat，可能不是标准存档）"), null);
                 Platform.runLater(() -> host.ui().toast(panelTitle + "「" + ver.getName() + "」下载完成"));
             } catch (Exception ex) {
-                boolean cancelled = HttpDownloadEngine.CANCELLED_MESSAGE.equals(ex.getMessage());
+                boolean cancelled = ContentDownloader.CANCELLED_MESSAGE.equals(ex.getMessage());
                 dialog.finish(false, cancelled ? "已取消下载" : "下载失败: " + ex.getMessage(), null);
-            } finally {
-                if (tempDir != null) {
-                    try {
-                        ArchiveUtils.deleteRecursively(tempDir);
-                    } catch (Exception ignored) {
-                    }
-                }
             }
         });
     }
+
+    /** 「世界」面板的内层内容节点（外层还套了提示文案，激活动作需要转挂到外层） */
+    private Node worldsContentPanel;
 
     /**
      * 世界存档面板：数据源为 CurseForge（classId 17）。
@@ -2937,8 +3069,10 @@ public final class DownloadCenterPage {
      */
     private Node buildDownloadWorldsPanel() {
         VBox root = new VBox(12);
-        root.getChildren().add(buildContentPanel("世界", RemoteModRepository.Type.WORLD,
-                List.of(new ModSource("CurseForge", CurseForgeRemoteModRepository.WORLDS))));
+        Node content = buildContentPanel("世界", RemoteModRepository.Type.WORLD,
+                List.of(new ModSource("CurseForge", CurseForgeRemoteModRepository.WORLDS)));
+        worldsContentPanel = content;
+        root.getChildren().add(content);
 
         Label hint = new Label("说明：世界存档来自 CurseForge。下载后会自动解压到存档目录（saves）；"
                 + "若压缩包内含单一顶层文件夹，则以该文件夹名作为存档名，否则以资源名命名。");
@@ -2948,7 +3082,7 @@ public final class DownloadCenterPage {
         return root;
     }
 
-    // ==================== 下载中心：整合包安装（Modrinth .mrpack / CurseForge zip） ====================
+    // 下载中心：整合包安装（Modrinth .mrpack / CurseForge zip） //
 
     /**
      * 从远程版本下载并安装整合包。
@@ -2970,15 +3104,14 @@ public final class DownloadCenterPage {
                 dialog.stage("下载整合包主体...");
                 dialog.beginFile("整合包主体");
                 dialog.logLine("整合包地址: " + url, true);
-                dialog.totalBytes(HttpDownloadEngine.probeFileSize(
-                        HttpDownloadEngine.HTTP_CLIENT, HttpDownloadEngine.firstContentCandidate(url)));
+                dialog.totalBytes(ContentDownloader.probeMirrorSize(url));
                 // 镜像优先（mcimirror）→ 官方直链兜底，整合包主体通常几十 MB，国内直连 CDN 很慢
-                HttpDownloadEngine.downloadWithMirrors(url, archive, dialog::progress, dialog.cancelFlag());
+                ContentDownloader.downloadModpackBody(url, archive, dialog::progress, dialog.cancelFlag());
                 dialog.finishFile(true);
                 dialog.logLine("整合包主体已下载（" + FormatUtils.formatFileSize(Files.size(archive)) + "）", true);
                 installModpackArchive(archive, packName, gameDir, dialog);
             } catch (Exception ex) {
-                boolean cancelled = HttpDownloadEngine.CANCELLED_MESSAGE.equals(ex.getMessage());
+                boolean cancelled = ContentDownloader.CANCELLED_MESSAGE.equals(ex.getMessage());
                 dialog.logLine("失败: " + ex, false);
                 dialog.finish(false, cancelled ? "已取消安装" : "安装失败: " + ex.getMessage(), null);
             } finally {
@@ -3055,7 +3188,7 @@ public final class DownloadCenterPage {
             }
             dialog.logLine("清单内文件: " + manifest.files().size() + " 个", true);
 
-            // ===== 1. 确保原版已安装 =====
+            // 1. 确保原版已安装 //
             Path mcVerDir = Paths.get(gameDir, "versions", mcVersion);
             boolean mcInstalled = Files.isDirectory(mcVerDir)
                     && Files.exists(mcVerDir.resolve(mcVersion + ".json"));
@@ -3077,7 +3210,7 @@ public final class DownloadCenterPage {
                 if (!ok) throw new IOException("原版 " + mcVersion + " 安装失败");
             }
 
-            // ===== 2. 加载器 =====
+            // 2. 加载器 //
             String inheritsFrom = mcVersion;
             if (manifest.loaderType() != null) {
                 String loaderType = manifest.loaderType();
@@ -3127,7 +3260,7 @@ public final class DownloadCenterPage {
                 }
             }
 
-            // ===== 3. 生成 versions/<packId> 版本 JSON =====
+            // 3. 生成 versions/<packId> 版本 JSON //
             // 壳 JSON（仅 id/inheritsFrom/time/releaseTime/type）作为整合包标记：
             // 启动与资源补全侧会沿 inheritsFrom 链解析出完整视图，不再依赖本文件自身完整；
             // jar 从底层版本复制一份，避免外部工具（无继承解析能力）无法识别
@@ -3148,7 +3281,7 @@ public final class DownloadCenterPage {
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
 
-            // ===== 4. 复制 overrides/ =====
+            // 4. 复制 overrides/ //
             Path overrides = extractDir.resolve(manifest.overridesDir());
             if (Files.isDirectory(overrides)) {
                 dialog.stage("复制整合包配置...");
@@ -3156,76 +3289,23 @@ public final class DownloadCenterPage {
                 ArchiveUtils.copyDirectory(overrides, packDir);
             }
 
-            // ===== 5. 下载清单内的文件 =====
+            // 5. 下载清单内的文件（4 线程并发，逻辑平移到 ContentDownloader） //
             List<PackFile> files = manifest.files();
             if (!files.isEmpty()) {
                 dialog.stage("下载整合包文件...");
                 dialog.beginFile("整合包文件（共 " + files.size() + " 个）");
-
-                int total = files.size();
-                java.util.concurrent.atomic.AtomicInteger doneFiles =
-                        new java.util.concurrent.atomic.AtomicInteger(0);
-                java.util.concurrent.atomic.AtomicInteger failedFiles =
-                        new java.util.concurrent.atomic.AtomicInteger(0);
-                java.util.concurrent.atomic.AtomicReference<IOException> dlError =
-                        new java.util.concurrent.atomic.AtomicReference<>(null);
-                List<java.util.concurrent.Callable<Void>> dlTasks = new java.util.ArrayList<>();
-
-                for (PackFile pf : files) {
-                    Path dest = packDir.resolve(pf.relativePath()).normalize();
-                    if (!dest.startsWith(packDir)) continue;                 // 路径穿越防护
-                    if (Files.exists(dest)) {                                // 已有（overrides 里带来的）
-                        doneFiles.incrementAndGet();
-                        continue;
-                    }
-                    Files.createDirectories(dest.getParent());
-                    final String fileUrl = pf.url();
-                    dlTasks.add(() -> {
-                        try {
-                            // 清单内文件同样是 cdn.modrinth.com / edge.forgecdn.net 直链，走镜像优先
-                            HttpDownloadEngine.downloadWithMirrors(fileUrl, dest,
-                                    pct -> {
-                                        // 进度按「已完成文件数 + 当前文件百分比」折算成整包进度。
-                                        // 注意 doneFiles 必须在任务结束时自增，否则进度永远停在 0。
-                                        int done = doneFiles.get();
-                                        int overall = (int) ((done + pct / 100.0) * 100 / total);
-                                        dialog.progress(Math.max(0, Math.min(99, overall)));
-                                        dialog.message("下载整合包文件 "
-                                                + Math.min(done + 1, total) + "/" + total);
-                                    }, dialog.cancelFlag());
-                        } catch (IOException e) {
-                            failedFiles.incrementAndGet();
-                            dlError.compareAndSet(null, e);
-                        } finally {
-                            doneFiles.incrementAndGet();
-                        }
-                        return null;
-                    });
-                }
-
-                if (!dlTasks.isEmpty()) {
-                    java.util.concurrent.ExecutorService filePool =
-                            java.util.concurrent.Executors.newFixedThreadPool(Math.min(4, dlTasks.size()), r -> {
-                                Thread t = new Thread(r, "sl-dl-file");
-                                t.setDaemon(true);
-                                return t;
-                            });
-                    try {
-                        for (java.util.concurrent.Future<Void> f : filePool.invokeAll(dlTasks)) {
-                            f.get();
-                        }
-                    } finally {
-                        filePool.shutdownNow();
-                    }
-                }
-                IOException err = dlError.get();
-                dialog.finishFile(err == null);
-                if (err != null) {
-                    throw new IOException("整合包文件下载失败（已成功 "
-                            + (total - failedFiles.get()) + "/" + total + "）: " + err.getMessage(), err);
+                boolean fileOk = true;
+                try {
+                    ContentDownloader.downloadModpackFiles(files, packDir,
+                            dialog::progress, dialog.cancelFlag(), dialog::message);
+                } catch (IOException ioe) {
+                    fileOk = false;
+                    throw ioe;
+                } finally {
+                    dialog.finishFile(fileOk);
                 }
                 dialog.progress(100);
-                dialog.logLine("全部 " + total + " 个文件就绪", true);
+                dialog.logLine("全部 " + files.size() + " 个文件就绪", true);
             }
 
             dialog.finish(true, "整合包已安装到 versions/" + packId, null);
@@ -3286,8 +3366,7 @@ public final class DownloadCenterPage {
         return null;
     }
 
-    // ==================== 下载工具 ====================
-
+    // 下载工具 //
     /**
      * 在无法逐步中断的流程（如 {@link InstallEngine} 的分阶段安装）的进度回调里调用，
      * 用户取消时抛出让整条调用链自然退出。

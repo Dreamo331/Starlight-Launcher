@@ -38,18 +38,41 @@ public final class PageKit {
     private PageKit() {
     }
 
-    /** 设置页导航项：侧边栏隐藏时用于下拉导航（顺序与 buildSidebar 一致） */
+    // 导航数据源（新 IA · 6 组 16 项） //
+
+    /** 分组标题数组：与 {@link #SETTINGS_NAV_ITEMS} 的顺序一一对应（重构 §5.1） */
+    public static final String[] SETTINGS_NAV_SECTIONS = {
+            "通用", "游戏", "个性化", "网络", "联机", "其他"
+    };
+
+    /** 每个分组包含的导航项数（用于把扁平数组切回分组渲染；总和必须等于 SETTINGS_NAV_ITEMS.length = 16） */
+    public static final int[] SETTINGS_NAV_SECTION_SIZES = {2, 5, 3, 2, 1, 3};
+
+    /**
+     * 设置页导航项（新 IA 单一数据源，重构 §7 导航数据源约定）：
+     * 侧边栏（LauncherView.buildSidebar）与顶部下拉导航都从这里渲染，禁止各写一份。
+     *
+     * <p>已移除的旧 id（sidebarLicense / sidebarMod / sidebarLanguage / sidebarColorBlind）
+     * 不在清单中——深链重定向见 {@code NavRouter.resolve}，内部页间跳转也必须走
+     * {@code LauncherContext.switchToSettings}（其内部同样过 NavRouter）。
+     */
     public static final String[][] SETTINGS_NAV_ITEMS = {
-            {"sidebarAccount", "Account"}, {"sidebarAbout", "关于"}, {"sidebarLicense", "版权"},
-            {"sidebarGameAccount", "游戏账户档案"}, {"sidebarMod", "模组"}, {"sidebarJvm", "Java虚拟机与内存"},
-            {"sidebarGameDir", "游戏目录"}, {"sidebarVersionSettings", "版本独立设置"}, {"sidebarAdvanced", "高级设置"},
-            {"sidebarTheme", "主题与背景"}, {"sidebarMainUi", "主界面"},
-            {"sidebarLanguage", "语言"}, {"sidebarAccessibility", "辅助功能"},
-            {"sidebarColorBlind", "色盲辅助"},
-            {"sidebarDownload", "下载"}, {"sidebarProxy", "代理"},
+            {"sidebarAccount", "账户"},
+            {"sidebarAbout", "关于"},
+            {"sidebarGameAccount", "游戏账户档案"},
+            {"sidebarJvm", "Java 与内存"},
+            {"sidebarGameDir", "游戏目录"},
+            {"sidebarVersionSettings", "版本独立设置"},
+            {"sidebarAdvanced", "高级设置"},
+            {"sidebarTheme", "主题与背景"},
+            {"sidebarMainUi", "主界面"},
+            {"sidebarAccessibility", "辅助功能"},
+            {"sidebarDownload", "下载"},
+            {"sidebarProxy", "代理"},
             {"sidebarMultiplayer", "联机设置"},
             {"sidebarFeedback", "服务与反馈"},
-            {"sidebarSponsor", "赞助我们"}, {"sidebarDev", "开发者选项"}
+            {"sidebarSponsor", "赞助我们"},
+            {"sidebarDev", "开发者选项"}
     };
 
     public static VBox settingsPage(LauncherContext ctx, String title) {
@@ -76,15 +99,16 @@ public final class PageKit {
         titleLabel.getStyleClass().add("content-title");
         header.getChildren().add(titleLabel);
         root.getChildren().add(header);
-        // 侧边栏隐藏时提供下拉导航，避免设置页内无法切换页面
+        // 侧边栏隐藏时提供下拉导航，避免设置页内无法切换页面。
+        // 数据源与侧边栏同一份（SETTINGS_NAV_ITEMS），分组顺序命名天然一致（重构 §5.3）
         if ("false".equalsIgnoreCase(ctx.config().getOrDefault("ShowSidebar", "true"))) {
             ComboBox<String> nav = new ComboBox<>();
             nav.getStyleClass().add("select-field");
             nav.setMaxWidth(240);
             for (String[] item : SETTINGS_NAV_ITEMS) nav.getItems().add(item[1]);
-            for (int i = 0; i < SETTINGS_NAV_ITEMS.length; i++) {
-                if (SETTINGS_NAV_ITEMS[i][1].equals(title)) {
-                    nav.setValue(SETTINGS_NAV_ITEMS[i][1]);
+            for (String[] item : SETTINGS_NAV_ITEMS) {
+                if (item[1].equals(title)) {
+                    nav.setValue(item[1]);
                     break;
                 }
             }
@@ -165,6 +189,71 @@ public final class PageKit {
             }
             card.getChildren().add(control);
         }
+        return card;
+    }
+
+    // 分区折叠卡片（重构 §4.2 / §7 CollapsibleSection） //
+
+    /**
+     * 分区折叠卡片：标题行点击展开/收起，右侧箭头指示状态；摘要行在收起时替代内容高度。
+     *
+     * <p>复用 settings-card / settings-card-stacked 外观（深浅主题自动跟随），
+     * 折叠状态同一会话内保持（由调用方持有，重建页面时把 open 再传回来即可）。
+     *
+     * @param title      卡片标题
+     * @param summary    收起时显示的一行摘要（空串则只显示标题行）
+     * @param content    展开后的内容（调用后其可见性由本方法管理）
+     * @param open       初始是否展开
+     * @param stateSink  展开/收起回调（把新状态写回调用方的持久化变量；传 null 忽略）
+     */
+    public static VBox collapsibleSection(String title, String summary, Node content,
+                                          boolean open, java.util.function.Consumer<Boolean> stateSink) {
+        VBox card = new VBox(12);
+        card.getStyleClass().addAll("settings-card", "settings-card-stacked");
+
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("settings-card-title");
+        Label chevron = new Label(open ? "▴" : "▾");
+        chevron.getStyleClass().add("settings-card-desc");
+        chevron.setMinWidth(Region.USE_PREF_SIZE);
+
+        HBox header = new HBox(10, titleLabel, chevron);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setCursor(javafx.scene.Cursor.HAND);
+
+        Label summaryLabel;
+        if (summary != null && !summary.isEmpty()) {
+            summaryLabel = new Label(summary);
+            summaryLabel.getStyleClass().add("settings-card-desc");
+            summaryLabel.setWrapText(true);
+            summaryLabel.setVisible(!open);
+            summaryLabel.setManaged(!open);
+        } else {
+            summaryLabel = null;
+        }
+
+        if (content instanceof Region region) {
+            region.setMaxWidth(Double.MAX_VALUE);
+            region.setMinWidth(0);
+        }
+        content.setVisible(open);
+        content.setManaged(open);
+
+        header.setOnMouseClicked(e -> {
+            boolean nowOpen = !content.isVisible();
+            content.setVisible(nowOpen);
+            content.setManaged(nowOpen);
+            chevron.setText(nowOpen ? "▴" : "▾");
+            if (summaryLabel != null) {
+                summaryLabel.setVisible(!nowOpen);
+                summaryLabel.setManaged(!nowOpen);
+            }
+            if (stateSink != null) stateSink.accept(nowOpen);
+        });
+
+        card.getChildren().add(header);
+        if (summaryLabel != null) card.getChildren().add(summaryLabel);
+        card.getChildren().add(content);
         return card;
     }
 
@@ -295,7 +384,9 @@ public final class PageKit {
 
     /** 沿滚轮目标向上找（以 sp 为边界）：途经自带滚动的控件时返回 true（滚轮留给它原生处理）。
      * 内层 ScrollPane 只有真正可滚（内容高于视口）才算自带滚动，短内容嵌套面板保持对外层透明；
-     * ListView/TableView/TreeView/TextArea 无法低成本判断可滚性，一律交原生处理（与挂接前行为一致）。 */
+     * ListView/TableView/TreeView/TextArea 无法低成本判断可滚性，一律交原生处理（与挂接前行为一致）。
+     * WebView（模组详情页的描述正文）同理：它内部有独立的滚动文档，滚轮必须交给它，
+     * 否则光标停在描述区滚动时会被外层页面滚走，描述区自己纹丝不动。 */
     private static boolean insideSelfScrollingControl(Object target, ScrollPane sp) {
         if (!(target instanceof Node n)) return false;
         Node cur = n;
@@ -304,6 +395,7 @@ public final class PageKit {
                     || cur instanceof javafx.scene.control.TableView<?>
                     || cur instanceof javafx.scene.control.TreeView<?>
                     || cur instanceof javafx.scene.control.TextArea
+                    || cur instanceof javafx.scene.web.WebView
                     || cur instanceof javafx.scene.control.ScrollBar) {
                 return true;
             }
@@ -423,6 +515,98 @@ public final class PageKit {
     }
 
 
+    // 多行输入：右下角三角把手拖拽调节高度 //
+
+    /** 可拖拽多行输入区的最小高度（约 2 行） */
+    public static final double RESIZABLE_AREA_MIN_H = 48;
+
+    /** 可拖拽多行输入区的最大高度（约 34 行） */
+    public static final double RESIZABLE_AREA_MAX_H = 560;
+
+    /** 右下角「拖拽调高」三角把手的样式类（三角形形状写在 style.css 的 -fx-shape 里） */
+    public static final String RESIZE_HANDLE_STYLE_CLASS = "textarea-resize-handle";
+
+    /** 三角把手边长（px） */
+    private static final double RESIZE_HANDLE_SIZE = 14;
+
+    /** 三角把手离输入框边框的内缩（px）：贴死边角会压住圆角边框 */
+    private static final double RESIZE_HANDLE_INSET = 3;
+
+    /**
+     * 给多行输入框（TextArea）右下角加一个三角把手，按住上下拖动即可自由调节高度
+     * （交互对齐 HTML {@code <textarea>} 右下角的 resizer）。
+     *
+     * <p>实现是「输入框 + 叠在右下角的三角 Region」的 StackPane：TextArea 的高度原本由
+     * {@code prefRowCount} 定死，这里按鼠标竖直位移改它的 prefHeight（夹在
+     * {@link #RESIZABLE_AREA_MIN_H} / {@link #RESIZABLE_AREA_MAX_H} 之间），松开时以新高度回调，
+     * 交给调用方持久化；双击三角把手复位到默认高度（回调传 0 表示「跟随 prefRowCount 的默认高度」）。
+     *
+     * <p>页面滚动只由滚轮/键盘驱动、不注册鼠标拖拽 filter，所以这里的 MOUSE_DRAGGED
+     * 不会和页面滚动打架（历史上页面有「按住拖动滚动」，会把这类把手的手势抢走）。
+     *
+     * @param area            多行输入框（宽度与文本仍由调用方负责）
+     * @param savedHeight     上次保存的高度（px）；≤0 表示不覆盖 prefRowCount 算出的默认高度
+     * @param onHeightChanged 高度变化回调（仅在真正拖动/双击复位后触发，可能传 0；传 null 忽略）
+     * @return 输入框 + 三角把手的叠层容器（放进卡片时替换原来的 TextArea 即可）
+     */
+    public static StackPane resizableTextArea(javafx.scene.control.TextArea area, double savedHeight,
+                                              java.util.function.DoubleConsumer onHeightChanged) {
+        final double minH = RESIZABLE_AREA_MIN_H;
+        final double maxH = Math.max(minH, RESIZABLE_AREA_MAX_H);
+        // 复位高度：有保存值就用保存值，否则交回 USE_COMPUTED_SIZE 让 prefRowCount 重新生效
+        final double resetH = savedHeight > 0 ? clamp(savedHeight, minH, maxH) : Region.USE_COMPUTED_SIZE;
+        if (savedHeight > 0) area.setPrefHeight(resetH);
+        // 高度改由把手接管：允许压缩到 minH、拉伸到 maxH（宽度约束仍留在调用方）
+        area.setMinHeight(minH);
+        area.setMaxHeight(maxH);
+
+        Region handle = new Region();
+        handle.getStyleClass().add(RESIZE_HANDLE_STYLE_CLASS);
+        handle.setCursor(javafx.scene.Cursor.SE_RESIZE);
+        handle.setMinSize(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
+        handle.setPrefSize(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
+        handle.setMaxSize(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
+        javafx.scene.control.Tooltip.install(handle,
+                new javafx.scene.control.Tooltip("上下拖动调节高度，双击恢复默认"));
+
+        StackPane wrap = new StackPane(area, handle);
+        StackPane.setAlignment(handle, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(handle, new Insets(0, RESIZE_HANDLE_INSET, RESIZE_HANDLE_INSET, 0));
+        wrap.setMinWidth(0);
+        wrap.setMaxWidth(Double.MAX_VALUE);
+
+        // 按下记住起始鼠标 Y 与起始高度，拖动期间按位移改 prefHeight；
+        // 指针拖出把手范围也继续生效（拖拽事件仍派发给按下时的节点）
+        final double[] origin = new double[2];
+        final boolean[] dragged = new boolean[1];
+        handle.setOnMousePressed(e -> {
+            dragged[0] = false;
+            origin[0] = e.getSceneY();
+            origin[1] = area.getHeight() > 0 ? area.getHeight() : area.prefHeight(-1);
+            e.consume();
+        });
+        handle.setOnMouseDragged(e -> {
+            dragged[0] = true;
+            area.setPrefHeight(clamp(origin[1] + (e.getSceneY() - origin[0]), minH, maxH));
+            e.consume();
+        });
+        handle.setOnMouseReleased(e -> {
+            // 只在真正拖动后回调：单纯点一下把手不该写配置
+            if (dragged[0] && onHeightChanged != null) onHeightChanged.accept(area.getPrefHeight());
+            dragged[0] = false;
+            e.consume();
+        });
+        handle.setOnMouseClicked(e -> {
+            if (e.getClickCount() != 2) return;
+            area.setPrefHeight(resetH);
+            if (onHeightChanged != null) onHeightChanged.accept(resetH > 0 ? resetH : 0);
+            e.consume();
+        });
+
+        return wrap;
+    }
+
+
     /**
 
     /** 设置页右侧控件列宽度：固定后各卡片纵向对齐，避免控件被压缩导致按钮变窄、文本被截断 */
@@ -437,7 +621,7 @@ public final class PageKit {
     }
 
 
-// ===== 工具条卡片 =====
+// 工具条卡片 //
 
 /**
  * 工具条卡片：把「搜索框 + 筛选控件」这样的整行控件装进同一张卡片里，避免它们直接铺在页面背景上。
@@ -457,7 +641,7 @@ public static VBox toolbarCard(Node... rows) {
 }
 
 
-// ===== 长列表：搜索框 + 每批 20 条 + 底部「向下加载更多」 =====
+// 长列表：搜索框 + 每批 20 条 + 底部「向下加载更多」 //
 
 /** 列表每批渲染条数：一次只铺这么多卡片，其余由底部按钮按需追加，避免一次渲染成百上千个节点卡窗口 */
 public static final int LIST_PAGE_SIZE = 20;
@@ -545,11 +729,10 @@ private static void removeMoreRow(Pane stack) {
 }
 
 
-// ===== 工具方法 =====
+// 工具方法 //
 
 public static int parseIntSafe(String s, int defaultVal) {
     try { return Integer.parseInt(s.trim()); }
     catch (Exception e) { return defaultVal; }
 }
 }
-

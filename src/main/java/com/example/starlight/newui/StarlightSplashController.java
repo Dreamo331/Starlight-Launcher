@@ -51,9 +51,7 @@ import java.util.ResourceBundle;
  */
 public class StarlightSplashController implements Initializable {
 
-    /* =========================================================
-     *  FXML 注入
-     * ========================================================= */
+    // FXML 注入 //
 
     @FXML private StackPane root;
     @FXML private Canvas bgCanvas;
@@ -66,9 +64,7 @@ public class StarlightSplashController implements Initializable {
     @FXML private Text footerText;
     @FXML private Region noiseLayer;
 
-    /* =========================================================
-     *  常量
-     * ========================================================= */
+    // 常量 //
 
     private static final double W = 520;
     private static final double H = 325;
@@ -98,9 +94,7 @@ public class StarlightSplashController implements Initializable {
         {255, 232, 196},
     };
 
-    /* =========================================================
-     *  运行时状态
-     * ========================================================= */
+    // 运行时状态 //
 
     private GraphicsContext bgGc;
     private GraphicsContext glowGc;
@@ -125,9 +119,7 @@ public class StarlightSplashController implements Initializable {
 
     private Runnable onFinished;
 
-    /* =========================================================
-     *  生命周期
-     * ========================================================= */
+    // 生命周期 //
 
     public void setOnFinished(Runnable onFinished) {
         this.onFinished = onFinished;
@@ -196,10 +188,7 @@ public class StarlightSplashController implements Initializable {
         }
     }
 
-    /* =========================================================
-     *  数学工具
-     * ========================================================= */
-
+    // 数学工具 //
     private static double clamp01(double x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 
     private static double seg(double t, double a, double b) {
@@ -223,14 +212,12 @@ public class StarlightSplashController implements Initializable {
         return 1 + amp * multiSine(TAU * t / period + phase);
     }
 
-    /* =========================================================
-     *  数据初始化
-     * ========================================================= */
+    // 数据初始化 //
 
     private void initData() {
         Random rnd = new Random(20260921);
 
-        /* ---------- 星尘 ---------- */
+        // 星尘 //
         starX        = new double[STAR_COUNT];
         starY        = new double[STAR_COUNT];
         starR        = new double[STAR_COUNT];
@@ -259,7 +246,7 @@ public class StarlightSplashController implements Initializable {
             starRgb[i]     = TINTS[rnd.nextInt(TINTS.length)];
         }
 
-        /* ---------- 环绕粒子 ---------- */
+        // 环绕粒子 //
         orbRx          = new double[ORB_COUNT];
         orbRy          = new double[ORB_COUNT];
         orbAngSpd      = new double[ORB_COUNT];
@@ -308,9 +295,7 @@ public class StarlightSplashController implements Initializable {
             new ImagePattern(img, 0, 0, size, size, false), null, null)));
     }
 
-    /* =========================================================
-     *  入场 / 退场
-     * ========================================================= */
+    // 入场 / 退场 //
 
     private void playEnter() {
         Timeline tl = new Timeline(
@@ -348,9 +333,7 @@ public class StarlightSplashController implements Initializable {
         tl.play();
     }
 
-    /* =========================================================
-     *  主渲染
-     * ========================================================= */
+    // 主渲染 //
 
     private void render(double t) {
         bgGc.clearRect(0, 0, W, H);
@@ -393,9 +376,7 @@ public class StarlightSplashController implements Initializable {
         return clamp01(p + jitter);
     }
 
-    /* =========================================================
-     *  UI 更新（驱动 FXML 节点）
-     * ========================================================= */
+    // UI 更新（驱动 FXML 节点） //
 
     private void updateUI(double t) {
         // 进度条：真实初始化进度优先（与时间基线取大者），逐帧平滑逼近避免跳变
@@ -437,9 +418,7 @@ public class StarlightSplashController implements Initializable {
         statusText.setText(text);
     }
 
-    /* =========================================================
-     *  绘制：星尘
-     * ========================================================= */
+    // 绘制：星尘 //
 
     private void drawStars(GraphicsContext gc, double t) {
         double appear = easeOutCubic(seg(t, 0, 1.0));
@@ -464,9 +443,7 @@ public class StarlightSplashController implements Initializable {
         gc.setGlobalAlpha(1);
     }
 
-    /* =========================================================
-     *  绘制：星云
-     * ========================================================= */
+    // 绘制：星云 //
 
     private void drawNebula(GraphicsContext gc, double t, double cx, double cy) {
         double inA = easeOutCubic(seg(t, 0.10, 1.40));
@@ -496,9 +473,7 @@ public class StarlightSplashController implements Initializable {
         gc.fillRect(0, 0, W, H);
     }
 
-    /* =========================================================
-     *  绘制：启动波纹
-     * ========================================================= */
+    // 绘制：启动波纹 //
 
     private void drawRipples(GraphicsContext gc, double t, double cx, double cy) {
         double t0 = 0.42;
@@ -520,9 +495,7 @@ public class StarlightSplashController implements Initializable {
         }
     }
 
-    /* =========================================================
-     *  绘制：环绕粒子
-     * ========================================================= */
+    // 绘制：环绕粒子 //
 
     private void drawOrbiters(GraphicsContext gc, double t, double cx, double cy) {
         double inA = easeOutCubic(seg(t, 0.62, 1.60));
@@ -553,9 +526,7 @@ public class StarlightSplashController implements Initializable {
         gc.setGlobalAlpha(1);
     }
 
-    /* =========================================================
-     *  绘制：单条渐隐光束
-     * ========================================================= */
+    // 绘制：单条渐隐光束 //
 
     private void drawSpike(GraphicsContext gc, double cx, double cy,
                            double len, double alpha, double angle) {
@@ -573,9 +544,7 @@ public class StarlightSplashController implements Initializable {
         gc.strokeLine(cx, cy, x1, y1);
     }
 
-    /* =========================================================
-     *  绘制：主光束
-     * ========================================================= */
+    // 绘制：主光束 //
 
     private void drawBeam(GraphicsContext gc, double t, double cx, double cy) {
         double inA = easeOutCubic(seg(t, 0.45, 1.40));
@@ -594,9 +563,7 @@ public class StarlightSplashController implements Initializable {
         }
     }
 
-    /* =========================================================
-     *  绘制：透视光环
-     * ========================================================= */
+    // 绘制：透视光环 //
 
     private void drawRing(GraphicsContext gc, double cx, double cy, double r,
                           double alpha, double rot, double fade) {
@@ -612,9 +579,7 @@ public class StarlightSplashController implements Initializable {
         gc.restore();
     }
 
-    /* =========================================================
-     *  绘制：中央星徽（星形线）
-     * ========================================================= */
+    // 绘制：中央星徽（星形线） //
 
     private void drawCrest(GraphicsContext gc, double t, double cx, double cy) {
         double inP = seg(t, 0.26, 1.05);

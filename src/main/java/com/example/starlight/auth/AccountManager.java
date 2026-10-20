@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.example.starlight.auth.offline.Skin;
+import com.example.starlight.config.AppDirs;
 import com.example.starlight.loginmicrosoft.MinecraftAuthLauncherDeviceCode;
 import com.example.starlight.util.CredentialStore;
 import com.google.gson.Gson;
@@ -26,13 +27,11 @@ import com.google.gson.JsonSyntaxException;
  */
 public class AccountManager {
 
-    // 常量定义
+    // 常量定义（路径统一由 AppDirs 解析：默认 ~/.starlight，--portable 回落工作目录）
 
-    private static final String CONFIG_DIR = System.getProperty("user.home")
-            + "/.starlight-launcher";
-    private static final String ACCOUNTS_FILE = CONFIG_DIR + "/accounts.json";
-    private static final String OLD_LOGIN_FILE = CONFIG_DIR + "/login.json";
-    private static final String OLD_EXTERNAL_FILE = CONFIG_DIR + "/external_login.json";
+    private static final String ACCOUNTS_FILE = AppDirs.accountsJson().toString();
+    private static final String OLD_LOGIN_FILE = AppDirs.loginJson().toString();
+    private static final String OLD_EXTERNAL_FILE = AppDirs.externalLoginJson().toString();
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -147,7 +146,7 @@ public class AccountManager {
      //保存账号列表到磁盘
     public static synchronized void saveAccounts(List<Account> accounts) {
         try {
-            Files.createDirectories(Paths.get(CONFIG_DIR));
+            Files.createDirectories(AppDirs.root());
             String json = serializeAccounts(accounts);
             Files.writeString(Paths.get(ACCOUNTS_FILE), json, StandardCharsets.UTF_8);
         } catch (IOException e) {
@@ -180,6 +179,8 @@ public class AccountManager {
                 Account updated = new Account(old.id, old.name, old.type,
                         old.accessToken, old.refreshToken, old.authServer,
                         System.currentTimeMillis(), old.tokenExpiresAt);
+                // 保留皮肤配置（new Account 构造器会把 skinJson 置空，直接覆盖会丢皮肤）
+                updated.setSkinJson(old.getSkinJson());
                 accounts.set(i, updated);
                 saveAccounts(accounts);
                 // 同步写入 INI 配置
@@ -455,14 +456,19 @@ public class AccountManager {
     }
 
     /** 更新指定账号的皮肤配置 */
-    public static void updateAccountSkin(String accountId, String skinJson) {
+    public static boolean updateAccountSkin(String accountId, String skinJson) {
         List<Account> accounts = loadAccounts();
         for (Account a : accounts) {
             if (a.id.equals(accountId)) {
                 a.setSkinJson(skinJson);
                 saveAccounts(accounts);
-                return;
+                // 读回验证，防止静默写盘失败
+                boolean ok = skinJson == null || skinJson.equals(a.getSkinJson());
+                if (!ok) System.err.println("[Account] Skin save verification failed for " + accountId);
+                return ok;
             }
         }
+        System.err.println("[Account] Skin save skipped: account not found " + accountId);
+        return false;
     }
 }

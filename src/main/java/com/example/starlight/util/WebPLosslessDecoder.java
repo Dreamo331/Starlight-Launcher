@@ -108,7 +108,7 @@ public final class WebPLosslessDecoder {
                 | ((b[off + 2] & 0xFF) << 16) | ((b[off + 3] & 0xFF) << 24);
     }
 
-    // ==================== 位读取器（LSB first） ====================
+    // 位读取器（LSB first） //
 
     private static final class BitReader {
         private final byte[] data;
@@ -142,7 +142,7 @@ public final class WebPLosslessDecoder {
         }
     }
 
-    // ==================== Huffman ====================
+    // Huffman //
 
     /** 规范 Huffman 解码树：counts/symbols 按（码长，符号）排序，用 zlib 式逐位下降解码 */
     private static final class HuffmanTree {
@@ -243,7 +243,7 @@ public final class WebPLosslessDecoder {
         }
     }
 
-    // ==================== 解码器主体 ====================
+    // 解码器主体 //
 
     private static final class Decoder {
         private final BitReader br;
@@ -320,7 +320,7 @@ public final class WebPLosslessDecoder {
             return pixels;
         }
 
-        // ---------- 变换读取 ----------
+        // 变换读取 //
 
         private int[] metaHuffmanImage;
         private int metaHuffmanBits;
@@ -362,7 +362,7 @@ public final class WebPLosslessDecoder {
             return (size + (1 << bits) - 1) >> bits;
         }
 
-        // ---------- Huffman 组 ----------
+        // Huffman 组 //
 
         private static final class HuffmanGroup {
             HuffmanTree green, red, blue, alpha, dist;
@@ -473,7 +473,7 @@ public final class WebPLosslessDecoder {
             return HuffmanTree.build(codeLengths, alphabetSize);
         }
 
-        // ---------- LZ77 图像数据 ----------
+        // LZ77 图像数据 //
 
         private int[] decodeImageData(HuffmanGroup[] groups, int width, int height, int colorCacheBits,
                                       int[] huffmanImage, int huffmanBits, int huffmanXSize) {
@@ -568,7 +568,7 @@ public final class WebPLosslessDecoder {
             return Math.max(dist, 1);
         }
 
-        // ---------- 逆变换 ----------
+        // 逆变换 //
 
         private static int[] inverseSubtractGreen(int[] px) {
             for (int i = 0; i < px.length; i++) {
@@ -679,7 +679,7 @@ public final class WebPLosslessDecoder {
             return out;
         }
 
-        // ---------- 预测子（与 spec / libwebp 一致） ----------
+        // 预测子（与 spec / libwebp 一致） //
 
         private static int addPixels(int a, int b) {
             int alpha = (((a >>> 24) + (b >>> 24)) & 0xFF) << 24;

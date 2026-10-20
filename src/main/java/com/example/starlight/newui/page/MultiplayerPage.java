@@ -83,7 +83,7 @@ public final class MultiplayerPage {
         this.ctx = ctx;
     }
 
-    // ===== 联机页面 =====
+    // 联机页面 //
 
     public Node build() {
         HBox layout = new HBox(20);
@@ -143,7 +143,7 @@ public final class MultiplayerPage {
         return layout;
     }
 
-    // ===== 陶瓦联机 =====
+    // 陶瓦联机 //
 
     private Node buildTerracottaPanel() {
         VBox root = new VBox(16);
@@ -281,7 +281,7 @@ public final class MultiplayerPage {
         }
         root.getChildren().add(helpCard);
 
-        // ===== Terracotta 状态监听（单次注册 + 支持所有状态）=====
+        // Terracotta 状态监听（单次注册 + 支持所有状态） //
         if (tcStateListener == null) {
             tcStateListener = (obs, old, state) -> Platform.runLater(() -> {
                 if (state instanceof TerracottaState.Bootstrap) {
@@ -404,7 +404,7 @@ public final class MultiplayerPage {
         setTcStatus("active", "等待操作", "选择「开房」或「加入游戏」");
     }
 
-    // ===== FRP 联机 =====
+    // FRP 联机 //
 
     /**
      * FRP 联机暂不可用占位面板：入口保留展示，点击后提示功能未开放（开放时改回 buildFrpPanel）
@@ -552,7 +552,7 @@ public final class MultiplayerPage {
         return root;
     }
 
-    // ===== SLAN 联机 =====
+    // SLAN 联机 //
 
     private Node buildEasyTierPanel() {
         // 初始化管理器（懒加载），用于模块可用性检查与下载
@@ -574,7 +574,7 @@ public final class MultiplayerPage {
         VBox card = new VBox(12);
         card.getStyleClass().add("settings-card");
 
-        // ===== 状态区域 =====
+        // 状态区域 //
         HBox statusArea = new HBox(12);
         statusArea.setAlignment(Pos.CENTER_LEFT);
         statusArea.setStyle("-fx-background-color: rgba(0,0,0,0.03); -fx-background-radius: 10; -fx-padding: 12 16;");
@@ -589,7 +589,7 @@ public final class MultiplayerPage {
         statusArea.getChildren().addAll(etDot, etStatus, etInfo);
         card.getChildren().add(statusArea);
 
-        // ===== 安装模块区域（模块缺失时显示） =====
+        // 安装模块区域（模块缺失时显示） //
         VBox slanInstallArea = new VBox(10);
         slanInstallArea.setStyle("-fx-background-color: rgba(0,0,0,0.02); -fx-background-radius: 10; -fx-padding: 16;");
         Label slanInstallTitle = new Label("安装联机模块");
@@ -611,10 +611,10 @@ public final class MultiplayerPage {
         slanInstallArea.getChildren().addAll(slanInstallTitle, slanInstallDesc, slanDownloadBtn, slanDownloadRow);
         card.getChildren().add(slanInstallArea);
 
-        // ===== 联机操作区域（模式/密码/按钮，模块缺失时隐藏） =====
+        // 联机操作区域（模式/密码/按钮，模块缺失时隐藏） //
         VBox slanActionArea = new VBox(12);
 
-        // ===== 模式选择（建房/加房） =====
+        // 模式选择（建房/加房） //
         HBox modeCard = PageKit.settingsCard("联机模式", "选择创建房间或加入他人房间", null);
         ToggleGroup modeGroup = new ToggleGroup();
         RadioButton hostMode = new RadioButton("创建房间（我当房主）");
@@ -628,7 +628,7 @@ public final class MultiplayerPage {
         modeCard.getChildren().add(modeBox);
         slanActionArea.getChildren().add(modeCard);
 
-        // ===== 邀请码输入区（仅加入模式显示，位于密码输入区上方） =====
+        // 邀请码输入区（仅加入模式显示，位于密码输入区上方） //
         HBox inviteCard = PageKit.settingsCard("邀请码", "输入好友分享的邀请码", null);
         TextField inviteField = new TextField();
         inviteField.setPromptText("请输入好友分享的邀请码");
@@ -636,7 +636,7 @@ public final class MultiplayerPage {
         inviteCard.getChildren().add(inviteField);
         slanActionArea.getChildren().add(inviteCard);
 
-        // ===== 联机密码（创建房间用，留空自动生成），从配置加载上次使用的密码 =====
+        // 联机密码（创建房间用，留空自动生成），从配置加载上次使用的密码 //
         HBox hostPwdCard = PageKit.settingsCard("联机密码", "用于防止未授权访问，留空则自动生成随机密码", null);
         TextField hostPwdField = new TextField(ctx.config().getOrDefault("SlanPassword", ""));
         hostPwdField.setPromptText("留空则自动生成随机密码");
@@ -653,7 +653,7 @@ public final class MultiplayerPage {
         hostPwdCard.getChildren().add(hostPwdBox);
         slanActionArea.getChildren().add(hostPwdCard);
 
-        // ===== 联机密码（加入房间用，必填） =====
+        // 联机密码（加入房间用，必填） //
         HBox joinPwdCard = PageKit.settingsCard("联机密码", "输入房主分享的联机密码", null);
         TextField joinPwdField = new TextField();
         joinPwdField.setPromptText("请输入房主分享的联机密码");
@@ -681,7 +681,7 @@ public final class MultiplayerPage {
         joinPwdCard.setVisible(false); // 默认建房模式，隐藏加入密码输入区
         joinPwdCard.setManaged(false);
 
-        // ===== 操作按钮 =====
+        // 操作按钮 //
         HBox btnRow = new HBox(10);
         btnRow.setAlignment(Pos.CENTER);
         btnRow.setStyle("-fx-padding: 10 0 0 0;");
@@ -712,7 +712,7 @@ public final class MultiplayerPage {
         card.getChildren().add(slanActionArea);
         root.getChildren().add(card);
 
-        // ===== 房间信息卡片（创建/加入成功后显示） =====
+        // 房间信息卡片（创建/加入成功后显示） //
         VBox roomInfoCard = new VBox(8);
         roomInfoCard.setStyle("-fx-background-color: rgba(34,197,94,0.08); -fx-border-color: rgba(34,197,94,0.4); -fx-border-radius: 12; -fx-background-radius: 12; -fx-padding: 12 14;");
         roomInfoCard.setVisible(false);
@@ -734,11 +734,11 @@ public final class MultiplayerPage {
         roomInfoCard.getChildren().addAll(infoTitle, roomNameRow, mcPortRow, inviteRow, pwdRow);
         root.getChildren().add(roomInfoCard);
 
-        // ===== 日志区域（SLAN 日志加高，便于查看详细日志） =====
+        // 日志区域（SLAN 日志加高，便于查看详细日志） //
         VBox logArea = buildLogArea("et", "SLAN 日志", 260);
         root.getChildren().add(logArea);
 
-        // ===== 单按钮模式：创建/加入成功后按钮原地变为「断开连接」，始终单个居中 =====
+        // 单按钮模式：创建/加入成功后按钮原地变为「断开连接」，始终单个居中 //
 
         // 恢复按钮为初始状态（创建房间 / 加入房间）
         Runnable resetButtons = () -> {
@@ -783,7 +783,7 @@ public final class MultiplayerPage {
             resetButtons.run();
         };
 
-        // ===== 模块可用性检查：缺失时隐藏操作区，显示安装区 =====
+        // 模块可用性检查：缺失时隐藏操作区，显示安装区 //
         boolean moduleAvailable = slanManager.isAvailable();
         slanInstallArea.setVisible(!moduleAvailable);
         slanInstallArea.setManaged(!moduleAvailable);
@@ -797,7 +797,7 @@ public final class MultiplayerPage {
             etInfo.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
         }
 
-        // ===== 下载安装模块（点击后异步下载，完成后切换为联机操作区） =====
+        // 下载安装模块（点击后异步下载，完成后切换为联机操作区） //
         slanDownloadBtn.setOnAction(e -> {
             slanDownloadBtn.setDisable(true);
             slanDownloadBtn.setText("下载中...");
@@ -849,7 +849,7 @@ public final class MultiplayerPage {
             }));
         });
 
-        // ===== 按钮事件处理 =====
+        // 按钮事件处理 //
 
         // 初始化管理器并注册进程退出监听（进程意外退出时自动清理 UI）
         if (slanManager == null) {
@@ -1080,7 +1080,7 @@ public final class MultiplayerPage {
         return root;
     }
 
-    // ===== 通用日志组件 =====
+    // 通用日志组件 //
 
     private VBox buildLogArea(String prefix, String logTitle) {
         return buildLogArea(prefix, logTitle, 140);
@@ -1154,7 +1154,7 @@ public final class MultiplayerPage {
         });
     }
 
-    // ===== SLAN 联机辅助方法 =====
+    // SLAN 联机辅助方法 //
 
     /**
      * 构建房间信息行（图标 + 标签 + 值 + 复制按钮）

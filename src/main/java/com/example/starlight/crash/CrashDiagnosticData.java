@@ -67,12 +67,12 @@ public class CrashDiagnosticData {
     /** 系统总物理内存 */
     private String totalMemory;
 
-    // ====== Constructor ======
+    // Constructor //
 
     public CrashDiagnosticData() {
     }
 
-    // ====== 构建辅助 ======
+    // 构建辅助 //
 
     /**
      * 构建用于显示的完整错误摘要文本
@@ -114,7 +114,7 @@ public class CrashDiagnosticData {
         return sb.toString();
     }
 
-    // ====== Getters & Setters ======
+    // Getters & Setters //
 
     public ErrorCode getErrorCode() { return errorCode; }
     public void setErrorCode(ErrorCode errorCode) { this.errorCode = errorCode; }

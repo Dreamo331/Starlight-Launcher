@@ -1,5 +1,6 @@
 package com.example.starlight.version;
 
+import com.example.starlight.config.AppDirs;
 import com.google.gson.Gson;
 
 import java.io.IOException;
@@ -16,8 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CacheManager {
 
-    private static final Path CACHE_DIR = Path.of(System.getProperty("user.home"),
-            ".starlight", "cache");
+    private static final Path CACHE_DIR = AppDirs.cacheDir();
     private static final Duration TTL = Duration.ofHours(24);
     private static final Gson GSON = new Gson();
     private static final ConcurrentHashMap<String, Object> MEM = new ConcurrentHashMap<>();

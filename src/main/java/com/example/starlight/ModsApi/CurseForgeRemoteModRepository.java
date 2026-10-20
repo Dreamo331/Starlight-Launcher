@@ -1,6 +1,6 @@
 package com.example.starlight.ModsApi;
 
-import com.example.starlight.download.DownloadProvider;
+import com.example.starlight.download.source.DownloadProvider;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -87,9 +87,7 @@ public class CurseForgeRemoteModRepository implements RemoteModRepository {
         return type;
     }
 
-    // ================================================================
-    //  搜索
-    // ================================================================
+    // 搜索 //
 
     @Override
     public SearchResult search(DownloadProvider dp, String gameVersion, Category category,
@@ -260,9 +258,7 @@ public class CurseForgeRemoteModRepository implements RemoteModRepository {
                 .build();
     }
 
-    // ================================================================
-    //  项目 / 版本 / 文件
-    // ================================================================
+    // 项目 / 版本 / 文件 //
 
     @Override
     public RemoteMod getModById(DownloadProvider dp, String id) throws IOException {
@@ -289,7 +285,10 @@ public class CurseForgeRemoteModRepository implements RemoteModRepository {
     @Override
     public RemoteMod.File getModFile(String modId, String fileId) throws IOException {
         JsonObject file = CurseForgeAPI.getModFile(modId, fileId);
-        return parseFile(file, modId);
+        RemoteMod.File parsed = parseFile(file, modId);
+        // 单文件查询：允许一次直链兜底（列表路径不会走到这里）
+        String url = resolveDownloadUrl(modId, fileId, parsed.getUrl());
+        return url != null ? parsed : new RemoteMod.File(parsed.getHashes(), null, parsed.getFilename());
     }
 
     @Override
@@ -297,9 +296,7 @@ public class CurseForgeRemoteModRepository implements RemoteModRepository {
         return Optional.empty(); // 预留：CurseForge 可通过 fingerprint 精确反查，暂未接入
     }
 
-    // ================================================================
-    //  分类
-    // ================================================================
+    // 分类 //
 
     @Override
     public Stream<Category> getCategories() throws IOException {
@@ -319,9 +316,7 @@ public class CurseForgeRemoteModRepository implements RemoteModRepository {
         return categories.stream();
     }
 
-    // ================================================================
-    //  解析
-    // ================================================================
+    // 解析 //
 
     /** 把 CurseForge 项目对象转换为统一的 {@link RemoteMod}，slug 使用数字项目 ID */
     private RemoteMod parseProject(JsonObject obj) {
@@ -452,7 +447,16 @@ public class CurseForgeRemoteModRepository implements RemoteModRepository {
     /**
      * 解析文件信息。
      * <p>{@code hashes[].algo}：1=Sha1，2=Md5。
-     * <p>{@code downloadUrl} 为空（作者关闭第三方分发）时，尝试 download-url 接口兜底。
+     *
+     * <p><b>这里不再对缺失的 {@code downloadUrl} 逐个补查</b>。列表页一次要解析 50 个文件，
+     * 逐个补查 {@code /files/{id}/download-url} 就是 50 次<b>串行</b>请求：
+     * 实测单次约 650ms，全量约 32 秒。<br>
+     * 而这类「没有 downloadUrl」通常不是响应缺字段，而是作者关闭了第三方分发
+     * （实测 {@code entityculling} / modId 448233 的 50 个文件全部缺失，补查也全部返回 null），
+     * 所以补查基本只是白等。列表/详情页并不需要直链——只有点「安装」才需要，
+     * 且安装入口已对 null 给出「请前往官网下载」的提示。
+     *
+     * <p>直链改为<b>按需</b>获取：见 {@link #resolveDownloadUrl}。
      */
     private RemoteMod.File parseFile(JsonObject file, String modId) {
         Map<String, String> hashes = new HashMap<>();
@@ -469,20 +473,27 @@ public class CurseForgeRemoteModRepository implements RemoteModRepository {
             }
         }
 
-        String url = getString(file, "downloadUrl");
-        if (url == null) {
-            // 部分响应不带 downloadUrl，尝试专用接口（作者禁止分发时同样返回 null）
-            String fileId = getString(file, "id");
-            if (fileId != null) {
-                try {
-                    url = CurseForgeAPI.getDownloadUrl(modId, fileId);
-                } catch (Exception e) {
-                    url = null;
-                }
-            }
-        }
+        return new RemoteMod.File(hashes, getString(file, "downloadUrl"), getString(file, "fileName"));
+    }
 
-        return new RemoteMod.File(hashes, url, getString(file, "fileName"));
+    /**
+     * 单个文件的直链兜底：列表接口没给 {@code downloadUrl} 时，再向
+     * {@code /files/{fileId}/download-url} 问一次。
+     *
+     * <p><b>只允许对单个文件调用</b>（{@link #getModFile}、安装前确认），
+     * 绝不能在解析版本列表的循环里调用 —— 那是 50 次串行请求、约 32 秒。
+     *
+     * @param knownUrl 列表里已经拿到的直链（非空时直接返回，不再发请求）
+     * @return 直链；作者确实关闭了第三方分发时返回 {@code null}
+     */
+    static String resolveDownloadUrl(String modId, String fileId, String knownUrl) {
+        if (knownUrl != null && !knownUrl.isBlank()) return knownUrl;
+        if (fileId == null || fileId.isBlank()) return null;
+        try {
+            return CurseForgeAPI.getDownloadUrl(modId, fileId);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 依赖关系：relationType 1=Embedded 2=Optional 3=Required 4=Tool 5=Incompatible 6=Include */
@@ -508,9 +519,7 @@ public class CurseForgeRemoteModRepository implements RemoteModRepository {
         return deps;
     }
 
-    // ================================================================
-    //  工具
-    // ================================================================
+    // 工具 //
 
     /** 接口排序枚举 → CurseForge sortField */
     private static int toSortField(SortType sortType) {

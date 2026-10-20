@@ -37,21 +37,26 @@ import com.example.starlight.auth.AccountManager;
 import com.example.starlight.auth.AccountManager.Account;
 import com.example.starlight.auth.AuthlibInjectorSupport;
 import com.example.starlight.auth.ExternalLoginAuth;
+import com.example.starlight.auth.offline.LocalYggdrasilServer;
+import com.example.starlight.auth.offline.LocalCapeProxy;
+import com.example.starlight.auth.offline.OfflineSkinManager;
+import com.example.starlight.auth.offline.Skin;
+import com.example.starlight.config.AppDirs;
 import com.example.starlight.config.Endpoints;
 import com.example.starlight.config.GameDirManager;
 import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.crash.CrashReportParser;
-import com.example.starlight.download.AssetDownloader;
+import com.example.starlight.download.task.AssetDownloader;
 import com.example.starlight.download.DownloadSettings;
-import com.example.starlight.download.GameResourceCompleter;
-import com.example.starlight.download.LibraryDownloader;
+import com.example.starlight.download.task.GameResourceCompleter;
+import com.example.starlight.download.task.LibraryDownloader;
 import com.example.starlight.frp.FrpClient;
 import com.example.starlight.gamebat.MinecraftLauncherBuilder;
 import com.example.starlight.service.GameInstanceRegistry;
 import com.example.starlight.service.GameLauncherService;
 import com.example.starlight.service.ParallelLaunchManager;
 import com.example.starlight.service.SilentLoginManager;
-import com.example.starlight.installjava.JavaInstall;
+import com.example.starlight.download.task.JavaInstall;
 import com.example.starlight.lang.GameLanguage;
 import com.example.starlight.lang.GameOptions;
 import com.example.starlight.listjava.FindAllJavaWindows;
@@ -62,26 +67,29 @@ import com.example.starlight.log.sendlogs;
 import com.example.starlight.loginmicrosoft.MinecraftAuthLauncherDeviceCode;
 import com.example.starlight.longcatapi.LongCatChat;
 import com.example.starlight.main.NativesManager;
-import com.example.starlight.multithreadeddownload.MultiThreadDownloader;
+import com.example.starlight.download.DownloadService;
+import com.example.starlight.model.CallbackInterfaces;
 import com.example.starlight.newui.ui.VersionIconKit;
 import com.example.starlight.saves.SaveBackupRestore;
+import com.example.starlight.util.LaunchLog;
 import com.example.starlight.util.LegacyLaunchArgs;
 import com.example.starlight.util.ProxyConfig;
+import com.example.starlight.util.VanillaVersion;
 import com.example.starlight.util.VersionUtils;
-import com.example.starlight.version.LoaderInstallEngine;
-import com.example.starlight.version.VersionManifest;
+import com.example.starlight.download.task.LoaderInstallEngine;
+import com.example.starlight.download.task.VersionManifest;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import com.google.zxing.WriterException;
-import com.startgame.LaunchInfo;
-import com.startgame.launcher.BaseLauncher;
-import com.startgame.launcher.FabricLauncher;
-import com.startgame.launcher.ForgeLegacyLauncher;
-import com.startgame.launcher.ForgeModernLauncher;
-import com.startgame.launcher.LoaderDetector;
-import com.startgame.launcher.VanillaLauncher;
+import com.example.starlight.startmc.LaunchInfo;
+import com.example.starlight.startmc.launcher.BaseLauncher;
+import com.example.starlight.startmc.launcher.FabricLauncher;
+import com.example.starlight.startmc.launcher.ForgeLegacyLauncher;
+import com.example.starlight.startmc.launcher.ForgeModernLauncher;
+import com.example.starlight.startmc.launcher.LoaderDetector;
+import com.example.starlight.startmc.launcher.VanillaLauncher;
 import javafx.event.ActionEvent;
 
 public final class UIGeneralControlClass {
@@ -90,15 +98,15 @@ public final class UIGeneralControlClass {
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(UIGeneralControlClass.class);
 
-    // ================================================================
-    //  0.  常量 & 内部类定义
-    // ================================================================
+    // 0.  常量 & 内部类定义 //
 
-    /** 配置目录名 */
+    /** 配置目录名（仅历史遗留常量；实际路径一律走 {@link AppDirs}） */
+    @Deprecated
     private static final String CONFIG_DIR = "Starlight-Launcher";
-    /** 配置文件名 */
+    /** 配置文件名（仅历史遗留常量；实际路径一律走 {@link AppDirs#starlightIni()}） */
+    @Deprecated
     private static final String CONFIG_FILE = CONFIG_DIR + "/starlight.ini";
-    /** 日志目录 */
+    /** 日志目录（仍留在工作目录，不随用户数据迁移） */
     private static final String LOG_DIR = "logs";
     /** 默认服务器 URL */
     private static final String DEFAULT_SERVER_URL = Endpoints.logUploadUrl();
@@ -143,7 +151,7 @@ public final class UIGeneralControlClass {
         }, "async-pool-shutdown"));
     }
 
-    // ---------- 通用回调接口 ----------
+    // 通用回调接口 //
 
     /** 通用进度回调（0-100） */
     public interface ProgressCallback { void onProgress(int percent, String message); }
@@ -165,7 +173,7 @@ public final class UIGeneralControlClass {
     private static final java.util.concurrent.atomic.AtomicBoolean launchCancelled =
             new java.util.concurrent.atomic.AtomicBoolean(false);
 
-    // ---------- 统一结果包装类 ----------
+    // 统一结果包装类 //
 
     /** 通用操作结果 */
     public static class ActionResult {
@@ -268,6 +276,10 @@ public final class UIGeneralControlClass {
         public String gameArgs = "";
         public String preLaunchCommand = "";
         public String postExitCommand = "";
+        /** 自定义游戏窗口标题（空 = 保持游戏默认标题，见 GameProcessTweaks） */
+        public String windowTitle = "";
+        /** 游戏进程优先级（low / below_normal / normal / above_normal / high / realtime） */
+        public String processPriority = "normal";
 
         /** 从 ini 配置 Map 构造 */
         public static LaunchConfig fromIni(Map<String, String> ini) {
@@ -290,6 +302,8 @@ public final class UIGeneralControlClass {
             c.gameArgs = ini.getOrDefault("GameArgs", "");
             c.preLaunchCommand = ini.getOrDefault("PreLaunchCommand", "");
             c.postExitCommand  = ini.getOrDefault("PostExitCommand", "");
+            c.windowTitle = ini.getOrDefault("GameWindowTitle", "");
+            c.processPriority = ini.getOrDefault("GameProcessPriority", "normal");
             return c;
         }
     }
@@ -371,15 +385,12 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  Ⅰ.  配置管理（INI 读写）
-    // ================================================================
+    // Ⅰ.  配置管理（INI 读写） //
 
-    /** 1.1 读取全部配置 */
+    /** 1.1 读取全部配置（路径统一由 AppDirs 解析：默认 ~/.starlight，--portable 回落工作目录） */
     public static Map<String, String> readConfig() {
         Map<String, String> config = new HashMap<>();
-        Path configPath = Paths.get(CONFIG_FILE);
-        if (!Files.exists(configPath)) configPath = Paths.get(CONFIG_DIR, "starlight.ini");
+        Path configPath = AppDirs.starlightIni();
         if (!Files.exists(configPath)) return config;
         try {
             List<String> lines = Files.readAllLines(configPath, StandardCharsets.UTF_8);
@@ -426,9 +437,9 @@ public final class UIGeneralControlClass {
     /** 1.4 保存配置 */
     public static ActionResult saveConfig(Map<String, String> config) {
         try {
-            Path configDir = Paths.get(CONFIG_DIR);
+            Path configDir = AppDirs.root();
             if (!Files.exists(configDir)) Files.createDirectories(configDir);
-            Path configPath = configDir.resolve("starlight.ini");
+            Path configPath = AppDirs.starlightIni();
 
             List<String> oldLines = new ArrayList<>();
             if (Files.exists(configPath)) oldLines = Files.readAllLines(configPath, StandardCharsets.UTF_8);
@@ -438,6 +449,9 @@ public final class UIGeneralControlClass {
                 "MinMemory", "MaxMemory", "WindowWidth", "WindowHeight",
                 "Fullscreen", "VersionIsolation", "JvmArgs", "GameArgs", "GameLanguage",
                 "PreLaunchCommand", "PostExitCommand",
+                // 高级设置：自定义游戏窗口标题 / 进程优先级 / 游戏启动后的启动器可见性
+                // （未登记的话点「保存」写不进 starlight.ini，重启就丢）
+                "GameWindowTitle", "GameProcessPriority", "LauncherVisibility",
                 "ServerUrl", "GameFolders", "GameDirNames", "ParallelLaunch",
                 "ParallelVerify", "StreamingSha1", "FastVerify", "SilentLoginMode",
                 "ProxyType", "ProxyHost", "ProxyPort", "ProxyUser", "ProxyPass"
@@ -511,9 +525,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  Ⅱ.  游戏启动 / 停止
-    // ================================================================
+    // Ⅱ.  游戏启动 / 停止 //
 
     /**
      * 最近一次启动对应实例的 PID。
@@ -533,10 +545,62 @@ public final class UIGeneralControlClass {
     private static volatile String lastLaunchJavaPath = null;
     private static volatile String lastLaunchJavaVersion = null;
 
+    /**
+     * 最近一次启动的<b>实例快照</b>：真正启动的版本 / 目录 / 加载器 / Java / 隔离开关。
+     *
+     * <p>崩溃诊断此前只能拿到「当前选中版本」的配置（{@code LauncherView.showGameCrashPanel}
+     * 重新 {@code getLaunchConfig()}），于是从「最近游玩」或插件启动非当前选中版本时，
+     * 崩溃面板会把「当前版本」的元数据（26w14a Vanilla）与「实际崩溃版本」的旧 crash-report
+     * （1.12.2 Forge）拼到一起，造成「版本隔离失效」的假象。这里把真实启动信息留在内存里，
+     * 供崩溃诊断按「实际启动的版本」回读崩溃报告与 Java 版本。
+     */
+    public static final class LaunchSnapshot {
+        public final String version;
+        public final String gameDir;
+        public final String loader;           // LoaderDetector 常量（Vanilla/Forge (Legacy)/...）
+        public final String javaPath;          // 实际使用的 java.exe（含 AutoJava 覆盖结果）
+        public final boolean versionIsolation;
+        public final long launchStartTime;     // 本次启动开始时间戳(ms)，崩溃报告按此过滤新鲜度
+        public LaunchSnapshot(String version, String gameDir, String loader, String javaPath,
+                              boolean versionIsolation, long launchStartTime) {
+            this.version = version;
+            this.gameDir = gameDir;
+            this.loader = loader;
+            this.javaPath = javaPath;
+            this.versionIsolation = versionIsolation;
+            this.launchStartTime = launchStartTime;
+        }
+    }
+
+    private static volatile LaunchSnapshot lastLaunchSnapshot = null;
+
     /** 记录本次启动实际使用的 Java（由启动线程在 AutoJava 解析完成后调用） */
     public static void recordLaunchJavaPath(String version, String javaPath) {
         lastLaunchJavaPath = javaPath;
         lastLaunchJavaVersion = version;
+    }
+
+    /**
+     * 记录本次启动的实例快照（在加载器判定完成后调用，此时版本/目录/Java/隔离开关均已确定）。
+     * 启动开始时间稍后在 {@link #launchMinecraftAsync} 内补齐，这里先以当前时间为占位。
+     */
+    public static void recordLaunchSnapshot(String version, String gameDir, String loader,
+                                            String javaPath, boolean versionIsolation) {
+        lastLaunchSnapshot = new LaunchSnapshot(version, gameDir, loader, javaPath,
+                versionIsolation, System.currentTimeMillis());
+    }
+
+    /** 更新最近一次启动快照的启动开始时间（游戏进程真正启动前写入，供崩溃报告新鲜度过滤）。 */
+    public static void markLaunchSnapshotStartTime(long launchStartTime) {
+        LaunchSnapshot snap = lastLaunchSnapshot;
+        if (snap == null) return;
+        lastLaunchSnapshot = new LaunchSnapshot(snap.version, snap.gameDir, snap.loader,
+                snap.javaPath, snap.versionIsolation, launchStartTime);
+    }
+
+    /** 取最近一次启动的实例快照（可能为 null） */
+    public static LaunchSnapshot getLastLaunchSnapshot() {
+        return lastLaunchSnapshot;
     }
 
     /**
@@ -578,13 +642,20 @@ public final class UIGeneralControlClass {
         ASYNC_POOL.submit(() -> {
             // 本次启动对应实例的 PID（-1 = 进程还没起来）。放在 try 外面，退出与异常两条路径都要用它注销实例
             final long[] gamePidRef = new long[]{-1L};
+            // 本地披风服务器引用：同样放在 try 外面，退出与异常两条路径都要用它停止服务器
+            final java.util.concurrent.atomic.AtomicReference<LocalYggdrasilServer> capeServerRef =
+                    new java.util.concurrent.atomic.AtomicReference<>(null);
+            // 本地披风代理引用（劫持 OptiFine s.optifine.net 披风下载）：与档案服务器同生命周期
+            final java.util.concurrent.atomic.AtomicReference<LocalCapeProxy> capeProxyRef =
+                    new java.util.concurrent.atomic.AtomicReference<>(null);
             try {
                 // 每次启动重置取消标志
                 launchCancelled.set(false);
 
-                // ===== Token 过期自动刷新（两种静默登录模式） =====
+                // Token 过期自动刷新（两种静默登录模式） //
                 // 模式一「启动游戏时静默登录」：每次启动游戏时检查并静默刷新过期令牌（默认）；
                 // 模式二「开启启动器静默登录」：启动器启动时已在后台刷新，此处保留过期检查（幂等）
+                AccountManager.Account currentAccount = AccountManager.getCurrentAccount();
                 AccountManager.Account refreshedAccount = SilentLoginManager.refreshIfNeeded(
                         (pct, msg) -> onProgress.onProgress(pct, msg));
                 if (refreshedAccount != null) {
@@ -593,26 +664,46 @@ public final class UIGeneralControlClass {
                     config.userName = refreshedAccount.name;
                     config.userType = "msa";
                 }
+                // 离线皮肤（PCL2 风格）：离线账号按皮肤配置微调传给游戏的 UUID（Steve/Alex 模型
+                // 由 UUID 决定）；以账号基础 UUID 为起点，幂等，不改动账号本身
+                if (currentAccount != null && currentAccount.type == AccountManager.AccountType.OFFLINE) {
+                    String resolvedUuid = OfflineSkinManager.resolveUuid(currentAccount.id, currentAccount.getSkin());
+                    if (resolvedUuid != null && !resolvedUuid.isEmpty()) {
+                        config.uuid = resolvedUuid;
+                    }
+                }
 
-                // ===== 第三方（外置登录）账号：注入认证服务器参数（authlib-injector / minecraft.api.*）=====
+                // 启动流程日志（PCL 标准）：预检测 / 登录方式 //
+                if (config.userName != null && !config.userName.isEmpty()) {
+                    boolean isMsa = "msa".equalsIgnoreCase(config.userType);
+                    LaunchLog.info(isMsa ? "登录方式：正版（" + config.userName + "）"
+                                        : "登录方式：离线（" + config.userName + "）");
+                }
+
+                // 第三方（外置登录）账号：注入认证服务器参数（authlib-injector / minecraft.api.*） //
                 injectThirdPartyAuth(config);
 
-                // ===== 代理：注入系统代理 / HTTP 代理 JVM 参数（参照 HMCL DefaultLauncher）=====
+                // 代理：注入系统代理 / HTTP 代理 JVM 参数（参照 HMCL DefaultLauncher） //
                 injectProxyArgs(config);
 
-                // ===== 自动选择 Java（参考 HMCL findSuitableJava：按游戏版本匹配本机安装）=====
+                // 自动选择 Java（参考 HMCL findSuitableJava：按游戏版本匹配本机安装） //
                 // AutoJava 开启时以自动选择为准（与设置页 UI 一致：开启时手动控件禁用），
                 // 避免手动配置的高版本 Java（如 25）被用于只支持旧版本 Java 的游戏（如 1.18）导致崩溃；
-                // 自动选择找不到合适 Java 时才回退到当前配置（手动/系统默认）
-                if ("true".equalsIgnoreCase(getConfigValue("AutoJava"))) {
+                // 自动选择找不到合适 Java 时才回退到当前配置（手动/系统默认）。
+                // 版本独立设置可仅对该版本关闭自动选择（effectiveAutoJava），让手动 java.path 生效。
+                boolean autoJavaOn = VersionConfigManager.effectiveAutoJava(
+                        readConfig(), config.gameDir, config.version);
+                if (autoJavaOn) {
                     onProgress.onProgress(5, "正在自动选择 Java...");
                     String autoJava = autoSelectJavaPath(config.version, config.gameDir);
                     if (autoJava != null) {
                         config.javaPath = autoJava;
                         LOG.info("AutoJava selected: {}", autoJava);
+                        LaunchLog.info("选择的 Java：" + autoJava);
                         onProgress.onProgress(6, "已自动选择 Java: " + autoJava);
                     } else {
                         LOG.warn("AutoJava found no suitable Java, falling back to: {}", config.javaPath);
+                        LaunchLog.warn("未找到合适的 Java，使用当前配置");
                         onProgress.onProgress(6, "未找到合适的 Java，使用当前配置");
                     }
                 }
@@ -622,6 +713,7 @@ public final class UIGeneralControlClass {
                 recordLaunchJavaPath(config.version, config.javaPath);
 
                 onProgress.onProgress(7, "正在读取版本信息...");
+                LaunchLog.info("正在读取版本信息...");
                 LaunchInfo info = buildLaunchInfo(config);
                 Path jsonPath = info.resolveVersionDir().resolve(config.version + ".json");
                 if (!Files.exists(jsonPath)) {
@@ -645,17 +737,23 @@ public final class UIGeneralControlClass {
                 // 的 Forge 版本误判成 Vanilla，导致 Forge 整合包被裸启
                 String loader = VersionIconKit.detectLoader(versionJson, config.version);
                 info.setLoaderType(loader);
+                // 记录本次启动的实例快照（真正启动的版本/目录/加载器/Java/隔离），供崩溃诊断回读，
+                // 避免从「最近游玩」启动非当前选中版本时崩溃面板串到当前版本的元数据
+                recordLaunchSnapshot(config.version, config.gameDir, loader,
+                        config.javaPath, config.versionIsolation);
                 // 核心 jar 构建参数时会漏掉 --userProperties（1.7.x/1.12.x 的 Main 必填），补上
                 java.util.List<String> injectedArgs = LegacyLaunchArgs.apply(info, versionJson);
                 if (!injectedArgs.isEmpty()) {
                     LOG.info("Injected legacy game args: {}", injectedArgs);
                 }
                 onProgress.onProgress(20, "检测到加载器: " + loader);
+                LaunchLog.info("检测到加载器：" + loader);
                 if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
 
-                // ===== 资源准备（并行加速开启时：原生库检查与资源补全同时进行，缩短启动时间） =====
+                // 资源准备（并行加速开启时：原生库检查与资源补全同时进行，缩短启动时间） //
                 // 关闭时保持原串行流程：先补全资源（资产+库），再检查原生库
                 onProgress.onProgress(25, "正在准备游戏资源...");
+                LaunchLog.info("正在准备游戏资源...");
                 if (ParallelLaunchManager.isEnabled()) {
                     boolean prepOk = ParallelLaunchManager.prepare(config.gameDir, config.version, jsonString,
                             (pct, msg) -> onProgress.onProgress(Math.min(25 + (int) (pct * 0.35), 60), msg),
@@ -685,7 +783,7 @@ public final class UIGeneralControlClass {
                     default -> { onResult.onError("未知加载器类型: " + loader); return; }
                 }
 
-                // === 方案一：在 initLogging() 之前采集已有日志文件 ===
+                // 方案一：在 initLogging() 之前采集已有日志文件 //
                 // 确保 initLogging() 创建的新日志文件不会被过滤掉
                 final java.nio.file.Path logDir = java.nio.file.Paths.get(LOG_DIR);
                 final java.util.Set<String> existingLogs;
@@ -704,11 +802,13 @@ public final class UIGeneralControlClass {
                 }
 
                 onProgress.onProgress(50, "正在初始化路径...");
+                LaunchLog.info("正在初始化路径...");
                 launcher.initPaths();
                 launcher.initLogging(Paths.get(LOG_DIR));
                 launcher.setVersionJson(versionJson);
 
                 onProgress.onProgress(60, "正在处理原生库文件...");
+                LaunchLog.info("正在解压 Natives 文件");
                 boolean nativesOk = NativesManager.checkAndCompleteNatives(config.gameDir, config.version, jsonString, false);
                 if (!nativesOk) {
                     onResult.onError("原生库准备失败，请检查网络连接或重新安装该版本");
@@ -721,8 +821,8 @@ public final class UIGeneralControlClass {
                 }
                 if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
 
-                // ===== 应用游戏内设置（语言 / 全屏 → options.txt；取该版本合并后的有效值） =====
-                onProgress.onProgress(70, "正在应用版本设置（语言 / 全屏）...");
+                // 应用游戏内设置（语言 / 全屏 → options.txt；取该版本合并后的有效值） //
+                LaunchLog.info("正在应用版本设置（语言 / 全屏）...");
                 Map<String, String> launchEffective = VersionConfigManager.buildEffectiveIni(
                         readConfig(), config.gameDir, config.version);
                 String langCode = launchEffective.getOrDefault("GameLanguage", "");
@@ -736,8 +836,106 @@ public final class UIGeneralControlClass {
                 GameOptions.setFullscreen(config.gameDir, config.version,
                         config.versionIsolation, launchFullscreen);
 
+                // 离线皮肤资源包（PCL2 风格：自定义皮肤以资源包覆盖默认贴图，
+                // 无需本地皮肤服务器 / authlib-injector）
+                if (currentAccount != null && currentAccount.type == AccountManager.AccountType.OFFLINE) {
+                    onProgress.onProgress(75, "正在应用离线皮肤...");
+                    LaunchLog.info("正在应用离线皮肤...");
+                    try {
+                        Skin skin = currentAccount.getSkin();
+                        VanillaVersion vanilla = VanillaVersion.resolve(
+                                java.nio.file.Path.of(config.gameDir), config.version);
+                        OfflineSkinManager.applySkinPack(skin, currentAccount.name,
+                                config.gameDir, config.version, config.versionIsolation, vanilla);
+                    } catch (Exception e) {
+                        LOG.warn("Failed to apply offline skin resource pack: {}", e.getMessage());
+                        LaunchLog.warn("离线皮肤资源包应用失败：" + e.getMessage());
+                    }
+                    // 披风：本地 Yggdrasil 档案服务器 + authlib-injector（仅当配置了披风；
+                    // 无披风保持纯 PCL2 机制）。原版/纯 OptiFine 客户端只从会话档案读披风。
+                    try {
+                        Skin.LoadedSkin loaded = OfflineSkinManager.loadForLaunch(
+                                currentAccount.getSkin(), currentAccount.name);
+                        LocalYggdrasilServer capeServer = LocalYggdrasilServer.start(
+                                loaded, config.uuid, currentAccount.name);
+                        if (capeServer != null) {
+                            capeServerRef.set(capeServer);
+                            List<String> injectArgs = new ArrayList<>(
+                                    AuthlibInjectorSupport.buildLaunchJvmArgs(capeServer.getApiBase()));
+                            // 本地披风代理：SOCKS5 劫持 OptiFine s.optifine.net 披风下载
+                            //（1.17.1 纯 OptiFine 本地玩家披风唯一原生通道；--proxyHost 由
+                            // Main 解析为 SOCKS 代理，HttpTexture 走 HttpPipeline SOCKS 隧道）
+                            LocalCapeProxy capeProxy = LocalCapeProxy.start(
+                                    OfflineSkinManager.capePngBytes(loaded), currentAccount.name);
+                            if (capeProxy != null) {
+                                capeProxyRef.set(capeProxy);
+                                // CapeUrlPatchAgent：CapeUtils 类加载时把
+                                // http://s.optifine.net 重写为本地披风服务器地址
+                                String agentArg = capeProxy.agentJvmArg();
+                                if (agentArg != null) {
+                                    injectArgs.add(agentArg);
+                                }
+                            }
+                            String extra = String.join(" ", injectArgs);
+                            config.jvmArgs = (config.jvmArgs == null || config.jvmArgs.isBlank())
+                                    ? extra : config.jvmArgs.trim() + " " + extra;
+                            // buildLaunchInfo 已把 jvmArgs 快照进 info（披风服务器启动之前），
+                            // 注入参数必须同步回 info，否则 Forge Legacy / Vanilla 启动器读到的是
+                            // 不含 -javaagent 的旧列表（日志显示有、实际进程没有）
+                            info.setJvmArgs(java.util.Arrays.asList(config.jvmArgs.split("\\s+")));
+                            // 1.17+ 本地玩家皮肤/披风直注入：SkinManager 对本地玩家直接取
+                            // Session profile 属性（--profileProperties），不走会话档案查询
+                            java.util.List<String> pp = OfflineSkinManager.profilePropertiesArgs(
+                                    capeServer, config.version);
+                            if (!pp.isEmpty()) {
+                                java.util.List<String> ga = new java.util.ArrayList<>();
+                                if (info.getGameArgs() != null) ga.addAll(info.getGameArgs());
+                                ga.addAll(pp);
+                                info.setGameArgs(ga);
+                                LaunchLog.info("已注入 --profileProperties（本地玩家皮肤/披风直传）");
+                            }
+                            LaunchLog.info("已启用本地披风服务器：" + capeServer.getApiBase());
+                        }
+                    } catch (Exception e) {
+                        LOG.warn("Failed to start local cape server: {}", e.getMessage());
+                        LaunchLog.warn("披风服务器启动失败：" + e.getMessage());
+                    }
+                }
+
                 onProgress.onProgress(80, "正在启动 Minecraft " + config.version + " ...");
                 long startTime = System.currentTimeMillis();
+                // 崩溃报告新鲜度过滤用「本次启动开始时间」；这里回填到快照里
+                markLaunchSnapshotStartTime(startTime);
+
+                // 启动参数区块（PCL 标准：参数获取开始 / 分隔线 / 每行一个参数） //
+                LaunchLog.info("=================== 启动参数开始 ===================");
+                if (versionJson != null && versionJson.has("mainClass")) {
+                    LaunchLog.info(versionJson.get("mainClass").getAsString());
+                }
+                LaunchLog.info("Java：" + config.javaPath);
+                LaunchLog.info("最小内存：" + config.minMemory + " MB");
+                LaunchLog.info("最大内存：" + config.maxMemory + " MB");
+                LaunchLog.info("游戏版本：" + config.version);
+                LaunchLog.info("游戏目录：" + config.gameDir);
+                LaunchLog.info("版本隔离：" + (config.versionIsolation ? "是" : "否"));
+                if (config.windowWidth > 0 && config.windowHeight > 0) {
+                    LaunchLog.info("窗口大小：" + config.windowWidth + " x " + config.windowHeight);
+                }
+                // 进程微调（高级设置）：只有真的设置了才占日志行，默认值不打扰
+                if (config.windowTitle != null && !config.windowTitle.isBlank()) {
+                    LaunchLog.info("窗口标题：" + config.windowTitle);
+                }
+                if (config.processPriority != null && !"normal".equalsIgnoreCase(config.processPriority)) {
+                    LaunchLog.info("进程优先级：" + com.example.starlight.util.GameProcessTweaks
+                            .priorityLabel(config.processPriority));
+                }
+                if (config.jvmArgs != null && !config.jvmArgs.isEmpty()) {
+                    LaunchLog.info("JVM 参数：" + config.jvmArgs);
+                }
+                if (config.gameArgs != null && !config.gameArgs.isEmpty()) {
+                    LaunchLog.info("游戏参数：" + config.gameArgs);
+                }
+                LaunchLog.info("=================== 启动参数结束 ===================");
 
                 if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
 
@@ -747,9 +945,10 @@ public final class UIGeneralControlClass {
                     gamePidRef[0] = process.pid();
                     GameInstanceRegistry.register(new GameInstanceRegistry.Instance(
                             process.pid(), config.version, config.gameDir, config.userName, loader, startTime));
+                    LaunchLog.info("已启动游戏进程：" + config.javaPath + "（PID " + process.pid() + "）");
                 });
 
-                // ===== 游戏窗口检测线程（在 launcher.launch() 之前启动） =====
+                // 游戏窗口检测线程（在 launcher.launch() 之前启动） //
                 // 方案一：logDir/existingLogs 已在 initLogging() 之前采集（见上方）
                 if (onGameStarted != null) {
                     final long launcherPid = ProcessHandle.current().pid();
@@ -793,7 +992,7 @@ public final class UIGeneralControlClass {
                                     if (found) {
                                         processFound.set(true);
                                         processFoundTime.set(System.currentTimeMillis());
-                                        System.out.println("[UIGeneralControlClass] Game Java process detected started");
+                                        LaunchLog.info("[UIGeneralControlClass] Game Java process detected started");
                                     }
                                 }
 
@@ -868,8 +1067,29 @@ public final class UIGeneralControlClass {
 
                 // 阻塞等待游戏退出
                 int exitCode = launcher.launch();
+                LocalYggdrasilServer capeServerDone = capeServerRef.getAndSet(null);
+                if (capeServerDone != null) capeServerDone.stop();
+                LocalCapeProxy capeProxyDone = capeProxyRef.getAndSet(null);
+                if (capeProxyDone != null) capeProxyDone.stop();
                 long elapsed = (System.currentTimeMillis() - startTime) / 1000;
                 onProgress.onProgress(100, "游戏已退出，运行时长: " + elapsed + "秒");
+
+                // 启动结束日志（PCL 标准：~ 基础参数 ~ / ~ 登录参数 ~ / 开始启动结束处理） //
+                LaunchLog.info("~ 基础参数 ~");
+                LaunchLog.info("游戏版本：" + config.version);
+                LaunchLog.info("分配的内存：" + config.maxMemory + " MB");
+                LaunchLog.info("MC 文件夹：" + config.gameDir);
+                LaunchLog.info("版本隔离：" + (config.versionIsolation ? "是" : "否"));
+                LaunchLog.info("Java 信息：" + config.javaPath);
+                LaunchLog.info("");
+                LaunchLog.info("~ 登录参数 ~");
+                LaunchLog.info("玩家用户名：" + (config.userName == null ? "" : config.userName));
+                LaunchLog.info("AccessToken：" + LaunchLog.mask(config.accessToken));
+                LaunchLog.info("UUID：" + LaunchLog.mask(config.uuid));
+                LaunchLog.info("登录方式：" + ("msa".equalsIgnoreCase(config.userType) ? "正版" : "离线"));
+                LaunchLog.info("");
+                LaunchLog.info("开始启动结束处理");
+                LaunchLog.info("游戏已退出，运行时长：" + elapsed + "秒");
 
                 // 读「是否被用户主动关闭」要在注销之前：注销后实例对象就查不到了。
                 // 该标记决定退出时是否弹崩溃诊断面板（主动关闭不算崩溃）
@@ -889,7 +1109,12 @@ public final class UIGeneralControlClass {
                 onResult.onSuccess(new LaunchResult(exitCode, elapsed, errorLog, startTime, stoppedByUser));
 
             } catch (JsonSyntaxException | IOException | InterruptedException e) {
+                LocalYggdrasilServer capeServerErr = capeServerRef.getAndSet(null);
+                if (capeServerErr != null) capeServerErr.stop();
+                LocalCapeProxy capeProxyErr = capeProxyRef.getAndSet(null);
+                if (capeProxyErr != null) capeProxyErr.stop();
                 unregisterGameInstance(gamePidRef[0]);
+                LaunchLog.error("错误：" + e.getMessage());
                 onResult.onError("启动失败: " + e.getMessage());
             }
         });
@@ -942,6 +1167,7 @@ public final class UIGeneralControlClass {
     public static void stopLaunchingInstance() {
         // 进程还没起来时会走启动流程里的取消检查点（launchCancelled）
         launchCancelled.set(true);
+        LaunchLog.info("已取消启动");
         long pid = launchingPid;
         if (pid > 0) {
             // 先标记「用户主动结束」，否则非 0 退出码会被当成崩溃
@@ -964,9 +1190,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  Ⅲ.  微软账号登录
-    // ================================================================
+    // Ⅲ.  微软账号登录 //
 
     /**
      * 3.1 首次微软登录（设备码流，异步）
@@ -1049,9 +1273,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  Ⅳ.  Java 管理
-    // ================================================================
+    // Ⅳ.  Java 管理 //
 
     /** 4.1 查找本机所有 Java 安装 */
     public static List<JavaInfo> findAllJava() {
@@ -1074,8 +1296,7 @@ public final class UIGeneralControlClass {
      * 找不到时返回 null，由调用方回退到现有配置。
      */
     public static String autoSelectJavaPath(String versionId, String gameDir) {
-        String mcVersion = resolveRealMcVersion(gameDir, versionId);
-        int requiredMajor = getRequiredJavaMajor(mcVersion);
+        int requiredMajor = getRequiredJavaMajorFromJson(gameDir, versionId);
         // 优先读扫描缓存（JavaCacheManager），缓存失效时自动重新全盘扫描并写回 json
         List<FindAllJavaWindows.JavaEntry> entries = JavaCacheManager.getAvailable();
         FindAllJavaWindows.JavaEntry best = null;
@@ -1084,6 +1305,41 @@ public final class UIGeneralControlClass {
             if (best == null || entry.majorVersion < best.majorVersion) best = entry;
         }
         return best != null ? best.getJavaExePath() : null;
+    }
+
+    /**
+     * 读取某版本所需的 Java 主版本：<b>优先用 version.json 的权威字段
+     * {@code javaVersion.majorVersion}</b>（现代版本必带），读不到时退回按版本名猜。
+     *
+     * <p>版本名是自定义中文名（如「自然之需YSM兼容整合」）时，旧实现用正则从版本名猜
+     * 猜不出 MC 版本 → 落到「需要 Java 8」，于是 1.21.11 的 Fabric 整合包被用 Java 8 启动，
+     * Fabric Loader 报「需要 java 21」。json 里其实写死了 {@code javaVersion: {majorVersion: 21}}，
+     * 直接读它即可，覆盖整合包 / 自定义命名 / 周版本快照等所有无法从名字猜的场景。
+     */
+    public static int getRequiredJavaMajorFromJson(String gameDir, String versionId) {
+        // 沿继承链找到根版本 JSON，读其 javaVersion.majorVersion
+        String current = versionId;
+        Set<String> visited = new HashSet<>();
+        while (current != null && !current.isEmpty() && visited.add(current)) {
+            Path json = Paths.get(gameDir == null ? "" : gameDir, "versions", current, current + ".json");
+            if (!Files.isRegularFile(json)) break;
+            try {
+                JsonObject obj = JsonParser.parseString(Files.readString(json)).getAsJsonObject();
+                if (obj != null && obj.has("javaVersion") && obj.get("javaVersion").isJsonObject()) {
+                    JsonObject jv = obj.getAsJsonObject("javaVersion");
+                    if (jv.has("majorVersion") && jv.get("majorVersion").isJsonPrimitive()) {
+                        int major = parseIntSafe(jv.get("majorVersion").getAsString(), 0);
+                        if (major > 0) return major;
+                    }
+                }
+                if (obj == null || !obj.has("inheritsFrom")) break; // 根版本
+                current = obj.get("inheritsFrom").getAsString();
+            } catch (Exception e) {
+                break;
+            }
+        }
+        // 兜底：按版本名猜（旧逻辑）
+        return getRequiredJavaMajor(resolveRealMcVersion(gameDir, versionId));
     }
 
     /** 沿 version.json 的 inheritsFrom 继承链解析真实 Minecraft 版本（链根 = 无 inheritsFrom 的版本） */
@@ -1119,12 +1375,34 @@ public final class UIGeneralControlClass {
         return 8;
     }
 
-    /** 提取版本 ID 开头的 MC 版本号（如 "1.20.4-fabric-0.15.0" → "1.20.4"） */
+    /**
+     * 提取版本 ID 开头的 MC 版本号（如 "1.20.4-fabric-0.15.0" → "1.20.4"）。
+     *
+     * <p>周版本快照（如 {@code 26w14a}）没有「数字.数字」结构，旧实现原样返回后会被
+     * {@link #compareMcVersion} 当非数字段（按 0）比较，一路落到「需要 Java 8」，
+     * 导致自动选择 Java 在快照版本上静默失效。这里把快照按年份归入对应发布线，
+     * 使 {@link #getRequiredJavaMajor} 能正确判定（26w* → 26.x → Java 25，等）。
+     */
     public static String extractMcVersion(String versionId) {
         if (versionId == null) return "";
+        String trimmed = versionId.trim();
+        // 周版本快照：YYwNN[letter]（如 26w14a / 25w14a）→ 归入对应发布线
+        java.util.regex.Matcher w = java.util.regex.Pattern.compile("^(\\d{2})w\\d{2}[a-z]?")
+                .matcher(trimmed);
+        if (w.find()) {
+            int year = parseIntSafe(w.group(1), 0);
+            if (year >= 26) return "26.1";
+            if (year == 25) return "1.21";
+            if (year == 24) return "1.20.5";
+            if (year == 23) return "1.20";
+            if (year == 22) return "1.19";
+            if (year == 21) return "1.18";
+            if (year == 20) return "1.17";
+            return "1.16";
+        }
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(\\d+\\.\\d+(?:\\.\\d+)?)")
-                .matcher(versionId.trim());
-        return m.find() ? m.group(1) : versionId.trim();
+                .matcher(trimmed);
+        return m.find() ? m.group(1) : trimmed;
     }
 
     /** 逐段数字比较版本号（a >= b 返回 >= 0），非数字段按 0 处理 */
@@ -1203,9 +1481,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  Ⅴ.  存档管理
-    // ================================================================
+    // Ⅴ.  存档管理 //
 
     /**
      * 5.1 列出 Minecraft 存档
@@ -1301,10 +1577,7 @@ public final class UIGeneralControlClass {
         return saves;
     }
 
-    // ================================================================
-    //  Ⅵ.  FRP 隧道管理
-    // ================================================================
-
+    // Ⅵ.  FRP 隧道管理 //
     private static FrpClient frpClientInstance = null;
 
     /**
@@ -1365,9 +1638,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  Ⅶ.  日志管理（上传 + 二维码）
-    // ================================================================
+    // Ⅶ.  日志管理（上传 + 二维码） //
 
     /** 7.1 上传日志并生成二维码 */
     public static ActionResult uploadLogAndGenerateQR(String logFilePath, String serverUrl) {
@@ -1475,9 +1746,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  Ⅷ.  AI 分析错误日志
-    // ================================================================
+    // Ⅷ.  AI 分析错误日志 //
 
     /**
      * 8.1 AI 分析错误日志（异步）
@@ -1550,9 +1819,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  Ⅸ.  多线程下载
-    // ================================================================
+    // Ⅸ.  多线程下载 //
 
     /**
      * 9.1 下载文件（异步，带进度）
@@ -1560,58 +1827,23 @@ public final class UIGeneralControlClass {
     public static void downloadFileAsync(String url, String savePath, int threadCount,
                                           ProgressCallback onProgress,
                                           ResultCallback<String> onResult) {
-        // 未指定线程数时使用设置页「并发下载数」配置
-        int effectiveThreadCount = threadCount <= 0 ? DownloadSettings.getDownloadThreads() : threadCount;
-        ASYNC_POOL.submit(() -> {
-            try {
-                MultiThreadDownloader downloader = new MultiThreadDownloader(url, savePath, effectiveThreadCount);
-
-                // 重定向输出到回调
-                PrintStream originalOut = System.out;
-                ByteArrayOutputStream baos = new ByteArrayOutputStream() {
-                    @Override
-                    public synchronized void write(byte[] b, int off, int len) {
-                        super.write(b, off, len);
-                        String chunk = new String(b, off, len, StandardCharsets.UTF_8);
-                        int pIdx = chunk.indexOf('%');
-                        if (pIdx > 0) {
-                            for (int i = pIdx - 1; i >= 0; i--) {
-                                if (!Character.isDigit(chunk.charAt(i))) {
-                                    try {
-                                        int pct = Integer.parseInt(chunk.substring(i + 1, pIdx));
-                                        onProgress.onProgress(pct, chunk.trim());
-                                    } catch (NumberFormatException ignored) {}
-                                    break;
-                                }
-                            }
-                        }
-                        if (chunk.contains("下载完成")) {
-                            onProgress.onProgress(100, chunk.trim());
-                        }
+        // JUDGE-2：删除原 MultiThreadDownloader + System.out 劫持实现，统一委托 download 根目录门面；
+        // threadCount 为兼容占位，实际线程数由 HttpDownloadEngine 内部策略决定
+        DownloadService.downloadFileAsync(url, savePath, threadCount,
+                (pct, msg) -> { if (onProgress != null) onProgress.onProgress(pct, msg); },
+                new CallbackInterfaces.ResultCallback<String>() {
+                    @Override public void onSuccess(String result) {
+                        if (onResult != null) onResult.onSuccess(result);
                     }
-                };
-                System.setOut(new PrintStream(baos, true, StandardCharsets.UTF_8));
-
-                downloader.start();
-
-                System.out.flush();
-                System.setOut(originalOut);
-
-                onResult.onSuccess("下载完成: " + savePath);
-
-            } catch (Exception e) {
-                onResult.onError("下载失败: " + e.getMessage());
-            }
-        });
+                    @Override public void onError(String error) {
+                        if (onResult != null) onResult.onError(error);
+                    }
+                });
     }
 
 
-    // ================================================================
-    //  Ⅹ.  模组 / 资源包 / 光影 / 配置文件管理
-    // ================================================================
-
-    // ---------- 10. 模组管理 ----------
-
+    // Ⅹ.  模组 / 资源包 / 光影 / 配置文件管理 //
+    // 10. 模组管理 //
     /** 10.1 列出所有模组 */
     public static List<ModInfo> listMods(String gameDir, String version) {
         List<ModInfo> mods = new ArrayList<>();
@@ -1655,8 +1887,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ---------- 11. 资源包管理 ----------
-
+    // 11. 资源包管理 //
     /** 11.1 列出资源包 */
     public static List<PackInfo> listResourcePacks(String gameDir) {
         Path rpDir = Paths.get(gameDir, "resourcepacks");
@@ -1680,8 +1911,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ---------- 12. 光影包管理 ----------
-
+    // 12. 光影包管理 //
     /** 12.1 列出光影包 */
     public static List<PackInfo> listShaderPacks(String gameDir) {
         Path shaderDir = Paths.get(gameDir, "shaderpacks");
@@ -1699,8 +1929,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ---------- 13. 模组配置文件管理 ----------
-
+    // 13. 模组配置文件管理 //
     /** 13.1 列出模组配置文件 */
     public static List<ConfigFileInfo> listConfigFiles(String gameDir) {
         Path cfgDir = Paths.get(gameDir, "config");
@@ -1741,10 +1970,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  Ⅺ.  原生库管理
-    // ================================================================
-
+    // Ⅺ.  原生库管理 //
     /** 11.1 检查原生库状态 */
     public static NativesStatus checkNativesStatus(String gameDir, String version) {
         Path verDir = Paths.get(gameDir, "versions", version);
@@ -1796,7 +2022,10 @@ public final class UIGeneralControlClass {
                 info.setGameDirPath(Path.of(gameDir));
                 info.setVersion(version);
                 info.setJavaPath("java");
-                info.setVersionIsolation(false);
+                // 隔离开关走版本有效配置而非硬编码：processNatives 目前虽不读它，
+                // 但任何后续接入隔离语义的启动库逻辑都不应在这里被静默关掉
+                info.setVersionIsolation(VersionConfigManager.effectiveVersionIsolation(
+                        readConfig(), gameDir, version));
 
                 VanillaLauncher launcher = new VanillaLauncher(info);
                 launcher.initPaths();
@@ -1822,10 +2051,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  Ⅻ.  游戏设置编辑 (options.txt)
-    // ================================================================
-
+    // Ⅻ.  游戏设置编辑 (options.txt) //
     /** 12.1 读取 options.txt */
     public static Map<String, String> readOptionsTxt(String gameDir) {
         Path optFile = Paths.get(gameDir, "options.txt");
@@ -1871,10 +2097,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  XIII.  启动器档案信息 (launcher_profiles.json)
-    // ================================================================
-
+    // XIII.  启动器档案信息 (launcher_profiles.json) //
     /** 13.1 读取启动器档案信息 */
     public static LauncherProfileInfo readLauncherProfiles(String gameDir) {
         Path profFile = Paths.get(gameDir, "launcher_profiles.json");
@@ -1918,10 +2141,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  XIV.  文件系统工具
-    // ================================================================
-
+    // XIV.  文件系统工具 //
     /** 14.1 打开文件/目录（操作系统默认程序） */
     public static ActionResult openInExplorer(String path) {
         try {
@@ -1978,10 +2198,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  XV.  版本管理（查询 + 下载）
-    // ================================================================
-
+    // XV.  版本管理（查询 + 下载） //
     /** 15.1 获取 Minecraft 版本列表 */
     public static List<VersionManifest.VersionEntry> fetchVersionList() {
         return VersionManifest.fetchVersionList();
@@ -2006,10 +2223,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  XVI.  资源文件 & 库文件下载
-    // ================================================================
-
+    // XVI.  资源文件 & 库文件下载 //
     /** 16.1 下载资源索引文件 */
     public static void downloadAssetIndexAsync(String assetId, String gameDir,
                                                ProgressCallback progress, ResultCallback<Boolean> onResult) {
@@ -2067,10 +2281,7 @@ public final class UIGeneralControlClass {
 
 
 
-    // ================================================================
-    //  XVII.  崩溃报告解析
-    // ================================================================
-
+    // XVII.  崩溃报告解析 //
     /** 17.1 解析崩溃报告文件 */
     public static CrashReportParser.CrashInfo parseCrashReport(String filePath) {
         return CrashReportParser.parse(filePath);
@@ -2087,10 +2298,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  XVIII.  存档备份与恢复
-    // ================================================================
-
+    // XVIII.  存档备份与恢复 //
     /** 18.1 备份单个存档 */
     public static SaveBackupRestore.ActionResult backupSave(String worldPath, String backupDir) {
         return SaveBackupRestore.backupSave(worldPath, backupDir);
@@ -2112,10 +2320,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  XIX.  外置登录 (LittleSkin / Blessing Skin 等)
-    // ================================================================
-
+    // XIX.  外置登录 (LittleSkin / Blessing Skin 等) //
     /** 19.1 外置登录 */
     public static ExternalLoginAuth.AuthResult externalLogin(String authServer, String email, String password) {
         return ExternalLoginAuth.login(authServer, email, password);
@@ -2139,10 +2344,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  XX.  多账号管理
-    // ================================================================
-
+    // XX.  多账号管理 //
     /** 20.1 列出所有账号 */
     public static List<Account> listAccounts() {
         return AccountManager.listAccounts();
@@ -2211,6 +2413,13 @@ public final class UIGeneralControlClass {
         if (acc != null) {
             config.userName = acc.name;
             config.uuid = acc.id;
+            // 离线皮肤（PCL2 风格）：离线账号按皮肤配置微调 UUID，让游戏按期望模型渲染默认皮肤
+            if (acc.type == AccountManager.AccountType.OFFLINE) {
+                String resolvedUuid = OfflineSkinManager.resolveUuid(acc.id, acc.getSkin());
+                if (resolvedUuid != null && !resolvedUuid.isEmpty()) {
+                    config.uuid = resolvedUuid;
+                }
+            }
             config.accessToken = acc.accessToken;
             config.userType = acc.getUserType();
             config.authServer = acc.authServer != null ? acc.authServer : "";
@@ -2246,7 +2455,6 @@ public final class UIGeneralControlClass {
         config.jvmArgs = (config.jvmArgs == null || config.jvmArgs.isBlank())
                 ? extra : config.jvmArgs.trim() + " " + extra;
     }
-    // ================================================================
 
     /**
      * 20.11 代理启动注入（参照 HMCL DefaultLauncher.buildJVMArgs）：
@@ -2288,6 +2496,9 @@ public final class UIGeneralControlClass {
         if (!c.gameArgs.isEmpty()) info.setGameArgs(Arrays.asList(c.gameArgs.split("\\s+")));
         if (!c.preLaunchCommand.isEmpty()) info.setPreLaunchCommand(c.preLaunchCommand);
         if (!c.postExitCommand.isEmpty())  info.setPostExitCommand(c.postExitCommand);
+        // 进程微调（高级设置）：自定义窗口标题 + 进程优先级，在 BaseLauncher 启动进程后应用
+        info.setWindowTitle(c.windowTitle);
+        info.setProcessPriority(c.processPriority);
         return info;
     }
 
@@ -2354,7 +2565,7 @@ public final class UIGeneralControlClass {
     }
 
     private static MicrosoftAuthResult readMicrosoftAuthResult() {
-        Path loginJson = Paths.get(System.getProperty("user.home"), ".starlight-launcher", "login.json");
+        Path loginJson = AppDirs.loginJson();
         if (!Files.exists(loginJson)) return null;
         try {
             String content = Files.readString(loginJson, StandardCharsets.UTF_8);
@@ -2481,10 +2692,7 @@ public final class UIGeneralControlClass {
     }
 
 
-    // ================================================================
-    //  XXI.  加载器一键安装
-    // ================================================================
-
+    // XXI.  加载器一键安装 //
     /** 21.1 一键安装加载器（异步）
      *  @param mcVersion   Minecraft 原版版本号（如 1.21.1）
      *  @param loaderType  加载器类型（fabric / forge / neoforge）

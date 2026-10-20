@@ -38,8 +38,9 @@ import java.util.logging.Logger;
  */
 public final class PluginManager {
 
-    /** 启用状态持久化文件（相对启动器根目录）。 */
-    public static final String STATE_FILE = "Starlight-Launcher/plugins-state.json";
+    /** 启用状态持久化文件（统一走 AppDirs：默认 ~/.starlight，--portable 回落工作目录）。 */
+    public static final String STATE_FILE =
+            com.example.starlight.config.AppDirs.pluginsStateJson().toString();
 
     private static final Logger LOGGER = Logger.getLogger(PluginManager.class.getName());
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -53,7 +54,7 @@ public final class PluginManager {
     /** .minecraft 游戏目录（通过 -Dstarlight.minecraft.dir 传给插件子进程）。 */
     private final Path minecraftDir;
 
-    /** 插件目录：<launcherRoot>/Starlight-Launcher/mod。 */
+    /** 插件目录（统一走 AppDirs：默认 ~/.starlight/mod，--portable 回落工作目录）。 */
     private final Path pluginDir;
 
     /** 已扫描到的插件元数据：pluginId → metadata。 */
@@ -71,7 +72,7 @@ public final class PluginManager {
     private PluginManager(Path launcherRoot, Path minecraftDir) {
         this.launcherRoot = launcherRoot;
         this.minecraftDir = minecraftDir;
-        this.pluginDir = launcherRoot.resolve(PluginScanner.DEFAULT_PLUGINS_DIR);
+        this.pluginDir = com.example.starlight.config.AppDirs.pluginsDir();
     }
 
     /**
@@ -281,9 +282,7 @@ public final class PluginManager {
         }
     }
 
-    // ------------------------------------------------------------------
-    // 内部工具
-    // ------------------------------------------------------------------
+    // 内部工具 //
 
     /**
      * 子进程 java 可执行文件。
@@ -303,7 +302,7 @@ public final class PluginManager {
     /** 从状态文件加载启用集合。文件不存在 → 全禁用（用户确认的默认策略）。 */
     private void loadState() {
         enabledIds.clear();
-        Path file = launcherRoot.resolve(STATE_FILE);
+        Path file = Path.of(STATE_FILE);
         if (!Files.isRegularFile(file)) {
             return;
         }
@@ -319,7 +318,7 @@ public final class PluginManager {
 
     /** 持久化启用集合到状态文件（覆盖写入）。 */
     private void saveState() {
-        Path file = launcherRoot.resolve(STATE_FILE);
+        Path file = Path.of(STATE_FILE);
         try {
             Files.createDirectories(file.getParent());
             State state = new State();

@@ -16,19 +16,19 @@
            prefWidth="520" prefHeight="325"
            styleClass="splash-root">
 
-    <!-- ============ 第 1 层：背景画布 ============ -->
+    <!-- 第 1 层：背景画布 -->
     <Canvas fx:id="bgCanvas" width="520" height="325"/>
 
-    <!-- ============ 第 2 层：光效画布（ADD + Bloom 在 Java 里设置） ============ -->
+    <!-- 第 2 层：光效画布（ADD + Bloom 在 Java 里设置） -->
     <Canvas fx:id="glowCanvas" width="520" height="325"/>
 
-    <!-- ============ 第 3 层：暗角遮罩 ============ -->
+    <!-- 第 3 层：暗角遮罩 -->
     <Region styleClass="mask-vignette" mouseTransparent="true"/>
 
-    <!-- ============ 第 4 层：边缘压暗 ============ -->
+    <!-- 第 4 层：边缘压暗 -->
     <Region styleClass="mask-edge" mouseTransparent="true"/>
 
-    <!-- ============ 第 5 层：UI（标题 / 副标题 / 进度 / 状态） ============ -->
+    <!-- 第 5 层：UI（标题 / 副标题 / 进度 / 状态） -->
     <VBox fx:id="uiLayer"
           alignment="BOTTOM_CENTER"
           spacing="0"
@@ -94,14 +94,14 @@
         </VBox>
     </VBox>
 
-    <!-- ============ 第 6 层：版权 ============ -->
+    <!-- 第 6 层：版权 -->
     <Text fx:id="footerText"
           text=""
           styleClass="footer-text"
           StackPane.alignment="BOTTOM_CENTER"
           translateY="-9"/>
 
-    <!-- ============ 第 7 层：噪点 ============ -->
+    <!-- 第 7 层：噪点 -->
     <Region fx:id="noiseLayer" styleClass="noise-layer"
             mouseTransparent="true"/>
 </StackPane>

@@ -101,7 +101,7 @@ public class MinecraftAuthLauncherDeviceCode {
      * 从本地保存的 refresh_token 刷新，并更新凭证
      */
     public void refreshAndSave() throws Exception {
-        Path credPath = Paths.get(System.getProperty("user.home"), ".starlight-launcher", "login.json");
+        Path credPath = com.example.starlight.config.AppDirs.loginJson();
         if (!Files.exists(credPath)) {
             log.warn("No saved login info found, please run full login first (run without arguments).");
             return;
@@ -299,7 +299,7 @@ public class MinecraftAuthLauncherDeviceCode {
         }
     }
 
-    // ---------- 原有认证方法 (Xbox, XSTS, Minecraft, Profile) ----------
+    // 原有认证方法 (Xbox, XSTS, Minecraft, Profile) //
     private String xboxAuth(HttpClient client, String msToken) throws Exception {
         String json = "{" +
                 "\"Properties\":{\"AuthMethod\":\"RPS\",\"SiteName\":\"user.auth.xboxlive.com\",\"RpsTicket\":\"d=" + msToken + "\"}," +
@@ -396,7 +396,7 @@ public class MinecraftAuthLauncherDeviceCode {
         this.username = getJsonStr(profileJson, "name");
     }
 
-    // ---------- 浏览器 & JSON 解析 ----------
+    // 浏览器 & JSON 解析 //
 
     /**
      * 打开系统默认浏览器访问登录页（多级降级，避免部分设备自动打开失败）：
@@ -467,7 +467,7 @@ public class MinecraftAuthLauncherDeviceCode {
         CredentialStore.saveCredentials(accessToken, refreshToken, uuid, userName);
 
         // 同时保留旧的 login.json 用于兼容
-        Path userConfigPath = Paths.get(System.getProperty("user.home"), ".starlight-launcher", "login.json");
+        Path userConfigPath = com.example.starlight.config.AppDirs.loginJson();
         saveJson(userConfigPath, accessToken, uuid, userName, refreshToken);
     }
 
@@ -510,9 +510,7 @@ public class MinecraftAuthLauncherDeviceCode {
         return null;
     }
 
-    // ================================================================
-    //  静默刷新（纯内存操作，不依赖文件）
-    // ================================================================
+    // 静默刷新（纯内存操作，不依赖文件） //
 
     /** 静默刷新结果 */
     public static class RefreshResult {
@@ -706,9 +704,7 @@ public class MinecraftAuthLauncherDeviceCode {
         return dci;
     }
 
-    // ================================================================
-    //  内部数据类
-    // ================================================================
+    // 内部数据类 //
 
     /** 设备代码响应信息 */
     public static class DeviceCodeInfo {

@@ -57,6 +57,11 @@
             <version>2.0.16</version>
         </dependency>
         <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jul-to-slf4j</artifactId>
+            <version>2.0.16</version>
+        </dependency>
+        <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>1.5.16</version>
@@ -105,17 +110,10 @@
             <version>17.0.6</version>
         </dependency>
 
-        <!-- StarlightLauncher core library (local JAR in lib/) -->
-        <!-- 注意：这里的 2.0.0 是「核心库」自己的 artifact 版本，跟启动器版本（1.0.0）是两回事，
-             不要为了统一版本号把它改掉——改了就得同步重命名 lib/StarlightLauncher-2.0.0.jar 并重新 install-file。
-             使用前请先安装到本地仓库：
-             mvn install:install-file -Dfile=lib/StarlightLauncher-2.0.0.jar -DgroupId=com.starlight -DartifactId=starlight-launcher-core -Dversion=2.0.0 -Dpackaging=jar -->
-        <dependency>
-            <groupId>com.starlight</groupId>
-            <artifactId>starlight-launcher-core</artifactId>
-            <version>2.0.0</version>
-        </dependency>
-
+        <!-- 启动库（原 com.startgame 核心库）已集成进本项目源码：
+             位于 src/main/java/com/example/starlight/startmc（含 launcher 子包），
+             不再依赖外部 jar，无需 install-file 到本地仓库。
+             历史说明：lib/StarlightLauncher-2.0.0.jar 与 .m2 中的旧坐标仅作备份保留。 -->
         <!-- Kotlin -->
         <dependency>
             <groupId>org.jetbrains.kotlin</groupId>
@@ -172,6 +170,10 @@
                     <include>**/*.fxml</include>
                     <include>**/*.css</include>
                     <include>**/*.png</include>
+                    <!-- 节日壁纸（wallpaper/ 下，支持 jpg/jpeg/webp） -->
+                    <include>**/*.jpg</include>
+                    <include>**/*.jpeg</include>
+                    <include>**/*.webp</include>
                     <include>**/*.properties</include>
                     <include>**/*.xml</include>
                     <include>**/*.html</include>
@@ -388,6 +390,10 @@
                 <version>1.0.29</version>
                 <configuration>
                     <mainClass>com.example.starlight.MainApp</mainClass>
+                    <!-- 原生嵌入启动器图标（链接期由 IconGroup.obj 完成）。
+                         不要再用 rcedit 后处理改写 exe 资源，否则会破坏 GraalVM 原生镜像的 PE 资源节，
+                         导致 Windows 报“此应用无法在你的电脑上运行”。 -->
+                    <iconPath>src/windows/assets/icon.ico</iconPath>
                     <verbose>true</verbose>
                     <!-- 与项目 JavaFX 17 主版本匹配的 Gluon 静态 SDK（用于 native-image 静态链接） -->
                     <javafxStaticSdkVersion>17.0.8</javafxStaticSdkVersion>
@@ -397,7 +403,7 @@
                          写单反斜杠 \. 会让 resourceconfig-x86_64-windows.json 成为非法 JSON,
                          native-image 报 "Invalid escape character". step3-fix.ps1 里还有兜底修复. -->
                     <resourcesList>
-                        <list>.*\\.(fxml|css|png|jpg|jpeg|ico|svg|properties|json|xml|html|txt|ttf|otf|dll|dat|so|dylib)$</list>
+                        <list>.*\\.(fxml|css|png|jpg|jpeg|webp|ico|svg|properties|json|xml|html|txt|ttf|otf|dll|dat|so|dylib)$</list>
                     </resourcesList>
                     <!-- Gson 反射模型类：Native Image 关闭运行期反射，必须显式注册
                          （LaunchRecord 最近游玩 / Community* 社区登录 / Modrinth* 模组库 / CacheEntry） -->
@@ -568,6 +574,10 @@
                          native/management_stub.c 的 PDH 桩（JDK 类桩不受此限制） -->
                     <jniList>
                         <list>com.example.starlight.util.SystemInfoMonitor</list>
+                        <!-- 帧插值 DLL：native 方法在 Native Image 下必须显式注册，
+                             否则运行期按符号名查找会抛 UnsatisfiedLinkError。
+                             本类只做 JNI 转发，不需要反射配置。 -->
+                        <list>com.example.starlight.newui.framegen.FramegenNative</list>
                     </jniList>
                 </configuration>
             </plugin>

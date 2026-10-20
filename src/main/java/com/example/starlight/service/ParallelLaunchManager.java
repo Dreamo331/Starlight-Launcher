@@ -1,7 +1,7 @@
 package com.example.starlight.service;
 
 import com.example.starlight.config.StarlightConfig;
-import com.example.starlight.download.GameResourceCompleter;
+import com.example.starlight.download.task.GameResourceCompleter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

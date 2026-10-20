@@ -48,9 +48,7 @@ import java.util.List;
  */
 public final class CurseForgeAPI {
 
-    // ================================================================
-    //  API Key（本类为凭证唯一持有处）
-    // ================================================================
+    // API Key（本类为凭证唯一持有处） //
 
     /**
      * CurseForge 传统 API Key（{@code x-api-key} 认证）。
@@ -66,9 +64,7 @@ public final class CurseForgeAPI {
         return API_KEY != null && !API_KEY.isBlank();
     }
 
-    // ================================================================
-    //  接口常量
-    // ================================================================
+    // 接口常量 //
 
     /** Minecraft 在 CurseForge 中的固定 gameId */
     public static final int GAME_ID_MINECRAFT = 432;
@@ -109,9 +105,7 @@ public final class CurseForgeAPI {
     public static final int HASH_ALGO_SHA1 = 1;
     public static final int HASH_ALGO_MD5 = 2;
 
-    // ================================================================
-    //  地址
-    // ================================================================
+    // 地址 //
 
     /** 官方 API 根地址 */
     private static final String OFFICIAL_BASE = "https://api.curseforge.com";
@@ -126,10 +120,7 @@ public final class CurseForgeAPI {
     /** 编辑器/网页地址前缀（用于拼项目主页链接） */
     private static final String WEBSITE_BASE = "https://www.curseforge.com/minecraft/";
 
-    // ================================================================
-    //  HTTP 基础设施
-    // ================================================================
-
+    // HTTP 基础设施 //
     private static final Gson GSON = new GsonBuilder().create();
 
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
@@ -148,9 +139,7 @@ public final class CurseForgeAPI {
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
-    // ================================================================
-    //  业务接口
-    // ================================================================
+    // 业务接口 //
 
     /**
      * 搜索项目。
@@ -319,9 +308,7 @@ public final class CurseForgeAPI {
         return WEBSITE_BASE + section + "/" + (slug == null ? "" : slug);
     }
 
-    // ================================================================
-    //  连接自检
-    // ================================================================
+    // 连接自检 //
 
     /**
      * 连接自检：返回人类可读的结果描述（供设置页「测试连接」按钮展示）。
@@ -346,9 +333,7 @@ public final class CurseForgeAPI {
         }
     }
 
-    // ================================================================
-    //  内部实现
-    // ================================================================
+    // 内部实现 //
 
     /** 最近一次成功请求使用的通道（"官方" / "镜像"），仅供 {@link #testConnection()} 展示 */
     private static volatile String lastChannel = "-";
@@ -376,7 +361,9 @@ public final class CurseForgeAPI {
     private static FetchResult fetch(String path, String postBody) throws IOException {
         StringBuilder errors = new StringBuilder();
 
-        boolean mirrorFirst = MIRROR_BREAKER.allowMirror();
+        // allowMirrorProbe：冷启动时只放行一个请求去试镜像，其余立即走官方，
+        // 避免下载中心打开瞬间十几个并发请求各自付一次镜像超时（惊群）
+        boolean mirrorFirst = MIRROR_BREAKER.allowMirrorProbe();
         String[] bases = mirrorFirst
                 ? new String[]{MIRROR_BASE, OFFICIAL_BASE}
                 : new String[]{OFFICIAL_BASE};
@@ -419,6 +406,8 @@ public final class CurseForgeAPI {
                 .timeout(REQUEST_TIMEOUT)
                 .header("Accept", "application/json")
                 .header("User-Agent", AppConfig.USER_AGENT);
+        // 显式请求 gzip：JDK HttpClient 不会自动带 Accept-Encoding（文件列表响应可达数百 KB）
+        com.example.starlight.util.HttpText.acceptGzip(builder);
         applyAuth(builder);
 
         HttpRequest request;
@@ -429,8 +418,8 @@ public final class CurseForgeAPI {
             request = builder.POST(HttpRequest.BodyPublishers.ofString(postBody, StandardCharsets.UTF_8)).build();
         }
 
-        HttpResponse<String> response = client.send(request,
-                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        HttpResponse<byte[]> response = client.send(request,
+                HttpResponse.BodyHandlers.ofByteArray());
 
         int code = response.statusCode();
         if (code >= 200 && code < 300) {
@@ -438,13 +427,15 @@ public final class CurseForgeAPI {
             if (AppConfig.DEBUG_MODE) {
                 System.err.println("[CurseForge] " + code + " " + url);
             }
-            return new FetchResult(response.body(), lastChannel);
+            // 按 Content-Encoding 解压后再以 UTF-8 解码（gzip 由 acceptGzip 显式请求）
+            return new FetchResult(com.example.starlight.util.HttpText.decode(response), lastChannel);
         }
         System.err.println("[CurseForge] HTTP " + code + " (" + (official ? "官方" : "镜像") + ") " + url
-                + " -> " + truncate(response.body()));
+                + " -> " + truncate(new String(response.body(), StandardCharsets.UTF_8)));
         // 抛出而不是返回 null：上层仍会换通道重试（catch 后继续），
         // 但失败原因（状态码 + 响应片段）会写进最终异常，不再是空括号
-        throw new IOException("HTTP " + code + " -> " + truncate(response.body()));
+        throw new IOException("HTTP " + code + " -> "
+                + truncate(new String(response.body(), StandardCharsets.UTF_8)));
     }
 
     /** 按凭证形态选择认证头：PAT 用 Bearer，传统 Key 用 x-api-key */

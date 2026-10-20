@@ -1,5 +1,6 @@
 package com.example.starlight;
 
+import com.example.starlight.config.AppDirs;
 import com.example.starlight.main.CliHandler;
 import com.example.starlight.main.ConsoleMode;
 import javafx.application.Application;
@@ -15,14 +16,32 @@ import java.time.LocalDateTime;
 public class MainApp {
 
     public static void main(String[] args) {
+        // 必须最先执行：确定用户级数据根目录（默认 ~/.starlight，--portable 回落工作目录），
+        // 并完成一次性历史数据迁移。任何早于这里的配置读取都会写错目录。
+        String[] afterPortable = AppDirs.initAndStrip(args);
         installCrashLogger();
+        installJulBridge();
         // --console 是「命令行启动模式」的显式开关，剥离后再进入 GUI/CLI 分流
         // （必须在分流之前处理：带参数启动会走 CliHandler 而开不了界面）
-        String[] rest = ConsoleMode.stripAndMaybeEnable(args);
+        String[] rest = ConsoleMode.stripAndMaybeEnable(afterPortable);
         if (rest.length > 0) {
             CliHandler.processCommandArgs(rest);
         } else {
             Application.launch(JavaFXLauncher.class, rest);
+        }
+    }
+
+    /**
+     * 安装 JUL→SLF4J 桥：插件系统（PluginManager / PluginScanner / PluginApiServer / API）
+     * 使用 java.util.logging 输出，默认不走 logback，导致其日志没有级别颜色；
+     * 桥接后统一走 logback 的级别标识与控制台颜色。
+     */
+    private static void installJulBridge() {
+        try {
+            java.util.logging.LogManager.getLogManager().reset();
+            org.slf4j.bridge.SLF4JBridgeHandler.install();
+        } catch (Throwable ignored) {
+            // 桥安装失败不影响启动器主功能
         }
     }
 

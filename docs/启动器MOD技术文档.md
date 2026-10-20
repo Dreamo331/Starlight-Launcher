@@ -25,7 +25,7 @@
 
 启动器 MOD 是**启动器自身的扩展插件**，与 Minecraft 游戏的模组**没有任何关系**：
 
-- MOD 存放在启动器专属目录 `Starlight-Launcher\mod`，游戏不会读取该目录；
+- MOD 存放在启动器专属目录 `~/.starlight/mod`（便携模式下为 `Starlight-Launcher\mod`），游戏不会读取该目录；
 - 启动器不解析 MC 版本、加载器等信息，不参与游戏的 mods 目录管理；
 - 启动器 MOD 只能访问启动器通过本地 HTTP 服务暴露的 API（数据接口），自行负责 UI 展示。
 
@@ -35,7 +35,7 @@
 
 | 概念 | 说明 |
 |---|---|
-| MOD 目录 | `<启动器根目录>\Starlight-Launcher\mod`，存放 MOD 的可执行 JAR |
+| MOD 目录 | `~/.starlight/mod`（便携模式：`<启动器根目录>\Starlight-Launcher\mod`），存放 MOD 的可执行 JAR |
 | 元数据文件 | JAR 包**根目录**下的 `launcher-plugin.json`（启动器只读 JSON，不加载任何类） |
 | 进程隔离 | MOD 以独立子进程 `java -jar <MOD.jar>` 运行，与启动器不共用 ClassLoader；崩溃不影响启动器 |
 | 数据边界 | 启动器只提供**原始数据**（JSON 字节流），一切 UI 由 MOD 自己实现 |
@@ -44,11 +44,10 @@
 ## 三、目录与文件约定
 
 ```
-<启动器根目录>/
-└── Starlight-Launcher/
-    ├── mod/                    # MOD 目录（放入 *.jar 即可被扫描）
-    │   └── starlight-mod.jar   # MOD 可执行 JAR
-    └── plugins-state.json      # MOD 启用状态（{"enabled": ["plugin-id", ...]}）
+~/.starlight/                     # 用户数据目录（便携模式为 <启动器根目录>/Starlight-Launcher/）
+├── mod/                    # MOD 目录（放入 *.jar 即可被扫描）
+│   └── starlight-mod.jar   # MOD 可执行 JAR
+└── plugins-state.json      # MOD 启用状态（{"enabled": ["plugin-id", ...]}）
 ```
 
 - MOD JAR 内必须包含 `launcher-plugin.json`（位于 JAR 根目录），否则被跳过；
@@ -83,7 +82,7 @@
 
 ```
 启动器启动
-  └─ PluginScanner 扫描 Starlight-Launcher/mod 下的 *.jar
+  └─ PluginScanner 扫描 ~/.starlight/mod 下的 *.jar
        └─ 读取 launcher-plugin.json（只读 JSON，不加载类）
             └─ 加载 plugins-state.json 启用状态
                  └─ 自动拉起所有已启用 MOD（子进程）
@@ -170,7 +169,7 @@ MOD 主动发起：
 2. 修改 `launcher-plugin.json`（id / name / version / description / main_class）；
 3. 修改主类中的身份常量与业务逻辑（可参考模板中的完整交互流程）；
 4. `mvn clean package` 构建出可执行 fat JAR；
-5. 将 JAR 复制到 `Starlight-Launcher\mod`；
+5. 将 JAR 复制到 `~/.starlight/mod`（便携模式为 `Starlight-Launcher\mod`）；
 6. 在启动器「模组」页启用，观察启动器控制台日志验证。
 
 详细步骤见《启动器MOD模板/使用说明.md》。

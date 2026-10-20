@@ -108,8 +108,14 @@ public final class VersionSettingsPage {
     /** 滑块范围，与 JvmPage 的最内存滑块上限一致 */
     private static final double MEM_SLIDER_MIN = 1024;
     private static final double MEM_SLIDER_MAX = 16384;
+    /**
+     * 最小内存滑块的下限：与全局「Java 与内存」页的最小内存滑块一致（512），
+     * 不能用 {@link #MEM_SLIDER_MIN}（1024）——版本里已存的 512 会被顶上去，
+     * 进页就误报「未保存修改」，保存后还会把 512 悄悄改成 1024。
+     */
+    private static final double MIN_MEM_SLIDER_MIN = 512;
 
-    // ==================== 页面状态（页面实例常驻，每次 build 重置） ====================
+    // 页面状态（页面实例常驻，每次 build 重置） //
 
     /** 全局配置快照：本页构建期间固定，保存动作基于它判断「与全局相同 → 恢复继承」 */
     private Map<String, String> globalIni = Map.of();
@@ -141,7 +147,7 @@ public final class VersionSettingsPage {
     private final Map<String, String> versionMetaCache = new HashMap<>();
     private final Map<String, Image> versionIconImageCache = new HashMap<>();
 
-    // ---- 控件引用（每次重建卡片时更新） ----
+    // 控件引用（每次重建卡片时更新） //
     private ComboBox<VersionItem> versionCombo;
     private boolean comboGuard = false;
     private Label versionSummary;
@@ -150,10 +156,12 @@ public final class VersionSettingsPage {
 
     private TextField javaField;
     private Label javaNote;
+    private CheckBox autoJavaBox;
 
     private Slider memSlider;
     private Label memValue;
-    private TextField minMemField;
+    private Slider minMemSlider;
+    private Label minMemValue;
 
     private TextArea jvmArea;
     private ComboBox<String> jvmModeCombo;
@@ -177,7 +185,7 @@ public final class VersionSettingsPage {
         this.host = host;
     }
 
-    // ==================== 页面骨架 ====================
+    // 页面骨架 //
 
     public Node build() {
         cardStatuses.clear();
@@ -271,7 +279,7 @@ public final class VersionSettingsPage {
         return PageKit.settingsCardStacked("版本独立设置", "", body);
     }
 
-    // ==================== 卡片脚手架 ====================
+    // 卡片脚手架 //
 
     /** 一张卡片构建完成后登记的状态（标签 + 恢复链接 + 单卡重载） */
     private static final class CardStatus {
@@ -377,7 +385,7 @@ public final class VersionSettingsPage {
         return l;
     }
 
-    // ==================== 1. 版本选择 ====================
+    // 1. 版本选择 //
 
     /** 下拉里的一个版本项（加载器信息与副标题按需懒加载，避免版本多时一次性读全部 JSON） */
     private record VersionItem(String dirName, boolean active) {
@@ -583,7 +591,7 @@ public final class VersionSettingsPage {
         }
     }
 
-    // ---- 版本下拉的单元格 ----
+    // 版本下拉的单元格 //
 
     /** 候选行：加载器图标 + 版本名 + 副标题 + 选中点（构建轻量：版本多时不拖慢打开） */
     private final class VersionListCell extends ListCell<VersionItem> {
@@ -682,10 +690,20 @@ public final class VersionSettingsPage {
         }
     }
 
-    // ==================== 2. Java 路径 ====================
+    // 2. Java 路径 //
 
     private VBox buildJavaCard() {
         String path = VersionConfigManager.PATH_JAVA_PATH;
+
+        // 自动选择开关（仅对该版本生效）：开启时忽略手动 java.path，关闭时强制用手动路径
+        String autoPath = VersionConfigManager.PATH_AUTO_JAVA;
+        autoJavaBox = PageKit.toggle(VersionConfigManager.effectiveAutoJava(globalIni, gameDir, version));
+        autoJavaBox.setOnAction(e -> {
+            refreshJavaControlsDisabled();
+            markDirty();
+        });
+        HBox autoRow = settingRow("自动选择 Java",
+                "开启时按游戏版本自动匹配本机 Java；关闭时使用下方手动路径", new HBox(autoJavaBox), false);
 
         javaField = new TextField(effective(path));
         javaField.getStyleClass().addAll("input-field", "vset-mono");
@@ -721,12 +739,23 @@ public final class VersionSettingsPage {
             if (b) pathField.getStyleClass().add("focused");
         });
 
-        VBox body = new VBox(10, pathField, note);
+        refreshJavaControlsDisabled();
+
+        VBox body = new VBox(10, autoRow, pathField, note);
         body.setMinWidth(0);
-        return cardShell("java", "cpu", "Java 路径", List.of(path), null, body, () -> {
+        return cardShell("java", "cpu", "Java 路径", List.of(path, autoPath), null, body, () -> {
+            autoJavaBox.setSelected(VersionConfigManager.effectiveAutoJava(globalIni, gameDir, version));
             javaField.setText(effective(path));
             refreshJavaNote();
+            refreshJavaControlsDisabled();
         });
+    }
+
+    /** 自动选择开启时禁用手动路径行（与 JvmPage 语义一致） */
+    private void refreshJavaControlsDisabled() {
+        if (autoJavaBox == null || javaField == null) return;
+        boolean on = autoJavaBox.isSelected();
+        javaField.setDisable(on);
     }
 
     private void browseJavaExe() {
@@ -777,7 +806,7 @@ public final class VersionSettingsPage {
         }
     }
 
-    // ==================== 3. 内存分配 ====================
+    // 3. 内存分配 //
 
     private VBox buildMemoryCard() {
         String minPath = VersionConfigManager.PATH_MIN_MEMORY;
@@ -803,6 +832,8 @@ public final class VersionSettingsPage {
             int v = (int) Math.round(b.doubleValue());
             memValue.setText(String.valueOf(v));
             refreshMemoryChips();
+            // 最小内存上限跟随最大内存：最大内存调低时把最小内存一并收回来，避免出现「最小 > 最大」
+            syncMinSliderRange();
             if (!loading) markDirty();
         });
 
@@ -825,27 +856,72 @@ public final class VersionSettingsPage {
         }
         refreshMemoryChips();
 
-        minMemField = new TextField(effective(minPath));
-        minMemField.getStyleClass().addAll("input-field", "input-field-sm", "vset-mono");
-        minMemField.setMinWidth(Region.USE_PREF_SIZE);
+        minMemValue = new Label();
+        minMemValue.getStyleClass().add("vset-value");
         Label minUnit = new Label("MB");
-        minUnit.getStyleClass().add("vset-unit-label");
-        HBox minBox = new HBox(8, minMemField, minUnit);
-        minBox.setAlignment(Pos.CENTER_LEFT);
+        minUnit.getStyleClass().add("vset-value-unit");
+        HBox minValueBox = new HBox(5, minMemValue, minUnit);
+        minValueBox.setAlignment(Pos.BASELINE_LEFT);
         HBox minRow = settingRow("最小内存",
-                "启动时预分配（-Xms）；一般无需修改", minBox, true);
-        minMemField.textProperty().addListener((o, a, b) -> markDirty());
+                "启动时预分配（-Xms）；一般无需修改", minValueBox, true);
 
-        VBox body = new VBox(10, headRow, memSlider, chips, minRow);
+        // 滑块下限自适应：若版本里存的最小内存比默认下限还小（手工改过配置文件），
+        // 下限临时降到该值，否则滑块会把值顶上去 → 一进页就误报「未保存修改」。
+        int minInit = PageKit.parseIntSafe(effective(minPath), 2048);
+        minMemSlider = new Slider(Math.min(MIN_MEM_SLIDER_MIN, minInit), MEM_SLIDER_MAX, minInit);
+        minMemSlider.getStyleClass().add("vset-slider");
+        minMemSlider.setBlockIncrement(512);
+        minMemSlider.setMinWidth(240);
+        minMemSlider.setMaxWidth(Double.MAX_VALUE);
+        minMemSlider.valueProperty().addListener((o, a, b) -> {
+            minMemValue.setText(String.valueOf((int) Math.round(b.doubleValue())));
+            if (!loading) markDirty();
+        });
+        applyMinMemValue(minInit);
+
+        VBox body = new VBox(10, headRow, memSlider, chips, minRow, minMemSlider);
         body.setMinWidth(0);
         return cardShell("memory", "memory", "内存分配", List.of(minPath, maxPath), null, body, () -> {
             loading = true;
             memSlider.setValue(clampMem(PageKit.parseIntSafe(effective(maxPath), 4096)));
             memValue.setText(String.valueOf((int) Math.round(memSlider.getValue())));
             refreshMemoryChips();
-            minMemField.setText(effective(minPath));
+            applyMinMemValue(PageKit.parseIntSafe(effective(minPath), 2048));
             loading = false;
         });
+    }
+
+    /**
+     * 把最小内存滑块设到指定值，并按当前最大内存收紧上限（最小内存不允许超过最大内存）。
+     * 下限同样自适应：值比默认下限小时临时放宽下限，保证「设进去的值读回来还是它」——
+     * 否则 {@code setValue} 会被滑块钳到下限，进页就误报「未保存修改」。
+     */
+    private void applyMinMemValue(int value) {
+        if (minMemSlider == null) return;
+        double lower = Math.min(MIN_MEM_SLIDER_MIN, Math.max(0, value));
+        double upper = memSlider == null
+                ? MEM_SLIDER_MAX
+                : Math.max(lower, Math.round(memSlider.getValue()));
+        minMemSlider.setMin(lower);
+        minMemSlider.setMax(upper);
+        minMemSlider.setValue(value);
+        if (minMemValue != null) {
+            minMemValue.setText(String.valueOf((int) Math.round(minMemSlider.getValue())));
+        }
+    }
+
+    /** 最大内存变化时同步最小内存的滑块上限（最小内存不允许超过最大内存） */
+    private void syncMinSliderRange() {
+        if (minMemSlider == null || memSlider == null) return;
+        double lower = minMemSlider.getMin();
+        double cap = Math.max(lower, Math.round(memSlider.getValue()));
+        minMemSlider.setMax(cap);
+        if (minMemSlider.getValue() > cap) {
+            minMemSlider.setValue(cap);
+        }
+        if (minMemValue != null) {
+            minMemValue.setText(String.valueOf((int) Math.round(minMemSlider.getValue())));
+        }
     }
 
     private static String chipLabel(int mem) {
@@ -871,7 +947,7 @@ public final class VersionSettingsPage {
         return Math.max((int) MEM_SLIDER_MIN, Math.min((int) MEM_SLIDER_MAX, value));
     }
 
-    // ==================== 4. JVM 参数 ====================
+    // 4. JVM 参数 //
 
     private VBox buildJvmCard() {
         String path = VersionConfigManager.PATH_JVM_ARGS;
@@ -883,6 +959,9 @@ public final class VersionSettingsPage {
         jvmArea.setMaxWidth(Double.MAX_VALUE);
         jvmArea.setMinWidth(0);
         jvmArea.textProperty().addListener((o, a, b) -> markDirty());
+
+        // 右下角三角把手：拖动调高（与「Java 与内存」页同款；高度不持久化，每次进页回默认 3 行）
+        StackPane jvmEditor = PageKit.resizableTextArea(jvmArea, 0, null);
 
         jvmModeCombo = new ComboBox<>();
         jvmModeCombo.getItems().addAll(JVM_ARG_MODES.keySet());
@@ -901,7 +980,7 @@ public final class VersionSettingsPage {
         HBox controls = new HBox(10, jvmModeCombo);
         controls.setAlignment(Pos.CENTER_LEFT);
 
-        VBox body = new VBox(10, jvmArea, controls);
+        VBox body = new VBox(10, jvmEditor, controls);
         body.setMinWidth(0);
         return cardShell("jvm", "sliders", "JVM 参数", List.of(path), null, body, () -> {
             jvmModeReloading = true;
@@ -940,7 +1019,7 @@ public final class VersionSettingsPage {
         return mode != null && !"replace".equals(mode) && MODE_VERBS.containsKey(mode);
     }
 
-    // ==================== 5. 窗口设置 ====================
+    // 5. 窗口设置 //
 
     private VBox buildWindowCard() {
         String widthPath = VersionConfigManager.PATH_WIDTH;
@@ -994,7 +1073,7 @@ public final class VersionSettingsPage {
         if (on) sizeGroup.getStyleClass().add("disabled");
     }
 
-    // ==================== 6. 版本隔离 ====================
+    // 6. 版本隔离 //
 
     private VBox buildIsolationCard() {
         String path = VersionConfigManager.PATH_VERSION_ISOLATION;
@@ -1049,7 +1128,7 @@ public final class VersionSettingsPage {
         }
     }
 
-    // ==================== 6.5 游戏语言 ====================
+    // 6.5 游戏语言 //
 
     private VBox buildLanguageCard() {
         String path = VersionConfigManager.PATH_GAME_LANGUAGE;
@@ -1084,7 +1163,7 @@ public final class VersionSettingsPage {
         return GameLanguage.getCodeByDisplayName(languageCombo.getValue());
     }
 
-    // ==================== 7. 游戏参数 ====================
+    // 7. 游戏参数 //
 
     private VBox buildGameArgsCard() {
         String path = VersionConfigManager.PATH_GAME_ARGS;
@@ -1104,7 +1183,7 @@ public final class VersionSettingsPage {
                 gameArgsField.setText(effective(path)));
     }
 
-    // ==================== 8/9. 启动前 / 退出后命令 ====================
+    // 8/9. 启动前 / 退出后命令 //
 
     private VBox buildPreCommandCard() {
         String path = VersionConfigManager.PATH_PRE_LAUNCH;
@@ -1118,7 +1197,10 @@ public final class VersionSettingsPage {
         preArea.setPromptText("在游戏启动前执行，例如备份存档…");
         preArea.textProperty().addListener((o, a, b) -> markDirty());
 
-        VBox body = new VBox(10, preArea);
+        // 右下角三角把手：拖动调高
+        StackPane preEditor = PageKit.resizableTextArea(preArea, 0, null);
+
+        VBox body = new VBox(10, preEditor);
         body.setMinWidth(0);
         return cardShell("pre", "bolt", "启动前命令", List.of(path), null, body, () ->
                 preArea.setText(effective(path)));
@@ -1136,13 +1218,16 @@ public final class VersionSettingsPage {
         postArea.setPromptText("在游戏退出后执行，例如同步存档…");
         postArea.textProperty().addListener((o, a, b) -> markDirty());
 
-        VBox body = new VBox(10, postArea);
+        // 右下角三角把手：拖动调高
+        StackPane postEditor = PageKit.resizableTextArea(postArea, 0, null);
+
+        VBox body = new VBox(10, postEditor);
         body.setMinWidth(0);
         return cardShell("post", "power", "退出后命令", List.of(path), null, body, () ->
                 postArea.setText(effective(path)));
     }
 
-    // ==================== 底部操作栏 ====================
+    // 底部操作栏 //
 
     private HBox buildFooter() {
         footerDot = new Region();
@@ -1200,7 +1285,10 @@ public final class VersionSettingsPage {
         if (loading) return;
         boolean any = false;
         any |= !javaField.getText().equals(effective(VersionConfigManager.PATH_JAVA_PATH));
-        any |= !minMemField.getText().trim().equals(effective(VersionConfigManager.PATH_MIN_MEMORY));
+        any |= autoJavaBox.isSelected()
+                != VersionConfigManager.effectiveAutoJava(globalIni, gameDir, version);
+        any |= (int) Math.round(minMemSlider.getValue())
+                != PageKit.parseIntSafe(effective(VersionConfigManager.PATH_MIN_MEMORY), 2048);
         any |= (int) Math.round(memSlider.getValue())
                 != PageKit.parseIntSafe(effective(VersionConfigManager.PATH_MAX_MEMORY), 4096);
         any |= !jvmArea.getText().equals(jvmArgsInputValue());
@@ -1220,15 +1308,12 @@ public final class VersionSettingsPage {
 
     /** 统一保存：逐字段对比全局值写覆盖（与全局相同的字段自动恢复继承） */
     private void saveAll() {
-        String minS = minMemField.getText().trim();
+        String minS = String.valueOf((int) Math.round(minMemSlider.getValue()));
         String maxS = String.valueOf((int) Math.round(memSlider.getValue()));
         String widthS = widthField.getText().trim();
         String heightS = heightField.getText().trim();
 
-        if (!isNumeric(minS) || !isNumeric(maxS)) {
-            host.ui().toast("内存请填写数字（单位 MB）", "warning");
-            return;
-        }
+        // 两个滑块的范围已保证「最小 ≤ 最大」（syncMinSliderRange），这里只兜底
         if (PageKit.parseIntSafe(minS, 0) > PageKit.parseIntSafe(maxS, 0)) {
             host.ui().toast("最小内存不能大于最大内存", "warning");
             return;
@@ -1250,6 +1335,8 @@ public final class VersionSettingsPage {
 
         VersionConfigManager.setOverrideIfChanged(gameDir, version,
                 VersionConfigManager.PATH_JAVA_PATH, javaField.getText().trim(), globalIni);
+        VersionConfigManager.setBooleanOverrideIfChanged(gameDir, version,
+                VersionConfigManager.PATH_AUTO_JAVA, autoJavaBox.isSelected(), globalIni);
         VersionConfigManager.setOverrideIfChanged(gameDir, version,
                 VersionConfigManager.PATH_MIN_MEMORY, minS, globalIni);
         VersionConfigManager.setOverrideIfChanged(gameDir, version,
@@ -1314,7 +1401,7 @@ public final class VersionSettingsPage {
         }
     }
 
-    // ==================== 复制配置弹窗 ====================
+    // 复制配置弹窗 //
 
     /** 复制文件弹窗：单选目标版本（对齐参考稿的 modal 版式，复用 install-target 行样式） */
     private void openCopyModal() {
@@ -1334,7 +1421,7 @@ public final class VersionSettingsPage {
                 "modal-desc");
         body.getChildren().addAll(iconBox, title, desc);
 
-        // ---- 目标版本列表 ----
+        // 目标版本列表 //
         ToggleGroup group = new ToggleGroup();
         VBox list = new VBox(6);
         list.getStyleClass().add("install-target-list");
@@ -1399,7 +1486,7 @@ public final class VersionSettingsPage {
         PageKit.attachInertia(host, listScroll);
         body.getChildren().add(listScroll);
 
-        // ---- 按钮 ----
+        // 按钮 //
         Button cancel = new Button("取消");
         cancel.getStyleClass().add("modal-btn-cancel");
         cancel.setMaxWidth(Double.MAX_VALUE);
@@ -1475,7 +1562,7 @@ public final class VersionSettingsPage {
         return l;
     }
 
-    // ==================== 构建辅助 ====================
+    // 构建辅助 //
 
     private String effective(String path) {
         return VersionConfigManager.effectiveScalar(globalIni, gameDir, version, path);
@@ -1491,6 +1578,7 @@ public final class VersionSettingsPage {
 
     private static final Map<String, String> PATH_DISPLAY_NAMES = Map.ofEntries(
             Map.entry(VersionConfigManager.PATH_JAVA_PATH, "Java路径"),
+            Map.entry(VersionConfigManager.PATH_AUTO_JAVA, "自动选择Java"),
             Map.entry(VersionConfigManager.PATH_MIN_MEMORY, "最小内存"),
             Map.entry(VersionConfigManager.PATH_MAX_MEMORY, "最大内存"),
             Map.entry(VersionConfigManager.PATH_JVM_ARGS, "JVM参数"),

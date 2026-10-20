@@ -1,7 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
 import com.example.starlight.colorblind.ColorBlindOverlayManager;
-import com.example.starlight.download.HttpDownloadEngine;
+import com.example.starlight.download.task.OverlayDownloader;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.download.DownloadTaskCard;
@@ -44,11 +44,19 @@ public final class ColorBlindPage {
     public Node build() {
         VBox root = PageKit.settingsPage(ctx, "色盲辅助");
 
-        // ===== 矫正工具未安装：下载入口（exe 在位时整张卡片不出现）=====
+        // 未安装矫正工具：仅显示安装卡片（隔离引导），不渲染后续任何设置项。
+        // 下载成功后就地补全完整设置面板（无需手动重建页面）。
         if (!ColorBlindOverlayManager.isExeAvailable()) {
-            root.getChildren().add(buildMissingToolCard());
+            root.getChildren().add(buildMissingToolCard(root));
+            return root;
         }
 
+        buildSettingsCards(root);
+        return root;
+    }
+
+    /** 已安装形态的全部设置卡片（build() 主路径与下载后就地补全共用，避免两份逻辑漂移） */
+    private void buildSettingsCards(VBox root) {
         // 「启动后自动开启」在总开关之前创建：关闭总开关时要连带把它取消勾选（两个开关不该互相矛盾）
         CheckBox autoEnable = PageKit.toggle(
                 !"false".equalsIgnoreCase(ctx.config().getOrDefault(ColorBlindOverlayManager.KEY_AUTO_ENABLE, "true")));
@@ -58,7 +66,7 @@ public final class ColorBlindPage {
             ctx.toast("启动后自动开启: " + (autoEnable.isSelected() ? "已开启" : "已关闭"));
         });
 
-        // ===== 总开关 =====
+        // 总开关 //
         boolean enabled = "true".equalsIgnoreCase(ctx.config().getOrDefault(ColorBlindOverlayManager.KEY_MODE, "false"));
         CheckBox master = PageKit.toggle(enabled);
         master.setOnAction(e -> {
@@ -82,7 +90,7 @@ public final class ColorBlindPage {
                         + "关闭后本设置会被记住，重启启动器不会自动打开",
                 master));
 
-        // ===== 色障类型 =====
+        // 色障类型 //
         ComboBox<String> typeCombo = new ComboBox<>();
         typeCombo.getItems().addAll(ColorBlindOverlayManager.typeLabels());
         String currentType = ColorBlindOverlayManager.resolveType(ctx.config());
@@ -101,7 +109,7 @@ public final class ColorBlindPage {
         root.getChildren().add(PageKit.settingsCard("色障类型",
                 "选择与你情况最接近的类型；不确定时先用默认的绿色盲 deuteranopia", typeCombo));
 
-        // ===== 矫正强度 =====
+        // 矫正强度 //
         double currentStrength = ColorBlindOverlayManager.resolveStrength(ctx.config());
         Label strengthLabel = new Label("当前: " + ColorBlindOverlayManager.formatStrength(currentStrength));
         strengthLabel.getStyleClass().add("black-value-label");
@@ -129,7 +137,7 @@ public final class ColorBlindPage {
         root.getChildren().add(PageKit.settingsCardStacked("矫正强度",
                 "0.0 ~ 3.0，数值越大颜色偏移越明显、画面色彩也越夸张；建议从 1.0 开始微调", strengthRow));
 
-        // ===== 游戏窗口标题 =====
+        // 游戏窗口标题 //
         TextField windowField = new TextField(ctx.config().getOrDefault(ColorBlindOverlayManager.KEY_WINDOW, ""));
         windowField.getStyleClass().add("input-field");
         windowField.setPrefWidth(360);
@@ -157,14 +165,14 @@ public final class ColorBlindPage {
                         + "不填则使用默认的 " + ColorBlindOverlayManager.DEFAULT_WINDOW + "；填了自定义值就按自定义值匹配",
                 windowRow));
 
-        // ===== 自动开启 =====
+        // 自动开启 //
         // 勾选框与处理逻辑在方法开头已创建（总开关需要引用它），这里只挂卡片
         root.getChildren().add(PageKit.settingsCard("启动后自动开启",
                 "开启时：尚未设置过总开关的首次运行，启动器启动后色盲辅助默认开启；之后一律以总开关为准。"
                         + "手动关闭总开关会自动关闭本项，两个开关不会互相打架",
                 autoEnable));
 
-        // ===== 记住当前配置 =====
+        // 记住当前配置 //
         CheckBox remember = PageKit.toggle(
                 !"false".equalsIgnoreCase(ctx.config().getOrDefault(ColorBlindOverlayManager.KEY_REMEMBER, "true")));
         remember.setOnAction(e -> {
@@ -176,7 +184,7 @@ public final class ColorBlindPage {
                 "开启时：下次启动启动器沿用当前的色障类型 / 强度 / 窗口标题；关闭时：每次启动都恢复默认值",
                 remember));
 
-        // ===== 快速测试调节（本地网页工具）=====
+        // 快速测试调节（本地网页工具） //
         Label statusLabel = new Label(ColorBlindOverlayManager.statusText());
         statusLabel.getStyleClass().add("settings-card-desc");
         statusLabel.setWrapText(true);
@@ -218,12 +226,15 @@ public final class ColorBlindPage {
                         + "点「重启矫正工具进程」按当前数值立即重启矫正工具，游戏窗口在运行时马上能看到效果"
                         + "（矫正工具窗口内按 F10 可手动退出）",
                 tuneBox));
-
-        return root;
     }
 
-    /** 「矫正工具未安装」卡片：一键下载（走下载管理任务卡）与打开下载页两个入口 */
-    private Node buildMissingToolCard() {
+    /**
+     * 「矫正工具未安装」卡片：一键下载（走下载管理任务卡）与打开下载页两个入口。
+     *
+     * <p>未安装形态下本页只渲染这张卡（§6.9 隔离引导）。下载成功后把本卡从页面摘除，
+     * 并把完整设置面板就地补进 root，使用户不用离开页面即可继续配置。
+     */
+    private Node buildMissingToolCard(VBox root) {
         Button downloadBtn = AppIcons.button("download", "下载矫正工具");
         downloadBtn.getStyleClass().add("btn-primary");
         Button openPageBtn = AppIcons.button("external-link", "打开下载页");
@@ -235,16 +246,23 @@ public final class ColorBlindPage {
         buttons.setAlignment(Pos.CENTER_LEFT);
         VBox card = PageKit.settingsCardStacked("矫正工具未安装",
                 "色盲辅助依赖外部矫正工具 ColorBlindOverlay.exe（不随启动器分发）。点「下载矫正工具」"
-                        + "会自动下载并放到 Starlight-Launcher\\ColorBlindOverlay\\ 目录，无需手动安装；"
-                        + "也可以到下载页手动获取后自行放置",
+                        + "会自动下载并放到用户数据目录的 ColorBlindOverlay 文件夹，无需手动安装；"
+                        + "也可以到下载页手动获取后自行放置。安装完成前，下方矫正设置不可用",
                 buttons);
         downloadBtn.setOnAction(e -> downloadOverlay(downloadBtn, () -> {
-            // 下载成功后把「未安装」卡片从页面上摘掉（页面实例未重建时立即生效）
+            // 下载成功：先摘掉「未安装」卡片，再补全完整设置面板（页面实例未重建时立即生效）
             if (card.getParent() instanceof Pane holder) {
                 holder.getChildren().remove(card);
             }
+            appendInstalledPanels(root);
         }));
         return card;
+    }
+
+    /** 下载成功后就地补全的完整设置面板（与 build() 已安装形态共用 buildSettingsCards，避免两份逻辑漂移） */
+    private void appendInstalledPanels(VBox root) {
+        if (!ColorBlindOverlayManager.isExeAvailable()) return;
+        buildSettingsCards(root);
     }
 
     /** 通过下载管理任务卡下载矫正工具（进度 / 取消 / 失败重试与下载中心一致） */
@@ -262,9 +280,8 @@ public final class ColorBlindPage {
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
                 File target = ColorBlindOverlayManager.prepareDownloadTarget();
-                dialog.totalBytes(HttpDownloadEngine.probeFileSize(
-                        HttpDownloadEngine.HTTP_CLIENT, ColorBlindOverlayManager.DOWNLOAD_URL));
-                HttpDownloadEngine.downloadFileWithProgress(ColorBlindOverlayManager.DOWNLOAD_URL,
+                dialog.totalBytes(OverlayDownloader.probeSize(ColorBlindOverlayManager.DOWNLOAD_URL));
+                OverlayDownloader.download(ColorBlindOverlayManager.DOWNLOAD_URL,
                         target.toPath(), dialog::progress, dialog.cancelFlag());
                 dialog.finishFile(true);
                 dialog.finish(true, "已下载到 " + target.getAbsolutePath(), null);
@@ -275,7 +292,7 @@ public final class ColorBlindPage {
                     ctx.toast("色盲矫正工具已下载完成，下次启动游戏时自动生效");
                 });
             } catch (Exception ex) {
-                boolean cancelled = HttpDownloadEngine.CANCELLED_MESSAGE.equals(ex.getMessage());
+                boolean cancelled = OverlayDownloader.CANCELLED_MESSAGE.equals(ex.getMessage());
                 dialog.finishFile(false);
                 dialog.finish(false, cancelled ? "已取消下载" : "下载失败: " + ex.getMessage(), null);
                 Platform.runLater(() -> downloadBtn.setDisable(false));

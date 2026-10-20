@@ -110,7 +110,7 @@ public interface LauncherContext {
         ui().toast(msg);
     }
 
-    // ==================== 主壳状态与「立即应用」动作 ====================
+    // 主壳状态与「立即应用」动作 //
 
     /** 当前主题 key（light / dark / system） */
     String currentTheme();
@@ -120,6 +120,12 @@ public interface LauncherContext {
 
     /** 应用背景图片（读取配置后立即生效） */
     void applyBackgroundImage();
+
+    /**
+     * 自定义背景色管理（设置 → 主题与背景 → 自定义背景色）。
+     * <p>与壁纸、默认渐变三级共存：有壁纸时自定义色让位。
+     */
+    com.example.starlight.newui.ui.CustomThemeColor customThemeColor();
 
     /** 选择背景图片文件并应用，同时把文件名回显到 infoLabel */
     void chooseBackgroundImage(Label infoLabel);
@@ -154,7 +160,7 @@ public interface LauncherContext {
     /** 用系统默认程序打开文件或文件夹（失败仅提示） */
     void openFile(String path);
 
-    // ==================== 账号相关 ====================
+    // 账号相关 //
 
     /** 重新从磁盘加载配置表（账号切换等场景后调用） */
     void loadConfig();

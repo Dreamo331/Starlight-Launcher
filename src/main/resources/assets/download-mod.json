@@ -1,0 +1,31 @@
+{
+  "说明": "download.mod 提速模块的默认参数骨架（缺失的键在代码内回落默认值）。",
+  "运行时调参入口": "设置 → 下载 → 高级下载设置（对应 starlight-client.ini 的 DownloadThreads / DownloadPieceLimitKB / DownloadSplitPercent / DownloadMultithreadThresholdMB / DownloadLowSpeedKBps / DownloadSpeedLimitKBps，保存即生效）。本文件不再被运行时读取，仅作为参数默认值的对照说明。",
+  "threads": {
+    "min": 1,
+    "max": 64,
+    "default": 8,
+    "settingsSliderMax": 32
+  },
+  "speedLimit": {
+    "defaultKBps": 0,
+    "说明": "0 = 不限速；开启后只做全局令牌桶，不做线程级限速",
+    "lowThresholdKBps": 256
+  },
+  "piece": {
+    "filePieceLimitKB": 256,
+    "splitPercent": 60,
+    "multithreadThresholdMB": 4
+  },
+  "retry": {
+    "mergeAttempts": 3,
+    "requestTimeoutSeconds": 15,
+    "slowCutSeconds": 5,
+    "说明": "尚未接入 UI，仍为 RetryPolicy 类内常量（调错直接伤成功率）"
+  },
+  "coordinator": {
+    "seedIntervalMs": 20,
+    "speedWindowMs": 1000,
+    "说明": "播种周期尚未接入 UI"
+  }
+}

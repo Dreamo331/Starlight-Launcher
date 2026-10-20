@@ -42,7 +42,7 @@ public final class AppConfig {
     /** 版权年份 */
     public static final String COPYRIGHT_YEAR = "2026";
 
-    // ===== 运行开关（开发者选项页可实时切换） =====
+    // 运行开关（开发者选项页可实时切换） //
 
     /**
      * 调试模式：开启后记录底层页面刷新与网络数据包收发详情

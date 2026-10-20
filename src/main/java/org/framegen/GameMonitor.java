@@ -185,7 +185,7 @@ public class GameMonitor {
         }
     }
 
-    // ==================== 进程扫描（基于 WMI 读取真实命令行） ====================
+    // 进程扫描（基于 WMI 读取真实命令行） //
 
     private boolean scanForMinecraft() {
         List<String> lines = this.readJavaProcessCommandLines();
@@ -356,7 +356,7 @@ public class GameMonitor {
         return v;
     }
 
-    // ==================== options.txt 全自动搜索 ====================
+    // options.txt 全自动搜索 //
 
     /**
      * 全自动搜索 Minecraft 的 options.txt（傻瓜式，无需手动配置游戏目录）。

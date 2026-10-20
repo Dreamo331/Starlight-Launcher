@@ -14,9 +14,37 @@ public class NeoForgeProvider implements LoaderProvider {
     private static final String NEOFORGE_MAVEN_METADATA =
             "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml";
 
+    /**
+     * 全局 metadata 缓存：这个文件是<b>全 NeoForge 版本列表</b>（1835 个版本），
+     * 与 MC 版本无关。旧实现每次查配置页都重新拉一遍 66.5KB，而官方源实测
+     * 3/3 全部超时（21~23s）、镜像 5.9s~15s 大幅波动——NeoForge 经常查不到
+     * 就是这个原因。这里缓存一次，后续查询（含不同 MC 版本）直接复用。
+     *
+     * <p>TTL 15 分钟：NeoForge 发版频率低，15 分钟内的重复查询命中缓存即可秒回；
+     * 过期后由下一次查询异步刷新。失败不写缓存，方便立即重试。
+     */
+    private static volatile String cachedMetadata;
+    private static volatile long cachedMetadataAt;
+
+    private static final long METADATA_TTL_MS = 15 * 60_000L;
+
     public String name() { return "NeoForge"; }
     public String icon() { return ""; }
     public String fallbackUrl() { return "https://github.com/neoforged/NeoForge/releases"; }
+
+    /** 取全局 metadata（带 15 分钟缓存，命中直接复用，未命中联网拉取并写缓存） */
+    private String fetchMetadata() {
+        String cached = cachedMetadata;
+        if (cached != null && System.currentTimeMillis() - cachedMetadataAt < METADATA_TTL_MS) {
+            return cached;
+        }
+        String xml = VersionDownloadService.fetchString(NEOFORGE_MAVEN_METADATA);
+        if (xml != null) {
+            cachedMetadata = xml;
+            cachedMetadataAt = System.currentTimeMillis();
+        }
+        return xml;
+    }
 
     public LoaderVersion fetchVersion(String mcVersion) {
         try {
@@ -27,12 +55,7 @@ public class NeoForgeProvider implements LoaderProvider {
             String versionPrefix = getNeoForgePrefix(mcVersion);
             if (versionPrefix == null) return new LoaderVersion(name(), null, false, null);
 
-            // 先尝试 BMCLAPI（国内加速）
-            String xml = VersionDownloadService.fetchString(
-                    VersionDownloadService.BMCLAPI_BASE + "/maven/net/neoforged/neoforge/maven-metadata.xml");
-            if (xml == null) {
-                xml = VersionDownloadService.fetchString(NEOFORGE_MAVEN_METADATA);
-            }
+            String xml = fetchMetadata();
             if (xml == null) return new LoaderVersion(name(), null, false, null);
 
             return parseLatestVersion(xml, versionPrefix);
@@ -110,11 +133,8 @@ public class NeoForgeProvider implements LoaderProvider {
             String versionPrefix = getNeoForgePrefix(mcVersion);
             if (versionPrefix == null) return list;
 
-            String xml = VersionDownloadService.fetchString(
-                    VersionDownloadService.BMCLAPI_BASE + "/maven/net/neoforged/neoforge/maven-metadata.xml");
-            if (xml == null) {
-                xml = VersionDownloadService.fetchString(NEOFORGE_MAVEN_METADATA);
-            }
+            // 复用缓存：metadata 与 MC 版本无关，只拉一次
+            String xml = fetchMetadata();
             if (xml == null) return list;
 
             Pattern pattern = Pattern.compile("<version>([^<]+)</version>");

@@ -6,7 +6,7 @@ import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.update.UpdateInstaller;
 import com.example.starlight.util.UpdateChecker;
 
-import com.example.starlight.download.HttpDownloadEngine;
+import com.example.starlight.download.task.UpdateDownloader;
 import com.example.starlight.gui.UIGeneralControlClass;
 
 import javafx.animation.KeyFrame;
@@ -73,12 +73,20 @@ public final class UpdateCoordinator {
     }
 
     /**
-     * 降级来源提示：官方服务器正常时不显示；走 GitHub / Gitee 时明确告知，
-     * 便于用户（和排查问题的我们）知道官方更新服务当时不可用。
+     * 来源提示：降级来源（GitHub / Gitee）时告知官方服务不可用；
+     * 官方正常但下载源被替换为镜像时，明确告知「官方只检查、镜像下载」，
+     * 便于用户（和排查问题的我们）知道实际下载地址来自哪里。
      */
     private static String sourceHint(UpdateChecker.UpdateResult result) {
-        return result.source == null || result.source == UpdateChecker.Source.OFFICIAL
-                ? "" : "\n（官方更新服务不可用，本次版本信息来自 " + result.source.label() + "）";
+        if (result.source == null) return "";
+        if (result.source != UpdateChecker.Source.OFFICIAL) {
+            return "\n（官方更新服务不可用，本次版本信息来自 " + result.source.label() + "）";
+        }
+        String dl = result.downloadSourceLabel;
+        if (dl != null && !dl.isEmpty()) {
+            return "\n（版本信息来自官方服务器，安装包下载源：" + dl + "）";
+        }
+        return "";
     }
 
     /**
@@ -305,12 +313,12 @@ public final class UpdateCoordinator {
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
                 Files.deleteIfExists(newExe);
-                HttpDownloadEngine.downloadFileWithProgress(downloadUrl, newExe, pct -> Platform.runLater(() -> {
+                UpdateDownloader.downloadExe(downloadUrl, newExe, pct -> Platform.runLater(() -> {
                     if (!cancelled.get()) {
                         bar.setProgress(pct / 100.0);
                         statusLabel.setText("下载中 " + pct + "%");
                     }
-                }));
+                }), cancelled);
                 if (cancelled.get()) {
                     Files.deleteIfExists(newExe);
                     return;

@@ -1,6 +1,6 @@
 package com.example.starlight.ModsApi;
 
-import com.example.starlight.download.DownloadProvider;
+import com.example.starlight.download.source.DownloadProvider;
 import com.example.starlight.newui.AppConfig;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -246,7 +246,7 @@ public class ModrinthRemoteModRepository implements RemoteModRepository {
 
     @Override
     public Optional<RemoteMod.Version> getRemoteVersionByLocalFile(LocalModFile localModFile, Path file) {
-        return Optional.empty(); // TODO
+        return Optional.empty(); // TODO: Modrinth 无从本地文件反查版本的能力，暂返回空
     }
 
     @Override
@@ -320,7 +320,7 @@ public class ModrinthRemoteModRepository implements RemoteModRepository {
         }
     }
 
-    // ==================== 内部辅助 ====================
+    // 内部辅助 //
 
     private RemoteMod parseProject(JsonObject obj) {
         return parseProjectStatic(obj);
@@ -428,7 +428,7 @@ public class ModrinthRemoteModRepository implements RemoteModRepository {
             }
         }
 
-        // ====== 解析依赖关系 ======
+        // 解析依赖关系 //
         List<RemoteMod.Dependency> dependencyList = new ArrayList<>();
         if (obj.has("dependencies") && obj.get("dependencies").isJsonArray()) {
             JsonArray depsArray = obj.getAsJsonArray("dependencies");
@@ -464,7 +464,7 @@ public class ModrinthRemoteModRepository implements RemoteModRepository {
         );
     }
 
-    // ==================== HTTP 工具 ====================
+    // HTTP 工具 //
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -481,14 +481,25 @@ public class ModrinthRemoteModRepository implements RemoteModRepository {
      * 先付满 6 秒镜像超时，一页五六个请求叠加后列表要等十几秒才有反应。
      */
     private static final com.example.starlight.util.MirrorCircuitBreaker MIRROR_BREAKER =
-            new com.example.starlight.util.MirrorCircuitBreaker(2, 60_000L);
+            new com.example.starlight.util.MirrorCircuitBreaker(
+                    com.example.starlight.download.DownloadSettings.getBreakerThreshold(),
+                    com.example.starlight.download.DownloadSettings.breakerCooldownMs());
 
     private static String fetchString(String url) {
         String mirrored = url.startsWith(OFFICIAL_BASE)
                 ? MIRROR_BASE + url.substring(OFFICIAL_BASE.length())
                 : url;
         if (mirrored.equals(url)) return fetchOnce(url, false);
-        if (!MIRROR_BREAKER.allowMirror()) return fetchOnce(url, false);
+        // 大响应（版本列表）走「镜像 / 官方并行竞速」而不是「镜像优先串行」：
+        // 实测镜像取版本列表显著更慢（JEI 官方 2.3~3.8s vs 镜像 60.5s；
+        // 整合包 0.9~1.1s vs 12.2s），而串行策略下镜像「成功只是慢」，
+        // 永远不会触发回落，用户就要干等 60 秒。竞速后取先返回者，最坏 ≈ 较快的那个。
+        if (isLargePayload(url)) {
+            return fetchRacing(url, mirrored);
+        }
+        // allowMirrorProbe：冷启动时只放行一个请求去试镜像，其余立即走官方，
+        // 避免下载中心打开瞬间十几个并发请求各自付一次镜像超时（惊群）
+        if (!MIRROR_BREAKER.allowMirrorProbe()) return fetchOnce(url, false);
         String body = fetchOnce(mirrored, !mirrored.equals(url));
         if (body != null) {
             MIRROR_BREAKER.recordSuccess();
@@ -498,26 +509,73 @@ public class ModrinthRemoteModRepository implements RemoteModRepository {
         return fetchOnce(url, false);   // 镜像没取到，回落官方
     }
 
+    /** 该接口的响应是否为大体积（版本列表可达数 MB） */
+    private static boolean isLargePayload(String url) {
+        return url.contains("/version");
+    }
+
+    /**
+     * 镜像与官方同时发出，取<b>先拿到正文</b>的那个；两个都失败返回 null。
+     *
+     * <p>与 {@code VersionManifest.fetchFirstSuccessJson} 同一套「候选链并行竞速」思路：
+     * 不押注单一路径，谁先拿到完整正文就用谁。镜像快时享镜像的国内速度，
+     * 镜像慢（大响应常见）时也不会拖住用户。
+     */
+    private static String fetchRacing(String officialUrl, String mirrorUrl) {
+        java.util.concurrent.CompletableFuture<String> official =
+                java.util.concurrent.CompletableFuture.supplyAsync(() -> fetchOnce(officialUrl, false));
+        java.util.concurrent.CompletableFuture<String> mirror =
+                java.util.concurrent.CompletableFuture.supplyAsync(() -> fetchOnce(mirrorUrl, true));
+
+        // 汇聚口：任一路拿到正文即完成；两路都结束（含都失败）时以 null 完成，避免永久等待
+        java.util.concurrent.CompletableFuture<String> first = new java.util.concurrent.CompletableFuture<>();
+        official.thenAccept(v -> { if (v != null) first.complete(v); });
+        mirror.thenAccept(v -> {
+            if (v != null) {
+                MIRROR_BREAKER.recordSuccess();
+                first.complete(v);
+            } else {
+                MIRROR_BREAKER.recordFailure();
+            }
+        });
+        java.util.concurrent.CompletableFuture.allOf(official, mirror)
+                .thenRun(() -> first.complete(null));
+        try {
+            return first.get(REQUEST_TIMEOUT_LARGE.toSeconds() + 10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /** 镜像尝试的超时（比官方短）：镜像挂了也不会让回落官方等太久 */
     private static final Duration MIRROR_TIMEOUT = Duration.ofSeconds(6);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    /** 版本列表接口的放宽超时：响应体可达数 MB（gzip 后仍 1~2MB），小超时会误杀能下完的请求 */
+    private static final Duration MIRROR_TIMEOUT_LARGE = Duration.ofSeconds(30);
+    private static final Duration REQUEST_TIMEOUT_LARGE = Duration.ofSeconds(60);
 
     /** 单次 GET：2xx 返回响应体，其余情况返回 null（由上层决定是否换源重试） */
     private static String fetchOnce(String url, boolean mirror) {
         try {
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("User-Agent", AppConfig.USER_AGENT)
-                    .timeout(mirror ? MIRROR_TIMEOUT : REQUEST_TIMEOUT)
-                    .GET()
-                    .build();
-            HttpResponse<String> response = HTTP_CLIENT.send(request,
-                    // 显式 UTF-8：MCIM 镜像的 Content-Type 不带 charset，
-                    // ofString() 无参时回退 ISO-8859-1，会把中文文件名的 UTF-8 字节解成控制字符乱码，
-                    // 后续 URI.create(url) 直接抛 Illegal character in path（整合包“枪战.mrpack”实测踩中）
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                    .timeout(requestTimeout(url, mirror))
+                    .GET();
+            // 必须显式请求 gzip：JDK HttpClient 不会自动带 Accept-Encoding，
+            // 而版本列表接口的 JSON 极大（JEI 实测 6.9MB 未压缩 / 1.5MB gzip），
+            // 不压缩是详情页与版本列表慢的主因
+            com.example.starlight.util.HttpText.acceptGzip(builder);
+            HttpRequest request = builder.build();
+            // 用 ofByteArray 而非 ofString：正文可能是 gzip，交给 HttpText 按
+            // Content-Encoding 解压后再以 UTF-8 解码。显式 UTF-8 的原因见下方注释。
+            HttpResponse<byte[]> response = HTTP_CLIENT.send(request,
+                    HttpResponse.BodyHandlers.ofByteArray());
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                return response.body();
+                // 显式 UTF-8：MCIM 镜像的 Content-Type 不带 charset，
+                // 按 ISO-8859-1 解读会把中文文件名的 UTF-8 字节解成控制字符乱码，
+                // 后续 URI.create(url) 直接抛 Illegal character in path（整合包“枪战.mrpack”实测踩中）
+                return com.example.starlight.util.HttpText.decode(response);
             } else {
                 System.err.println("[ModrinthRepo] HTTP " + response.statusCode()
                         + (mirror ? " (镜像)" : "") + " for " + url);
@@ -530,6 +588,17 @@ public class ModrinthRemoteModRepository implements RemoteModRepository {
             return null;
         }
     }
+
+    /**
+     * 单次请求的超时：版本列表接口的响应可达数 MB，压缩后仍需数秒，
+     * 沿用 15s 会在弱网下把「能下完的大响应」判死。这里对版本列表单独放宽。
+     */
+    private static Duration requestTimeout(String url, boolean mirror) {
+        boolean versionList = url.contains("/version");
+        if (mirror) return versionList ? MIRROR_TIMEOUT_LARGE : MIRROR_TIMEOUT;
+        return versionList ? REQUEST_TIMEOUT_LARGE : REQUEST_TIMEOUT;
+    }
+
 
     private static String getJsonString(JsonObject obj, String member) {
         if (obj == null || !obj.has(member)) return null;

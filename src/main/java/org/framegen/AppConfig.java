@@ -9,8 +9,11 @@ import java.io.FileOutputStream;
 import java.util.Properties;
 
 public class AppConfig {
-    private static final String CONFIG_DIR = System.getenv("APPDATA") + "\\StarlightFrameGen";
-    private static final String CONFIG_FILE = CONFIG_DIR + "\\config.properties";
+    /** 配置目录（统一走 AppDirs：原 %APPDATA%\StarlightFrameGen，现 ~/.starlight/framegen） */
+    private static final String CONFIG_DIR =
+            com.example.starlight.config.AppDirs.framegenDir().toString();
+    private static final String CONFIG_FILE =
+            com.example.starlight.config.AppDirs.framegenConfig().toString();
     private final Properties props = new Properties();
     private int frameMultiplier = 0;
     private String losslessScalingPath = "";

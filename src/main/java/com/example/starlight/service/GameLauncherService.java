@@ -7,26 +7,30 @@ import com.example.starlight.model.LaunchConfig;
 import com.example.starlight.model.LaunchResult;
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.auth.AccountManager.Account;
+import com.example.starlight.auth.AuthlibInjectorSupport;
+import com.example.starlight.auth.offline.LocalYggdrasilServer;
+import com.example.starlight.auth.offline.LocalCapeProxy;
 import com.example.starlight.auth.offline.OfflineSkinManager;
-import com.example.starlight.auth.offline.OfflineSkinServer;
 import com.example.starlight.auth.offline.Skin;
 import com.example.starlight.colorblind.ColorBlindOverlayManager;
 import com.example.starlight.config.StarlightConfig;
 import com.example.starlight.config.VersionConfigManager;
-import com.example.starlight.download.GameResourceCompleter;
+import com.example.starlight.download.task.GameResourceCompleter;
 import com.example.starlight.gamebat.MinecraftLauncherBuilder;
 import com.example.starlight.lang.GameLanguage;
 import com.example.starlight.lang.GameOptions;
 import com.example.starlight.loginmicrosoft.MinecraftAuthLauncherDeviceCode;
 import com.example.starlight.newui.ui.VersionIconKit;
 import com.example.starlight.service.FileService;
+import com.example.starlight.util.LaunchLog;
 import com.example.starlight.util.LegacyLaunchArgs;
+import com.example.starlight.util.VanillaVersion;
 import com.example.starlight.util.VersionUtils;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
-import com.startgame.LaunchInfo;
-import com.startgame.launcher.*;
+import com.example.starlight.startmc.LaunchInfo;
+import com.example.starlight.startmc.launcher.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,9 +82,7 @@ public class GameLauncherService {
     private static final java.util.concurrent.atomic.AtomicBoolean launchCancelled =
             new java.util.concurrent.atomic.AtomicBoolean(false);
 
-    // ================================================================
-    //  启动游戏
-    // ================================================================
+    // 启动游戏 //
 
     /**
      * 异步启动 Minecraft
@@ -98,6 +100,12 @@ public class GameLauncherService {
         POOL.submit(() -> {
             // 本次启动对应实例的 PID（-1 = 进程还没起来）：退出与异常两条路径都要用它注销实例
             final long[] gamePidRef = new long[]{-1L};
+            // 本地披风服务器引用：同样放在 try 外面，退出与异常两条路径都要用它停止服务器
+            final java.util.concurrent.atomic.AtomicReference<LocalYggdrasilServer> capeServerRef =
+                    new java.util.concurrent.atomic.AtomicReference<>(null);
+            // 本地披风代理引用（劫持 OptiFine s.optifine.net 披风下载）：与档案服务器同生命周期
+            final java.util.concurrent.atomic.AtomicReference<LocalCapeProxy> capeProxyRef =
+                    new java.util.concurrent.atomic.AtomicReference<>(null);
             try {
                 // 每次启动重置取消标志
                 launchCancelled.set(false);
@@ -114,9 +122,76 @@ public class GameLauncherService {
                     config.userName = refreshedAccount.name;
                     config.userType = "msa";
                 }
+                // 离线皮肤（PCL2 风格）：离线账号按皮肤配置微调传给游戏的 UUID（Steve/Alex 模型
+                // 由 UUID 决定）；始终以账号基础 UUID 为起点，幂等，不改动账号本身
+                if (currentAccount != null && currentAccount.type == AccountManager.AccountType.OFFLINE) {
+                    String resolvedUuid = OfflineSkinManager.resolveUuid(currentAccount.id, currentAccount.getSkin());
+                    if (resolvedUuid != null && !resolvedUuid.isEmpty()) {
+                        config.uuid = resolvedUuid;
+                    }
+                }
+                // 披风：本地 Yggdrasil 档案服务器 + authlib-injector（仅当配置了披风；
+                // 无披风保持纯 PCL2 机制）。必须在 buildLaunchInfo 之前追加 JVM 参数。
+                if (currentAccount != null && currentAccount.type == AccountManager.AccountType.OFFLINE) {
+                    try {
+                        Skin.LoadedSkin loaded = OfflineSkinManager.loadForLaunch(
+                                currentAccount.getSkin(), currentAccount.name);
+                        LocalYggdrasilServer capeServer = LocalYggdrasilServer.start(
+                                loaded, config.uuid, currentAccount.name);
+                        if (capeServer != null) {
+                            capeServerRef.set(capeServer);
+                            java.util.List<String> injectArgs = new java.util.ArrayList<>(
+                                    AuthlibInjectorSupport.buildLaunchJvmArgs(capeServer.getApiBase()));
+                            // 本地披风代理：SOCKS5 劫持 OptiFine s.optifine.net 披风下载
+                            //（1.17.1 纯 OptiFine 本地玩家披风唯一原生通道；--proxyHost 由
+                            // Main 解析为 SOCKS 代理，HttpTexture 走 HttpPipeline SOCKS 隧道）
+                            LocalCapeProxy capeProxy = LocalCapeProxy.start(
+                                    OfflineSkinManager.capePngBytes(loaded), currentAccount.name);
+                            if (capeProxy != null) {
+                                capeProxyRef.set(capeProxy);
+                                String agentArg = capeProxy.agentJvmArg();
+                                if (agentArg != null) {
+                                    injectArgs.add(agentArg);
+                                }
+                            }
+                            String extra = String.join(" ", injectArgs);
+                            config.jvmArgs = (config.jvmArgs == null || config.jvmArgs.isBlank())
+                                    ? extra : config.jvmArgs.trim() + " " + extra;
+                            LaunchLog.info("已启用本地披风服务器：" + capeServer.getApiBase());
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to start local cape server: {}", e.getMessage());
+                    }
+                }
                 if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
 
+                // 启动流程日志（PCL 标准）：预检测 / 登录方式 //
+                if (config.userName != null && !config.userName.isEmpty()) {
+                    boolean isMsa = "msa".equalsIgnoreCase(config.userType);
+                    LaunchLog.info(isMsa ? "登录方式：正版（" + config.userName + "）"
+                                        : "登录方式：离线（" + config.userName + "）");
+                }
+
+                // 自动选择 Java（与 UIGeneralControlClass 主链路保持一致，修复插件 API 入口
+                // 走本服务时 AutoJava 静默失效的问题）。版本独立设置可仅对该版本关闭自动选择。
+                boolean autoJavaOn = VersionConfigManager.effectiveAutoJava(
+                        StarlightConfig.readConfig(), config.gameDir, config.version);
+                if (autoJavaOn) {
+                    onProgress.onProgress(5, "正在自动选择 Java...");
+                    String autoJava = com.example.starlight.gui.UIGeneralControlClass
+                            .autoSelectJavaPath(config.version, config.gameDir);
+                    if (autoJava != null) {
+                        config.javaPath = autoJava;
+                        LaunchLog.info("选择的 Java：" + autoJava);
+                    } else {
+                        LaunchLog.warn("未找到合适的 Java，使用当前配置");
+                    }
+                }
+                com.example.starlight.gui.UIGeneralControlClass
+                        .recordLaunchJavaPath(config.version, config.javaPath);
+
                 onProgress.onProgress(5, "正在读取版本信息...");
+                LaunchLog.info("正在读取版本信息...");
                 LaunchInfo info = buildLaunchInfo(config);
                 Path jsonPath = info.resolveVersionDir().resolve(config.version + ".json");
                 if (!Files.exists(jsonPath)) {
@@ -140,17 +215,36 @@ public class GameLauncherService {
                 // mainClass=launchwrapper.Launch 的 Forge 版本，会误判 Vanilla 裸启
                 String loader = VersionIconKit.detectLoader(versionJson, config.version);
                 info.setLoaderType(loader);
+                // 记录启动实例快照（真正启动的版本/目录/加载器/Java/隔离），供崩溃诊断回读
+                com.example.starlight.gui.UIGeneralControlClass.recordLaunchSnapshot(
+                        config.version, config.gameDir, loader, config.javaPath, config.versionIsolation);
                 // 核心 jar 构建参数时会漏掉 --userProperties（1.7.x/1.12.x 的 Main 必填），补上
                 var injectedArgs = LegacyLaunchArgs.apply(info, versionJson);
                 if (!injectedArgs.isEmpty()) {
                     log.info("Injected legacy game args: {}", injectedArgs);
                 }
+                // 1.17+ 本地玩家皮肤/披风直注入：SkinManager 对本地玩家直接取 Session profile
+                // 属性（--profileProperties），不走会话档案查询；无该参数时本地玩家永远没有
+                // textures 属性，皮肤/披风无法显示（1.17.1 反编译实证）
+                if (capeServerRef.get() != null) {
+                    java.util.List<String> pp = OfflineSkinManager.profilePropertiesArgs(
+                            capeServerRef.get(), config.version);
+                    if (!pp.isEmpty()) {
+                        java.util.List<String> ga = new java.util.ArrayList<>();
+                        if (info.getGameArgs() != null) ga.addAll(info.getGameArgs());
+                        ga.addAll(pp);
+                        info.setGameArgs(ga);
+                        log.info("Injected --profileProperties for local player textures");
+                    }
+                }
                 onProgress.onProgress(20, "检测到加载器: " + loader);
+                LaunchLog.info("检测到加载器：" + loader);
                 if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
 
                 // 资源准备（并行加速开启时：原生库检查与资源补全同时进行，占 25~60 区间）
                 // 关闭时保持原串行流程：先补全资源（资产+库），再检查原生库
                 onProgress.onProgress(25, "正在准备游戏资源...");
+                LaunchLog.info("正在准备游戏资源...");
                 if (ParallelLaunchManager.isEnabled()) {
                     boolean prepOk = ParallelLaunchManager.prepare(config.gameDir, config.version, jsonString,
                             (pct, msg) -> onProgress.onProgress(Math.min(25 + (int) (pct * 0.35), 60), msg),
@@ -175,7 +269,8 @@ public class GameLauncherService {
                 }
 
                 onProgress.onProgress(50, "正在初始化路径...");
-                // === 方案一：在 initLogging() 之前采集已有日志文件 ===
+                LaunchLog.info("正在初始化路径...");
+                // 方案一：在 initLogging() 之前采集已有日志文件 //
                 // 确保 initLogging() 创建的新日志文件不会被过滤掉
                 final java.nio.file.Path logDir = java.nio.file.Paths.get(LOG_DIR);
                 final java.util.Set<String> existingLogs;
@@ -197,6 +292,7 @@ public class GameLauncherService {
                 launcher.setVersionJson(versionJson);
 
                 onProgress.onProgress(60, "正在处理原生库...");
+                LaunchLog.info("正在解压 Natives 文件");
                 boolean nativesOk = FileService.checkAndCompleteNatives(config.gameDir, config.version, jsonString);
                 if (!nativesOk) {
                     onResult.onError("原生库准备失败，请检查网络连接或重新安装该版本");
@@ -210,6 +306,7 @@ public class GameLauncherService {
 
                 // 应用游戏内设置（语言 / 全屏 → options.txt；取该版本合并后的有效值）
                 onProgress.onProgress(70, "正在应用版本设置（语言 / 全屏）...");
+                LaunchLog.info("正在应用版本设置（语言 / 全屏）...");
                 Map<String, String> launchEffective = VersionConfigManager.buildEffectiveIni(
                         StarlightConfig.readConfig(), config.gameDir, config.version);
                 String langCode = launchEffective.getOrDefault("GameLanguage", "");
@@ -223,44 +320,58 @@ public class GameLauncherService {
                 GameOptions.setFullscreen(config.gameDir, config.version,
                         config.versionIsolation, launchFullscreen);
 
-                // 离线皮肤服务器（仅离线账号且配置了自定义皮肤时启动）
-                OfflineSkinServer skinServer = null;
+                // 离线皮肤资源包（PCL2 风格：自定义皮肤以资源包覆盖默认贴图，
+                // 无需本地皮肤服务器 / authlib-injector）
                 if (currentAccount != null && currentAccount.type == AccountManager.AccountType.OFFLINE) {
-                    Skin skin = currentAccount.getSkin();
-                    if (OfflineSkinManager.needsSkinServer(skin)) {
-                        onProgress.onProgress(75, "正在启动离线皮肤服务器...");
-                        try {
-                            String uuid = currentAccount.id;
-                            // 确保 UUID 为标准格式
-                            if (uuid.length() == 32) {
-                                uuid = uuid.replaceFirst(
-                                        "(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5");
-                            }
-                            skinServer = OfflineSkinManager.startSkinServer(
-                                    java.util.UUID.fromString(uuid),
-                                    currentAccount.name,
-                                    skin);
-                            if (skinServer != null) {
-                                info.getJvmArgs().addAll(
-                                        java.util.Arrays.asList(OfflineSkinManager.getAuthlibInjectorArgs(skinServer)));
-                                log.info("Offline skin server started, port: {}", skinServer.getPort());
-                            }
-                        } catch (Exception e) {
-                            log.warn("Failed to start offline skin server, launching without skin mode: {}", e.getMessage());
-                        }
+                    onProgress.onProgress(75, "正在应用离线皮肤...");
+                    try {
+                        Skin skin = currentAccount.getSkin();
+                        VanillaVersion vanilla = VanillaVersion.resolve(Path.of(config.gameDir), config.version);
+                        OfflineSkinManager.applySkinPack(skin, currentAccount.name,
+                                config.gameDir, config.version, config.versionIsolation, vanilla);
+                    } catch (Exception e) {
+                        log.warn("Failed to apply offline skin resource pack: {}", e.getMessage());
                     }
                 }
                 if (launchCancelled.get()) {
-                    if (skinServer != null) OfflineSkinManager.stopSkinServer();
                     onResult.onError("启动已取消");
                     return;
                 }
 
                 onProgress.onProgress(80, "正在启动 Minecraft " + config.version + " ...");
 
+                // 启动参数区块（PCL 标准：参数获取开始 / 分隔线 / 每行一个参数） //
+                LaunchLog.info("=================== 启动参数开始 ===================");
+                if (versionJson != null && versionJson.has("mainClass")) {
+                    LaunchLog.info(versionJson.get("mainClass").getAsString());
+                }
+                LaunchLog.info("Java：" + config.javaPath);
+                LaunchLog.info("最小内存：" + config.minMemory + " MB");
+                LaunchLog.info("最大内存：" + config.maxMemory + " MB");
+                LaunchLog.info("游戏版本：" + config.version);
+                LaunchLog.info("游戏目录：" + config.gameDir);
+                LaunchLog.info("版本隔离：" + (config.versionIsolation ? "是" : "否"));
+                if (config.windowWidth > 0 && config.windowHeight > 0) {
+                    LaunchLog.info("窗口大小：" + config.windowWidth + " x " + config.windowHeight);
+                }
+                // 进程微调（高级设置）：只有真的设置了才占日志行，默认值不打扰
+                if (config.windowTitle != null && !config.windowTitle.isBlank()) {
+                    LaunchLog.info("窗口标题：" + config.windowTitle);
+                }
+                if (config.processPriority != null && !"normal".equalsIgnoreCase(config.processPriority)) {
+                    LaunchLog.info("进程优先级：" + com.example.starlight.util.GameProcessTweaks
+                            .priorityLabel(config.processPriority));
+                }
+                if (config.jvmArgs != null && !config.jvmArgs.isEmpty()) {
+                    LaunchLog.info("JVM 参数：" + config.jvmArgs);
+                }
+                if (config.gameArgs != null && !config.gameArgs.isEmpty()) {
+                    LaunchLog.info("游戏参数：" + config.gameArgs);
+                }
+                LaunchLog.info("=================== 启动参数结束 ===================");
+
                 // 最终检查：launcher.launch() 前再次确认未被取消
                 if (launchCancelled.get()) {
-                    if (skinServer != null) OfflineSkinManager.stopSkinServer();
                     onResult.onError("启动已取消");
                     return;
                 }
@@ -274,9 +385,10 @@ public class GameLauncherService {
                             process.pid(), config.version, config.gameDir, config.userName,
                             loader, System.currentTimeMillis()));
                     log.info("Game process captured, PID: {}", process.pid());
+                    LaunchLog.info("已启动游戏进程：" + config.javaPath + "（PID " + process.pid() + "）");
                 });
 
-                // === 游戏窗口检测（混合 PCL + HMCL 方案，两个阶段独立并行） ===
+                // 游戏窗口检测（混合 PCL + HMCL 方案，两个阶段独立并行） //
                 // Phase 1: HMCL 方式 — 检测新 Java 进程
                 // Phase 2: PCL 方式 — 监控游戏 stdout 日志，等 "Setting user:" / "Created textures" 出现
                 // 两个阶段独立运行，任一成功即关闭启动动画
@@ -411,9 +523,32 @@ public class GameLauncherService {
                 }
 
                 long startTime = System.currentTimeMillis();
+                // 崩溃报告新鲜度过滤用「本次启动开始时间」；回填到快照
+                com.example.starlight.gui.UIGeneralControlClass.markLaunchSnapshotStartTime(startTime);
                 int exitCode = launcher.launch();
+                LocalYggdrasilServer capeServerDone = capeServerRef.getAndSet(null);
+                if (capeServerDone != null) capeServerDone.stop();
+                LocalCapeProxy capeProxyDone = capeProxyRef.getAndSet(null);
+                if (capeProxyDone != null) capeProxyDone.stop();
                 long elapsed = (System.currentTimeMillis() - startTime) / 1000;
                 onProgress.onProgress(100, "游戏已退出，运行时长: " + elapsed + "秒");
+
+                // 启动结束日志（PCL 标准：~ 基础参数 ~ / ~ 登录参数 ~ / 开始启动结束处理） //
+                LaunchLog.info("~ 基础参数 ~");
+                LaunchLog.info("游戏版本：" + config.version);
+                LaunchLog.info("分配的内存：" + config.maxMemory + " MB");
+                LaunchLog.info("MC 文件夹：" + config.gameDir);
+                LaunchLog.info("版本隔离：" + (config.versionIsolation ? "是" : "否"));
+                LaunchLog.info("Java 信息：" + config.javaPath);
+                LaunchLog.info("");
+                LaunchLog.info("~ 登录参数 ~");
+                LaunchLog.info("玩家用户名：" + (config.userName == null ? "" : config.userName));
+                LaunchLog.info("AccessToken：" + LaunchLog.mask(config.accessToken));
+                LaunchLog.info("UUID：" + LaunchLog.mask(config.uuid));
+                LaunchLog.info("登录方式：" + ("msa".equalsIgnoreCase(config.userType) ? "正版" : "离线"));
+                LaunchLog.info("");
+                LaunchLog.info("开始启动结束处理");
+                LaunchLog.info("游戏已退出，运行时长：" + elapsed + "秒");
 
                 // 清除进程引用，避免 stopGame() 误操作后续无关进程；同时从实例表注销
                 runningGameProcess = null;
@@ -444,15 +579,14 @@ public class GameLauncherService {
                 }
                 onResult.onSuccess(new LaunchResult(exitCode, elapsed, errorLog));
 
-                // 停止离线皮肤服务
-                if (skinServer != null) {
-                    OfflineSkinManager.stopSkinServer();
-                    log.info("Offline skin server stopped");
-                }
-
             } catch (JsonSyntaxException | IOException | InterruptedException e) {
+                LocalYggdrasilServer capeServerErr = capeServerRef.getAndSet(null);
+                if (capeServerErr != null) capeServerErr.stop();
+                LocalCapeProxy capeProxyErr = capeProxyRef.getAndSet(null);
+                if (capeProxyErr != null) capeProxyErr.stop();
                 // 启动失败也要注销：原先这里漏了注销，实例会一直挂在表里
                 GameInstanceRegistry.unregister(gamePidRef[0]);
+                LaunchLog.error("错误：" + e.getMessage());
                 onResult.onError("启动失败: " + e.getMessage());
             }
         });
@@ -462,6 +596,14 @@ public class GameLauncherService {
      * 生成 .bat 启动脚本
      */
     public static String generateBatScript(LaunchConfig config) throws Exception {
+        // 离线皮肤：与正常启动一致，按当前离线账号的皮肤配置解析定制 UUID
+        Account current = AccountManager.getCurrentAccount();
+        if (current != null && current.type == AccountManager.AccountType.OFFLINE) {
+            String resolvedUuid = OfflineSkinManager.resolveUuid(current.id, current.getSkin());
+            if (resolvedUuid != null && !resolvedUuid.isEmpty()) {
+                config.uuid = resolvedUuid;
+            }
+        }
         String cmd = MinecraftLauncherBuilder.buildLaunchCommand(
                 config.gameDir + "/versions/" + config.version + "/" + config.version + ".json",
                 config.gameDir, config.version, config.javaPath,
@@ -486,15 +628,14 @@ public class GameLauncherService {
     /** 强制停止游戏（本启动器拉起的实例全部关闭） */
     public static void stopGame() {
         launchCancelled.set(true);
+        LaunchLog.info("已取消启动");
         if (runningGameProcess != null && runningGameProcess.isAlive()) {
             runningGameProcess.destroyForcibly();
         }
         GameInstanceRegistry.killAll();
     }
 
-    // ================================================================
-    //  内部
-    // ================================================================
+    // 内部 //
 
     private static LaunchInfo buildLaunchInfo(LaunchConfig c) {
         LaunchInfo info = new LaunchInfo();
@@ -517,6 +658,9 @@ public class GameLauncherService {
         if (!c.gameArgs.isEmpty()) info.setGameArgs(java.util.Arrays.asList(c.gameArgs.split("\\s+")));
         if (!c.preLaunchCommand.isEmpty()) info.setPreLaunchCommand(c.preLaunchCommand);
         if (!c.postExitCommand.isEmpty()) info.setPostExitCommand(c.postExitCommand);
+        // 进程微调（高级设置）：自定义窗口标题 + 进程优先级，在 BaseLauncher 启动进程后应用
+        info.setWindowTitle(c.windowTitle);
+        info.setProcessPriority(c.processPriority);
         return info;
     }
 

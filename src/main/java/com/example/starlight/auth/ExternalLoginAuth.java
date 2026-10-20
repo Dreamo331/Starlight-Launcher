@@ -1,5 +1,6 @@
 package com.example.starlight.auth;
 
+import com.example.starlight.config.AppDirs;
 import com.example.starlight.util.DebugLog;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -20,13 +21,11 @@ import java.time.Duration;
  * <p>
  * Uses Java's built-in {@link HttpClient} to POST to the auth server's
  * {@code /authserver/authenticate} endpoint and persists the result to
- * a JSON file at {@code $HOME/.starlight-launcher/external_login.json}.
+ * a JSON file at {@code ~/.starlight/external_login.json}.
  */
 public class ExternalLoginAuth {
 
-    private static final String CONFIG_DIR = System.getProperty("user.home")
-            + "/.starlight-launcher";
-    private static final String AUTH_FILE = CONFIG_DIR + "/external_login.json";
+    private static final String AUTH_FILE = AppDirs.externalLoginJson().toString();
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -168,7 +167,7 @@ public class ExternalLoginAuth {
 
         // Use Gson for serialization
         try {
-            Files.createDirectories(Paths.get(CONFIG_DIR));
+            Files.createDirectories(AppDirs.root());
             com.google.gson.JsonObject obj = new com.google.gson.JsonObject();
             obj.addProperty("success", result.success);
             obj.addProperty("userName", result.userName != null ? result.userName : "");
@@ -218,9 +217,7 @@ public class ExternalLoginAuth {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Minimal JSON helpers (no external JSON library)
-    // -----------------------------------------------------------------------
+    // Minimal JSON helpers (no external JSON library) //
 
     /**
      * Escape a string for inclusion in a JSON value (only the bare minimum:
@@ -391,9 +388,7 @@ public class ExternalLoginAuth {
         return normalizedJson.indexOf(normalizedPattern);
     }
 
-    // -----------------------------------------------------------------------
-    // Data class
-    // -----------------------------------------------------------------------
+    // Data class //
 
     /**
      * Holds the result of an external Yggdrasil authentication attempt.

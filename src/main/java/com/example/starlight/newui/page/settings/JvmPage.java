@@ -57,7 +57,12 @@ public final class JvmPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(host, "Java虚拟机与内存");
+        VBox root = PageKit.settingsPage(host, "Java 与内存");
+
+        // 卡片「Java 运行环境」（重构 §6.3：自动选择开关在路径控件上方，开启时路径行整组置灰） //
+        // 自动选择 Java（参考 HMCL：根据游戏版本自动匹配本机已安装的 Java）
+        boolean autoJava = "true".equalsIgnoreCase(host.config().getOrDefault("AutoJava", "true"));
+        CheckBox autoJavaToggle = PageKit.toggle(autoJava);
 
         // Java 路径：可编辑下拉框，自动搜索本机所有 Java 安装（参考 HMCL JavaManagementPage 交互）
         ComboBox<JavaOption> javaCombo = new ComboBox<>();
@@ -139,72 +144,30 @@ public final class JvmPage {
             checkJavaAsync(sel != null ? sel.path : "java");
         });
 
-        HBox javaRow = new HBox(10, javaCombo, searchJavaBtn, browseJavaBtn, checkJavaBtn);
-        root.getChildren().add(PageKit.settingsCard("Java 路径", "自动搜索本机 Java，支持多版本切换", javaRow));
-
-        // 页面打开时后台加载上次扫描的 Java 列表（读缓存，毫秒级；点「搜索」才强制重扫）
-        refreshJavaOptionsAsync(javaCombo, false);
-
-        // 自动选择 Java（参考 HMCL：根据游戏版本自动匹配本机已安装的 Java）
-        boolean autoJava = "true".equalsIgnoreCase(host.config().getOrDefault("AutoJava", "true"));
-        CheckBox autoJavaToggle = PageKit.toggle(autoJava);
+        // 自动选择开关动作：开启时禁用手动配置，避免与自动结果混淆
         autoJavaToggle.setOnAction(e -> {
             host.config().put("AutoJava", String.valueOf(autoJavaToggle.isSelected()));
             host.saveConfig();
             setJavaManualControlsEnabled(javaCombo, searchJavaBtn, browseJavaBtn, checkJavaBtn, !autoJavaToggle.isSelected());
             host.ui().toast("自动选择 Java: " + (autoJavaToggle.isSelected() ? "开启" : "关闭"));
         });
-        // 开启自动选择时禁用手动配置，避免与自动结果混淆
+        // 开启自动选择时禁用手动配置（含初始状态）
         setJavaManualControlsEnabled(javaCombo, searchJavaBtn, browseJavaBtn, checkJavaBtn, !autoJava);
-        root.getChildren().add(PageKit.settingsCard("自动选择 Java", "根据游戏版本自动匹配，无需手动配置", autoJavaToggle));
 
-        // 最大内存
-        String curMaxMem = host.config().getOrDefault("MaxMemory", "4096");
-        int maxMem = PageKit.parseIntSafe(curMaxMem, 4096);
-        Label maxValLabel = new Label("当前: " + maxMem + " MB");
-        maxValLabel.getStyleClass().add("black-value-label");
-        // 锁固有宽度：滑杆占满剩余空间时不许把数值挤成「当前…」
-        maxValLabel.setMinWidth(Region.USE_PREF_SIZE);
-        Slider maxSlider = new Slider(512, 32768, maxMem);
-        maxSlider.getStyleClass().add("black-ticks");
-        maxSlider.setShowTickLabels(true);
-        maxSlider.setMajorTickUnit(8192);
-        maxSlider.setBlockIncrement(1024);
-        maxSlider.setPrefWidth(200);
-        maxSlider.valueProperty().addListener((obs, old, val) -> maxValLabel.setText("当前: " + val.intValue() + " MB"));
-        Button saveMaxMem = AppIcons.button("save", "保存");
-        saveMaxMem.getStyleClass().add("btn-primary");
-        saveMaxMem.setOnAction(e -> {
-            host.config().put("MaxMemory", String.valueOf((int) maxSlider.getValue()));
-            host.saveConfig();
-            host.ui().toast("最大内存已保存");
-        });
-        HBox maxRow = new HBox(10, new HBox(10, maxSlider, maxValLabel), saveMaxMem);
-        root.getChildren().add(PageKit.settingsCard("最大内存", "游戏可使用的最大内存 (MB)", maxRow));
+        // 卡片内纵向排布：开关在上，路径行在下（重构 §6.3 布局第 1 条） //
+        VBox javaBox = new VBox(10,
+                PageKit.settingsCard("自动选择 Java", "根据游戏版本自动匹配，无需手动配置", autoJavaToggle),
+                new HBox(10, javaCombo, searchJavaBtn, browseJavaBtn, checkJavaBtn));
+        root.getChildren().add(PageKit.settingsCardStacked("Java 运行环境",
+                "自动搜索本机 Java，支持多版本切换", javaBox));
 
-        // 最小内存
-        String curMinMem = host.config().getOrDefault("MinMemory", "2048");
-        int minMem = PageKit.parseIntSafe(curMinMem, 2048);
-        Label minValLabel = new Label("当前: " + minMem + " MB");
-        minValLabel.getStyleClass().add("black-value-label");
-        Slider minSlider = new Slider(512, 16384, minMem);
-        minSlider.getStyleClass().add("black-ticks");
-        minSlider.setShowTickLabels(true);
-        minSlider.setMajorTickUnit(4096);
-        minSlider.setBlockIncrement(512);
-        minSlider.setPrefWidth(200);
-        minSlider.valueProperty().addListener((obs, old, val) -> minValLabel.setText("当前: " + val.intValue() + " MB"));
-        Button saveMinMem = AppIcons.button("save", "保存");
-        saveMinMem.getStyleClass().add("btn-primary");
-        saveMinMem.setOnAction(e -> {
-            host.config().put("MinMemory", String.valueOf((int) minSlider.getValue()));
-            host.saveConfig();
-            host.ui().toast("最小内存已保存");
-        });
-        HBox minRow = new HBox(10, new HBox(10, minSlider, minValLabel), saveMinMem);
-        root.getChildren().add(PageKit.settingsCard("最小内存", "游戏启动时的最小内存分配 (MB)", minRow));
+        // 页面打开时后台加载上次扫描的 Java 列表（读缓存，毫秒级；点「搜索」才强制重扫）
+        refreshJavaOptionsAsync(javaCombo, false);
 
-        // JVM 参数：上标题、下多行输入框（通栏），参数通常较长，整行展示便于核对与编辑
+        // 卡片「内存分配」（重构 §6.3 布局第 2 条 + §6.6 内存优化卡迁入） //
+        root.getChildren().add(buildMemoryCard());
+
+        // 卡片「JVM 参数」（输入框右下角三角把手，高度可自由调节并记住） //
         String curJvmArgs = host.config().getOrDefault("JvmArgs", "");
         TextArea jvmArea = new TextArea(curJvmArgs.isEmpty() ? "-XX:+UseG1GC" : curJvmArgs);
         jvmArea.getStyleClass().addAll("textarea-field", "textarea-mono");
@@ -212,6 +175,15 @@ public final class JvmPage {
         jvmArea.setPrefRowCount(3);
         jvmArea.setMaxWidth(Double.MAX_VALUE);
         jvmArea.setMinWidth(0);
+        // 输入框高度：右下角三角把手拖动调节，拖动结束写回 JvmArgsEditorHeight（0 = 跟随默认 3 行）
+        int savedJvmAreaH = PageKit.parseIntSafe(host.config().getOrDefault("JvmArgsEditorHeight", "0"), 0);
+        StackPane jvmEditor = PageKit.resizableTextArea(jvmArea, savedJvmAreaH, h -> {
+            String value = String.valueOf(Math.round(h));
+            if (value.equals(host.config().getOrDefault("JvmArgsEditorHeight", "0"))) return;
+            host.config().put("JvmArgsEditorHeight", value);
+            // 单独落盘客户端配置：host.saveConfig() 会重建设置页，正在拖拽输入框时会被打断
+            ConfigManager.saveClientConfig(host.config());
+        });
         Button saveJvm = AppIcons.button("save", "保存");
         saveJvm.getStyleClass().add("btn-primary");
         saveJvm.setOnAction(e -> {
@@ -221,13 +193,80 @@ public final class JvmPage {
         });
         HBox jvmActions = new HBox(saveJvm);
         jvmActions.setAlignment(Pos.CENTER_RIGHT);
-        VBox jvmBox = new VBox(8, jvmArea, jvmActions);
-        root.getChildren().add(PageKit.settingsCardStacked("JVM 参数", "自定义 JVM 启动参数（多个参数用空格分隔）", jvmBox));
+        VBox jvmBox = new VBox(8, jvmEditor, jvmActions);
+        root.getChildren().add(PageKit.settingsCardStacked("JVM 参数",
+                "自定义 JVM 启动参数（多个参数用空格分隔）；拖动右下角三角可调节输入框高度", jvmBox));
 
         return root;
     }
 
-    // ==================== Java 路径辅助方法 ====================
+    /**
+     * 内存分配卡片（重构 §6.3）：最大/最小内存滑杆拖动结束自动保存（500ms 防抖，去掉保存按钮）；
+     * 「内存优化」卡从高级设置页迁入（§6.6），同为一条「内存分配」卡内容。
+     */
+    private Node buildMemoryCard() {
+        VBox content = new VBox(12);
+
+        // 最大内存（滑杆拖动结束防抖自动保存） //
+        String curMaxMem = host.config().getOrDefault("MaxMemory", "4096");
+        int maxMem = PageKit.parseIntSafe(curMaxMem, 4096);
+        Label maxValLabel = new Label("当前: " + maxMem + " MB");
+        maxValLabel.getStyleClass().add("black-value-label");
+        maxValLabel.setMinWidth(Region.USE_PREF_SIZE);
+        Slider maxSlider = new Slider(512, 32768, maxMem);
+        maxSlider.getStyleClass().add("black-ticks");
+        maxSlider.setShowTickLabels(true);
+        maxSlider.setMajorTickUnit(8192);
+        maxSlider.setBlockIncrement(1024);
+        maxSlider.setPrefWidth(200);
+        maxSlider.valueProperty().addListener((obs, old, val) -> maxValLabel.setText("当前: " + val.intValue() + " MB"));
+        javafx.animation.PauseTransition maxDebounce = new javafx.animation.PauseTransition(javafx.util.Duration.millis(500));
+        maxDebounce.setOnFinished(e -> {
+            int val = (int) maxSlider.getValue();
+            if (String.valueOf(val).equals(host.config().getOrDefault("MaxMemory", "4096"))) return;
+            host.config().put("MaxMemory", String.valueOf(val));
+            host.saveConfig();
+            host.ui().toast("最大内存已保存: " + val + " MB");
+        });
+        maxSlider.valueProperty().addListener((obs, old, val) -> maxDebounce.playFromStart());
+        HBox maxRow = new HBox(10, maxSlider, maxValLabel);
+        maxRow.setAlignment(Pos.CENTER_LEFT);
+        content.getChildren().add(PageKit.settingsCard("最大内存", "游戏可使用的最大内存 (MB)，拖动结束自动保存", maxRow));
+
+        // 最小内存（滑杆拖动结束防抖自动保存） //
+        String curMinMem = host.config().getOrDefault("MinMemory", "2048");
+        int minMem = PageKit.parseIntSafe(curMinMem, 2048);
+        Label minValLabel = new Label("当前: " + minMem + " MB");
+        minValLabel.getStyleClass().add("black-value-label");
+        minValLabel.setMinWidth(Region.USE_PREF_SIZE);
+        Slider minSlider = new Slider(512, 16384, minMem);
+        minSlider.getStyleClass().add("black-ticks");
+        minSlider.setShowTickLabels(true);
+        minSlider.setMajorTickUnit(4096);
+        minSlider.setBlockIncrement(512);
+        minSlider.setPrefWidth(200);
+        minSlider.valueProperty().addListener((obs, old, val) -> minValLabel.setText("当前: " + val.intValue() + " MB"));
+        javafx.animation.PauseTransition minDebounce = new javafx.animation.PauseTransition(javafx.util.Duration.millis(500));
+        minDebounce.setOnFinished(e -> {
+            int val = (int) minSlider.getValue();
+            if (String.valueOf(val).equals(host.config().getOrDefault("MinMemory", "2048"))) return;
+            host.config().put("MinMemory", String.valueOf(val));
+            host.saveConfig();
+            host.ui().toast("最小内存已保存: " + val + " MB");
+        });
+        minSlider.valueProperty().addListener((obs, old, val) -> minDebounce.playFromStart());
+        HBox minRow = new HBox(10, minSlider, minValLabel);
+        minRow.setAlignment(Pos.CENTER_LEFT);
+        content.getChildren().add(PageKit.settingsCard("最小内存", "游戏启动时的最小内存分配 (MB)，拖动结束自动保存", minRow));
+
+        // 内存优化卡（自高级设置页迁入，重构 §6.6；实现仍在 MemoryPage.buildOptimizeCard）
+        content.getChildren().add(host.buildMemoryOptimizeCard());
+
+        return PageKit.settingsCardStacked("内存分配",
+                "最小 / 最大内存与内存优化；滑杆拖动结束自动保存", content);
+    }
+
+    // Java 路径辅助方法 //
 
     /** Java 路径下拉选项：path 为实际 java.exe 路径（"java" 表示系统默认），label 为友好显示文本 */
     private static final class JavaOption {

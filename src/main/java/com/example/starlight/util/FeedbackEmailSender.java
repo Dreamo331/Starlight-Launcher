@@ -38,6 +38,17 @@ public class FeedbackEmailSender {
      * @param imageFile   可选附件图片 */
     public static boolean sendFeedback(String senderEmail,
                                         String userEmail, String content, File imageFile) {
+        return sendFeedback(senderEmail, userEmail, content, imageFile, null);
+    }
+
+    /** 发送反馈邮件（带可选日志附件，重构 §6.13「自动附加最新日志」）
+     * @param senderEmail 用户填写的发送方邮箱（用于邮件 From/Reply-To）
+     * @param userEmail   用户反馈联系邮箱
+     * @param content     反馈内容
+     * @param imageFile   可选附件图片
+     * @param logFile     可选附件日志 */
+    public static boolean sendFeedback(String senderEmail,
+                                        String userEmail, String content, File imageFile, File logFile) {
         try {
             String host   = DEFAULT_HOST;
             String port   = DEFAULT_PORT;
@@ -92,6 +103,14 @@ public class FeedbackEmailSender {
                 attachPart.setDataHandler(new DataHandler(source));
                 attachPart.setFileName(MimeUtility.encodeText(imageFile.getName(), "UTF-8", null));
                 multipart.addBodyPart(attachPart);
+            }
+
+            if (logFile != null && logFile.exists() && logFile.isFile()) {
+                MimeBodyPart logPart = new MimeBodyPart();
+                DataSource logSource = new FileDataSource(logFile);
+                logPart.setDataHandler(new DataHandler(logSource));
+                logPart.setFileName(MimeUtility.encodeText("starlight.log", "UTF-8", null));
+                multipart.addBodyPart(logPart);
             }
 
             msg.setContent(multipart);

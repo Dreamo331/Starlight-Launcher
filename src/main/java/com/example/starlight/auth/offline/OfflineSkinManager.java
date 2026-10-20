@@ -1,166 +1,123 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.auth.offline;
 
-import com.example.starlight.newui.AppConfig;
+import com.example.starlight.util.VanillaVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.time.Duration;
-import java.util.UUID;
-
 /**
- * 离线皮肤管理器
- * 负责皮肤服务器生命周期和 authlib-injector 管理
+ * 离线皮肤管理器（PCL2 风格）。
+ *
+ * <p>不再使用 authlib-injector + 本地会话服务器的注入方案，改为 PCL2 的两层机制：
+ * <ol>
+ *   <li><b>UUID 定制</b>：启动时按皮肤配置微调传给游戏的 {@code auth_uuid}，让游戏把玩家
+ *       判定为期望的默认皮肤模型（Steve/Alex 由 UUID 决定）；</li>
+ *   <li><b>资源包覆盖</b>：自定义皮肤（本地文件 / CSL API / 非 Steve-Alex 内置皮肤）通过
+ *       构建 {@code Starlight Skin.zip} 覆盖游戏内置默认贴图。</li>
+ * </ol>
+ * 本类是启动流程的唯一入口：{@link #resolveUuid} 在构建启动参数前调用（幂等，始终以
+ * 账号基础 UUID 为起点），{@link #applySkinPack} 在启动前构建/清理资源包。</p>
  */
-public class OfflineSkinManager {
+public final class OfflineSkinManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(OfflineSkinManager.class);
 
-    private static OfflineSkinServer skinServer;
-
-    /**
-     * 启动离线皮肤服务器并注册角色
-     */
-    public static synchronized OfflineSkinServer startSkinServer(UUID uuid, String username, Skin skin)
-            throws IOException {
-        // 如果已有服务器，先停止
-        stopSkinServer();
-
-        // 加载皮肤
-        Skin.LoadedSkin loadedSkin = skin.load(username);
-        if (loadedSkin == null || !loadedSkin.hasSkin()) {
-            LOG.warn("Skin is empty or failed to load, skin server not started");
-            return null;
-        }
-
-        OfflineSkinServer server = new OfflineSkinServer();
-        server.addCharacter(uuid, username, loadedSkin);
-        server.start();
-        skinServer = server;
-        return server;
+    private OfflineSkinManager() {
     }
 
     /**
-     * 停止皮肤服务器
+     * 按皮肤配置解析实际传给游戏的 UUID（无连字符 32 位十六进制）。
+     * 以账号基础离线 UUID 为起点，幂等：多次调用结果一致。
+     *
+     * @param baseUuid 账号离线 UUID（如 {@code Account.id}）
+     * @param skin     皮肤配置；null 按 DEFAULT 处理（UUID 不变）
+     * @return 定制后的 UUID；参数异常时返回 baseUuid
      */
-    public static synchronized void stopSkinServer() {
-        if (skinServer != null) {
-            skinServer.stop();
-            skinServer = null;
-        }
+    public static String resolveUuid(String baseUuid, Skin skin) {
+        return OfflineSkinUuid.resolve(baseUuid, skin);
     }
 
     /**
-     * 获取 authlib-injector 的 JVM 参数
+     * 启动前应用离线皮肤：需要资源包的皮肤类型构建并启用资源包；
+     * 其余情况（DEFAULT / STEVE / ALEX / 条件不满足）清理残留资源包。
+     *
+     * @return true=资源包已构建并启用
      */
-    public static String[] getAuthlibInjectorArgs(OfflineSkinServer server) {
-        if (server == null) return new String[0];
-
-        // 查找 authlib-injector jar
-        Path injectorPath = findAuthlibInjector();
-        if (injectorPath == null) {
-            LOG.warn("authlib-injector.jar not found, cannot inject offline skin server");
-            return new String[0];
+    public static boolean applySkinPack(Skin skin, String username, String gameDir,
+                                        String version, boolean versionIsolation, VanillaVersion vanilla) {
+        if (skin == null || !OfflineSkinPack.needsResourcePack(skin)) {
+            OfflineSkinPack.cleanup(gameDir, version, versionIsolation);
+            return false;
         }
+        return OfflineSkinPack.apply(skin, username, gameDir, version, versionIsolation, vanilla);
+    }
 
-        String agentArg = "-javaagent:" + injectorPath.toAbsolutePath()
-                + "=http://localhost:" + server.getPort();
-        return new String[]{
-                agentArg,
-                "-Dauthlibinjector.side=client"
-        };
+    /** 皮肤类型是否需要资源包（DEFAULT / STEVE / ALEX 只需 UUID 模型调整） */
+    public static boolean needsResourcePack(Skin skin) {
+        return skin != null && OfflineSkinPack.needsResourcePack(skin);
     }
 
     /**
-     * authlib-injector 下载地址（GitHub Releases）
+     * 启动前加载皮肤与披风（供本地档案服务器使用）。
+     * 无自定义皮肤 / 加载失败时返回 null；调用方仅在 {@code loaded.getCape() != null}
+     * 时启用披风服务器。
      */
-    private static final String AUTH_INJECTOR_VERSION = "1.2.6";
-    private static final String DOWNLOAD_URL =
-            "https://github.com/yushijinhun/authlib-injector/releases/download/v"
-                    + AUTH_INJECTOR_VERSION + "/authlib-injector-" + AUTH_INJECTOR_VERSION + ".jar";
-
-    /** 下载超时（秒） */
-    private static final int DOWNLOAD_TIMEOUT_SECONDS = 30;
-
-    /**
-     * 查找可用的 authlib-injector jar，若未找到则尝试自动下载
-     */
-    private static Path findAuthlibInjector() {
-        // 在启动器目录查找
-        String userDir = System.getProperty("user.dir", ".");
-        Path localPath = Paths.get(userDir, "authlib-injector.jar");
-        if (Files.exists(localPath)) return localPath;
-
-        // 在配置目录查找
-        Path configDir = Paths.get(System.getProperty("user.home"), ".starlight-launcher");
-        Path configPath = configDir.resolve("authlib-injector.jar");
-        if (Files.exists(configPath)) return configPath;
-
-        // 在 Starlight-Launcher 目录查找
-        Path launcherPath = Paths.get(userDir, "Starlight-Launcher", "authlib-injector.jar");
-        if (Files.exists(launcherPath)) return launcherPath;
-
-        // 未找到，尝试自动下载到配置目录
-        LOG.warn("authlib-injector.jar not found, auto-downloading to: {}", configPath);
+    public static Skin.LoadedSkin loadForLaunch(Skin skin, String username) {
+        if (skin == null) return null;
         try {
-            return tryDownloadAuthlibInjector(configDir, configPath);
+            return skin.load(username);
         } catch (Exception e) {
-            LOG.error("Failed to auto-download authlib-injector: {}", e.getMessage());
+            LOG.warn("启动前加载皮肤失败：{}", e.getMessage());
             return null;
         }
     }
 
     /**
-     * 从 GitHub Releases 下载 authlib-injector
+     * 取已加载披风的 PNG 字节（供本地披风代理劫持 OptiFine 下载通道）。
+     * 无披风 / 加载失败时返回 null。
      */
-    private static Path tryDownloadAuthlibInjector(Path configDir, Path targetPath) throws IOException, InterruptedException {
-        Files.createDirectories(configDir);
-
-        HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(DOWNLOAD_TIMEOUT_SECONDS))
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build();
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(DOWNLOAD_URL))
-                .timeout(Duration.ofSeconds(DOWNLOAD_TIMEOUT_SECONDS))
-                .header("User-Agent", AppConfig.USER_AGENT)
-                .GET()
-                .build();
-
-        LOG.info("Downloading authlib-injector from {}...", DOWNLOAD_URL);
-
-        HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
-        if (response.statusCode() != 200) {
-            throw new IOException("Failed to download authlib-injector, HTTP " + response.statusCode());
+    public static byte[] capePngBytes(Skin.LoadedSkin loaded) {
+        if (loaded == null || loaded.getCape() == null || loaded.getCape().getImage() == null) {
+            return null;
         }
-
-        // 先下载到临时文件，避免下载中断导致文件损坏
-        Path tempFile = targetPath.resolveSibling(targetPath.getFileName() + ".tmp");
-        try (InputStream in = response.body()) {
-            Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            return SkinTexture.toPngBytes(loaded.getCape().getImage());
+        } catch (Exception e) {
+            LOG.debug("披风转 PNG 失败：{}", e.getMessage());
+            return null;
         }
-        // 下载完成后重命名
-        Files.move(tempFile, targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-        LOG.info("authlib-injector downloaded to: {} ({} bytes)", targetPath, Files.size(targetPath));
-        return targetPath;
     }
 
     /**
-     * 判断是否需要启动皮肤服务器（无皮肤或默认皮肤不需要）
+     * 1.17+ 本地玩家皮肤/披风直注入：构建 {@code --profileProperties} 参数对。
+     *
+     * <p>1.17 起客户端 {@code SkinManager} 对本地玩家直接取登录 Session profile 的属性
+     * （来自启动参数 --profileProperties），不再查询会话档案；没有该参数时本地玩家
+     * profile 永远没有 textures 属性，皮肤/披风无法显示。仅当本地披风服务器已启动
+     * 且版本 >= 1.17 时注入（1.16 及更早的 Main 没有该选项，传入会解析失败）。</p>
+     *
+     * @param server   已启动的本地披风服务器（null 则返回空）
+     * @param versionId 版本 ID（如 {@code 1.17.1-OptiFine_H1}）
+     * @return {@code ["--profileProperties", "<json>"]} 或空列表
      */
-    public static boolean needsSkinServer(Skin skin) {
-        return skin != null && skin.getType() != Skin.Type.DEFAULT;
+    public static java.util.List<String> profilePropertiesArgs(LocalYggdrasilServer server,
+                                                               String versionId) {
+        if (server == null) return java.util.List.of();
+        VanillaVersion vanilla = VanillaVersion.parse(versionId);
+        if (vanilla == null || vanilla.major() < 17) return java.util.List.of();
+        String json = server.buildProfilePropertiesJson();
+        if (json == null || json.isBlank()) return java.util.List.of();
+        // Windows 命令行会把参数内的双引号当边界剥掉（JDK ProcessBuilder 不转义内部
+        // 引号，CreateProcess 解析后 JSON 引号丢失 -> 游戏 Gson 解析崩溃，已用参数探针
+        // temp/smoke/LaunchArgsProbe(2).java 实证）。把 " 转义为 \"，Windows 侧会还原为
+        // 完整 JSON；非 Windows（如 Linux/macOS）不转义，否则游戏会收到字面 \" 而解析失败。
+        if (isWindows()) {
+            json = json.replace("\"", "\\\"");
+        }
+        return java.util.List.of("--profileProperties", json);
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
     }
 }

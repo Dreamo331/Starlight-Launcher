@@ -54,7 +54,7 @@ public final class CommunityPage {
         this.ctx = ctx;
     }
 
-    // ===== 社区页组件引用（已接入星光MC社区后端） =====
+    // 社区页组件引用（已接入星光MC社区后端） //
     private final CommunityApi communityApi = new CommunityApi(); // 社区 API 客户端
     private VBox communityUserCard;       // 登录卡片：登录成功后刷新为已登录状态
     private Label communityCheckinStatus; // 签到状态文案："今日未签到" / "已连续签到N天"
@@ -65,7 +65,7 @@ public final class CommunityPage {
     private ComboBox<String> communityCategoryBox; // 发帖分类选择
     private CommunityPost currentDetailPost;       // 当前查看详情的帖子（点击帖子卡片时记录）
 
-    // ===== 社区页面（已接入星光MC社区后端，接口见 CommunityApi） =====
+    // 社区页面（已接入星光MC社区后端，接口见 CommunityApi） //
 
     /**
      * 社区页骨架：登录 / 签到 / 发帖 / 帖子列表 / 评论 / 点赞，全部对接真实后端接口。
@@ -78,7 +78,7 @@ public final class CommunityPage {
         HBox.setHgrow(layout, Priority.ALWAYS);
         VBox.setVgrow(layout, Priority.ALWAYS);
 
-        // ===== 左侧：登录 + 签到 + 官网提示（固定，不随帖子列表滚动） =====
+        // 左侧：登录 + 签到 + 官网提示（固定，不随帖子列表滚动） //
         VBox left = new VBox(14);
         left.setPrefWidth(280);
         left.setMinWidth(250);
@@ -87,7 +87,7 @@ public final class CommunityPage {
         left.getChildren().add(buildCommunityCheckinCard());
         left.getChildren().add(buildCommunityNoticeCard());
 
-        // ===== 右侧：帖子列表（含「发布帖子」按钮入口，发帖在独立页面完成） =====
+        // 右侧：帖子列表（含「发布帖子」按钮入口，发帖在独立页面完成） //
         VBox right = new VBox(12);
         right.setPadding(new Insets(0, 4, 0, 0));
         HBox.setHgrow(right, Priority.ALWAYS);
@@ -266,7 +266,7 @@ public final class CommunityPage {
         VBox body = new VBox(10);
         body.setPadding(new Insets(10, 4, 0, 4));
 
-        // ===== 登录方式切换：账号登录 / 令牌登录 =====
+        // 登录方式切换：账号登录 / 令牌登录 //
         ToggleGroup modeGroup = new ToggleGroup();
         ToggleButton accountModeBtn = AppIcons.toggle("user", "账号登录");
         accountModeBtn.getStyleClass().add("login-mode-toggle");
@@ -278,7 +278,7 @@ public final class CommunityPage {
         HBox modeBox = new HBox(0, accountModeBtn, tokenModeBtn);
         modeBox.setAlignment(Pos.CENTER);
 
-        // ===== 账号密码输入区 =====
+        // 账号密码输入区 //
         Label userLabel = new Label("用户名:");
         userLabel.getStyleClass().add("modal-text");
         TextField usernameField = new TextField();
@@ -292,7 +292,7 @@ public final class CommunityPage {
         passwordField.getStyleClass().add("input-field");
         passwordField.setPrefWidth(Double.MAX_VALUE);
 
-        // ===== 令牌输入区 =====
+        // 令牌输入区 //
         Label tokenLabel = new Label("登录令牌:");
         tokenLabel.getStyleClass().add("modal-text");
         PasswordField tokenField = new PasswordField();
@@ -509,18 +509,18 @@ public final class CommunityPage {
     /** 发帖页面：独立的标题 / 分类 / 内容编辑区，发布成功后自动返回社区页 */
     public VBox buildPostPublish() {
         VBox root = new VBox(16);
-        root.setPadding(new Insets(8, 8, 8, 0));
+        // 本页有外层 ScrollPane（.main-content 的 18/22 内边距已生效），叠加 8 会比其它页多缩进一圈
+        root.setPadding(new Insets(0, 4, 0, 0));
         VBox.setVgrow(root, Priority.ALWAYS);
 
         // 顶部：返回社区 + 页面标题
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
         Button backBtn = AppIcons.button("back", "返回社区");
-        backBtn.getStyleClass().add("community-action-btn");
-        backBtn.setStyle("-fx-padding: 6 14; -fx-font-size: 12px;");
+        backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> ctx.switchToPage("news"));
         Label pageTitle = new Label("发布帖子");
-        pageTitle.getStyleClass().add("home-card-title");
+        pageTitle.getStyleClass().add("content-title");
         header.getChildren().addAll(backBtn, pageTitle);
 
         // 编辑卡片
@@ -817,22 +817,23 @@ public final class CommunityPage {
             return buildNews();
         }
 
-        VBox root = new VBox(14);
-        root.setPadding(new Insets(8, 8, 8, 0));
+        VBox root = new VBox(16);
+        // 本页有外层 ScrollPane（.main-content 的 18/22 内边距已生效），叠加 8 会比其它页多缩进一圈；
+        // 间距同时与其它页统一为 16
+        root.setPadding(new Insets(0, 4, 0, 0));
         VBox.setVgrow(root, Priority.ALWAYS);
 
-        // ===== 顶部：返回社区 + 页面标题 =====
+        // 顶部：返回社区 + 页面标题 //
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
         Button backBtn = AppIcons.button("back", "返回社区");
-        backBtn.getStyleClass().add("community-action-btn");
-        backBtn.setStyle("-fx-padding: 6 14; -fx-font-size: 12px;");
+        backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> ctx.switchToPage("news"));
         Label pageTitle = new Label("帖子详情");
-        pageTitle.getStyleClass().add("home-card-title");
+        pageTitle.getStyleClass().add("content-title");
         header.getChildren().addAll(backBtn, pageTitle);
 
-        // ===== 主体：滚动内容 + 底部固定评论输入 =====
+        // 主体：滚动内容 + 底部固定评论输入 //
         BorderPane body = new BorderPane();
         VBox.setVgrow(body, Priority.ALWAYS);
 
@@ -857,7 +858,7 @@ public final class CommunityPage {
 
         root.getChildren().addAll(header, body);
 
-        // ===== 异步加载完整详情 =====
+        // 异步加载完整详情 //
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
                 ApiResult<CommunityPost> result = communityApi.postView(post.id);
@@ -871,7 +872,7 @@ public final class CommunityPage {
                     }
                     CommunityPost detail = result.data;
 
-                    // ===== 作者信息行：真实头像 + 作者 + 时间 + 分类 + 浏览量 =====
+                    // 作者信息行：真实头像 + 作者 + 时间 + 分类 + 浏览量 //
                     HBox authorRow = new HBox(10);
                     authorRow.setAlignment(Pos.CENTER_LEFT);
                     StackPane avatarBox = new StackPane();
@@ -901,18 +902,18 @@ public final class CommunityPage {
                     // 真实头像（未设置或失败时保留 emoji 占位）
                     loadCommunityAvatar(avatarBox, avatarFallback, "community-avatar-sm", detail.userId, 36);
 
-                    // ===== 标题 =====
+                    // 标题 //
                     Label titleLabel = new Label(detail.title == null ? "（无标题）" : detail.title);
                     titleLabel.getStyleClass().add("community-dialog-title");
                     titleLabel.setWrapText(true);
 
-                    // ===== 正文卡片 =====
+                    // 正文卡片 //
                     Label bodyLabel = new Label(detail.content == null || detail.content.isEmpty()
                             ? "（该帖没有正文内容）" : detail.content);
                     bodyLabel.getStyleClass().add("community-dialog-body");
                     bodyLabel.setWrapText(true);
 
-                    // ===== 操作行：点赞 + 统计 =====
+                    // 操作行：点赞 + 统计 //
                     HBox actionRow = new HBox(10);
                     actionRow.setAlignment(Pos.CENTER_LEFT);
                     Button likeBtn = new Button("" + detail.likes);
@@ -923,7 +924,7 @@ public final class CommunityPage {
                     actionRow.getChildren().addAll(likeBtn, statLabel);
                     applyPostLikedState(detail, likeBtn);
 
-                    // ===== 分隔线 + 评论区 =====
+                    // 分隔线 + 评论区 //
                     Region divider = new Region();
                     divider.getStyleClass().add("community-dialog-divider");
                     Label commentTitle = new Label("评论");

@@ -5,20 +5,14 @@ import com.example.starlight.newui.LauncherContext;
 import javafx.animation.AnimationTimer;
 import javafx.animation.PauseTransition;
 import javafx.scene.Node;
-import javafx.scene.control.ButtonBase;
-import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Slider;
-import javafx.scene.control.TabPane;
-import javafx.scene.control.TableView;
 import javafx.scene.control.TextInputControl;
-import javafx.scene.control.TreeView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
-import javafx.scene.input.MouseEvent;
 import javafx.util.Duration;
 
 import java.util.Map;
@@ -29,9 +23,9 @@ import java.util.Map;
  * <p>页面滚动区由 {@link PageKit#configureScrollPane}/{@link PageKit#attachInertia} 挂接；
  * 每个面板持有一个 Engine 实例（存入 {@code sp.getProperties()}，无静态注册表）：
  * <ul>
- *   <li><b>双值模型</b>：targetV 只被输入路径写（滚轮/拖拽/键盘/吸附），currentV 只被帧回调写
- *       （拖拽直控期二值同步例外）；帧回调 {@code currentV += (targetV-currentV)*ease} 后
- *       {@code setVvalue(currentV)}，|Δ| &lt; {@value #SNAP_EPSILON} 时精确停靠并 stop。</li>
+ *   <li><b>双值模型</b>：targetV 只被输入路径写（滚轮/键盘/吸附），currentV 只被帧回调写；
+ *       帧回调 {@code currentV += (targetV-currentV)*ease} 后 {@code setVvalue(currentV)}，
+ *       |Δ| &lt; {@value #SNAP_EPSILON} 时精确停靠并 stop。</li>
  *   <li><b>自停双保险</b>：帧回调首行 scene==null（切页移除，最迟一帧停止，无幽灵动画）
  *       与 SmoothScroll=false（关闭瞬间停靠当前目标位置，不悬停半途）。</li>
  *   <li><b>线程规则</b>：不创建线程、不注册后台回调、无 Platform.runLater——
@@ -40,7 +34,10 @@ import java.util.Map;
  *
  * <p>滚轮入口不在此注册：滚轮 SCROLL filter 由 PageKit 单点重写（惯性开/关二分），
  * 开启分支经 {@link #wheelScroll} 调入引擎；键盘用冒泡 {@code addEventHandler}
- * （控件先 consume 的方向键天然被尊重）；拖拽用捕获 filter 三连（豁免清单见 {@link #isInteractive}）。
+ * （控件先 consume 的方向键天然被尊重）。
+ *
+ * <p><b>页面滚动只支持滚轮与键盘</b>：不注册任何鼠标拖拽 filter。「按住空白处拖动滚动」
+ * 已整条移除（见 {@code Engine#attach} 的说明）——它会抢走页面内自定义拖拽控件的手势。
  */
 public final class InertiaScrollSupport {
 
@@ -52,10 +49,6 @@ public final class InertiaScrollSupport {
     public static final double DEFAULT_EASE = EASE_STD;
     /** 接近吸附阈值：|targetV-currentV| 小于此值时精确停靠（spec 6.1.3） */
     public static final double SNAP_EPSILON = 0.0005;
-    /** fling 系数：每秒 1 屏速度的甩动滑行 0.28 屏（spec 6.2.3 / design D5） */
-    public static final double FLING_FACTOR = 0.28;
-    /** 最近一次拖拽距释放超过该值 → 速度视为 0（停顿后原地释放不滑行） */
-    public static final double FLING_IDLE_MS = 250;
     /** 键盘 ↑/↓ 步长（spec 6.2.5） */
     public static final double KEY_STEP = 0.05;
     /** 键盘 PageUp/PageDown 步长（spec 6.2.5） */
@@ -83,8 +76,8 @@ public final class InertiaScrollSupport {
     /**
      * 给面板安装惯性引擎（幂等：重复调用直接返回）。
      *
-     * <p>注册拖拽三 filter、键盘冒泡 handler 与 contentProperty 监听
-     * （内容根节点 focusTraversable，保障"点击空白后键盘可滚"）；
+     * <p>注册键盘冒泡 handler 与 contentProperty 监听
+     * （内容根节点 focusTraversable，保障"点击空白后键盘可滚"）；不注册鼠标拖拽 filter。
      * ctx.config() 为 null 时按全默认值运行（对齐既有过滤器 null 防护惯例）。
      */
     public static void install(LauncherContext ctx, ScrollPane sp) {
@@ -206,38 +199,13 @@ public final class InertiaScrollSupport {
     }
 
     /**
-     * 拖拽豁免判定：沿 getTarget() 向上遍历父链（到 boundary 为止，不含），命中交互控件则本次手势不接管
-     * （滑块/按钮/输入框等照常工作，页面不滚——spec 4.5.3/5.5.1.3）。
-     * CheckBox/RadioButton/ToggleButton 均为 ButtonBase 子类，toggle-switch（CheckBox）同覆盖。
-     * boundary 传发起判定的面板自身：链路上的<b>其它</b> ScrollPane（嵌套内层滚动区）也算交互控件，
-     * 手势归最内层面板，避免内外两层同时拖拽。
+     * 键盘防御判定：焦点在这些控件上时按键归控件，页面不滚（与冒泡机制双保险，spec 5.7.1.2）
      */
-    private static boolean isInteractive(Node n, Node boundary) {
-        while (n != null && n != boundary) {
-            if (n instanceof ButtonBase
-                    || n instanceof TextInputControl
-                    || n instanceof ComboBox<?>
-                    || n instanceof ChoiceBox<?>
-                    || n instanceof Slider
-                    || n instanceof ScrollBar
-                    || n instanceof TableView<?>
-                    || n instanceof ListView<?>
-                    || n instanceof TreeView<?>
-                    || n instanceof TabPane
-                    || n instanceof ScrollPane) {
-                return true;
-            }
-            n = n.getParent();
-        }
-        return false;
-    }
-
-    /** 键盘防御判定：焦点在这些控件上时按键归控件，页面不滚（与冒泡机制双保险，spec 5.7.1.2） */
     private static boolean keyboardGuard(Node n) {
         return n instanceof TextInputControl || n instanceof Slider || n instanceof ComboBox<?>;
     }
 
-    // ===== 预览脚本验收通道（生产代码不使用；避免暴露内部类） =====
+    // 预览脚本验收通道（生产代码不使用；避免暴露内部类） //
 
     /** 帧回调计数（report②：停靠后不再递增 = 无空转动画） */
     public static long debugFrameCount(ScrollPane sp) {
@@ -257,14 +225,14 @@ public final class InertiaScrollSupport {
                 ? engine.targetV : Double.NaN;
     }
 
-    /** 当前 currentV（拖拽/收敛位置核对） */
+    /** 当前 currentV（收敛位置核对） */
     public static double debugCurrentV(ScrollPane sp) {
         return sp != null && sp.getProperties().get(INSTALL_KEY) instanceof Engine engine
                 ? engine.currentV : Double.NaN;
     }
 
     /**
-     * 每面板一个引擎实例。targetV 仅输入路径写、currentV 仅帧回调写（拖拽直控期同步例外）；
+     * 每面板一个引擎实例。targetV 仅输入路径写、currentV 仅帧回调写；
      * 单实例 AnimationTimer，需要时 start（幂等）、停靠即 stop，静止时零帧回调开销。
      */
     private static final class Engine {
@@ -276,14 +244,8 @@ public final class InertiaScrollSupport {
         private double targetV;
         private double currentV;
         private double ease;
-        private boolean dragging;
         /** 引擎当前是否在动画（AnimationTimer 无公开运行态，自维护；用于从静止恢复时对齐面板实际位置） */
         private boolean animating;
-        private double startY;
-        private double startV;
-        private double lastSceneY;
-        private long lastNanos;
-        private int dragCount;
         private long frameCount;
         private long frameNanosTotal;
 
@@ -332,9 +294,10 @@ public final class InertiaScrollSupport {
         }
 
         private void attach() {
-            sp.addEventFilter(MouseEvent.MOUSE_PRESSED, this::onPressed);
-            sp.addEventFilter(MouseEvent.MOUSE_DRAGGED, this::onDragged);
-            sp.addEventFilter(MouseEvent.MOUSE_RELEASED, this::onReleased);
+            // 页面滚动只由滚轮 / 键盘 / 滚动条驱动：不注册任何鼠标拖拽 filter。
+            // 曾经有「按住空白处拖动页面」的捕获 filter 三连，但它会抢走页面内自定义拖拽控件
+            // （如设置页多行输入框右下角的三角把手）的手势，表现为「一拖页面就滚、控件不动」，
+            // 故整条拖拽滚动路径已移除（含 fling 甩动与拖拽直控）。
             sp.addEventHandler(KeyEvent.KEY_PRESSED, this::onKey);
             sp.contentProperty().addListener((o, ov, nv) -> {
                 if (nv != null) nv.setFocusTraversable(true);
@@ -344,7 +307,7 @@ public final class InertiaScrollSupport {
             }
         }
 
-        // ===== 输入路径 =====
+        // 输入路径 //
 
         private void wheel(double deltaY, double range, double factor) {
             if (!scrollable()) return;
@@ -354,62 +317,6 @@ public final class InertiaScrollSupport {
             if (sections() >= 2) {
                 wheelSnap.playFromStart();   // 滚轮静止后就近归段，未声明区域零开销
             }
-        }
-
-        /** 按下：惯性关闭时事件直通控件与原生行为；豁免未命中才接管；滑行中再按下立即以 currentV 接管为起点（spec 5.5.3.2） */
-        private void onPressed(MouseEvent e) {
-            if (!readEnabled(ctx)) return;
-            if (!(e.getTarget() instanceof Node hit) || isInteractive(hit, sp)) return;
-            if (!scrollable()) return;
-            dragging = true;
-            stopAnimating();
-            wheelSnap.stop();
-            targetV = currentV;
-            startY = e.getSceneY();
-            startV = currentV;
-            lastSceneY = startY;
-            lastNanos = System.nanoTime();
-            dragCount = 0;
-        }
-
-        /** 拖拽直控：targetV = currentV = startV − (sceneY−startY)/range（可滚区间像素），二值同步 */
-        private void onDragged(MouseEvent e) {
-            if (!dragging) return;
-            double range = scrollableHeight();
-            if (range <= 0) return;
-            double v = clamp01(startV - (e.getSceneY() - startY) / range);
-            targetV = v;
-            currentV = v;
-            sp.setVvalue(currentV);
-            lastSceneY = e.getSceneY();
-            lastNanos = System.nanoTime();
-            dragCount++;
-            e.consume();
-        }
-
-        /**
-         * 释放：速度采样（&lt;2 次 DRAGGED 点按无速度、dt==0 防除零、停顿 &gt;250ms 视为 0）
-         * → fling 折算（velocityNorm 单位 vvalue/s）→ 分段吸附（D10：有甩动取甩动后 targetV）
-         * → 进入动画。
-         */
-        private void onReleased(MouseEvent e) {
-            if (!dragging) return;
-            dragging = false;
-            double velocity = 0;
-            if (dragCount >= 2) {
-                double dtMs = (System.nanoTime() - lastNanos) / 1_000_000.0;
-                double range = scrollableHeight();
-                if (dtMs > 0 && dtMs <= FLING_IDLE_MS && range > 0) {
-                    velocity = (e.getSceneY() - lastSceneY) / dtMs / range * 1000.0;
-                }
-            }
-            targetV = clamp01(currentV - velocity * FLING_FACTOR);
-            int s = sections();
-            if (s >= 2) {
-                targetV = clamp01(Math.round(targetV * s) / (double) s);
-            }
-            startAnimating();
-            e.consume();
         }
 
         /**
@@ -442,7 +349,7 @@ public final class InertiaScrollSupport {
             e.consume();
         }
 
-        // ===== 内部工具 =====
+        // 内部工具 //
 
         /**
          * 动画启动即刷新 ease（设置页切档后下次滚动立即用新档位，spec 5.3.1.3.a）；
@@ -462,9 +369,9 @@ public final class InertiaScrollSupport {
             animating = false;
         }
 
-        /** 输入驱动路径专用：动画未运行时把双值对齐到面板实际位置（拖拽接管期与动画运行期不动） */
+        /** 输入驱动路径专用：动画未运行时把双值对齐到面板实际位置（动画运行期不动） */
         private void resyncIfIdle() {
-            if (!animating && !dragging) {
+            if (!animating) {
                 currentV = clamp01(sp.getVvalue());
                 targetV = currentV;
             }
@@ -479,11 +386,6 @@ public final class InertiaScrollSupport {
         /** 内容不足（contentHeight − viewHeight ≤ 0）时全部输入路径忽略（spec 5.1.3.1） */
         private boolean scrollable() {
             return contentHeight() - sp.getViewportBounds().getHeight() > 0;
-        }
-
-        /** 可滚区间像素高度：内容高 − 视口高；vvalue 的 1.0 实际对应这段距离（恒定像素速度的归一基准） */
-        private double scrollableHeight() {
-            return contentHeight() - sp.getViewportBounds().getHeight();
         }
 
         private double contentHeight() {

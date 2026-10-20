@@ -1,5 +1,6 @@
 package com.example.starlight.newui.ui;
 
+import com.example.starlight.config.AppDirs;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.update.UpdateInstaller;
 
@@ -27,6 +28,9 @@ public final class ThemeManager {
 
     private final LauncherContext host;
 
+    /** 自定义背景色（设置 → 主题与背景 → 自定义背景色）；与壁纸、默认渐变三级共存 */
+    private final CustomThemeColor customColor;
+
     private String currentTheme = "light";
     // 背景图片视图（主题页设置，持久化到配置 BackgroundImage）
     private ImageView backgroundImageView;
@@ -35,6 +39,12 @@ public final class ThemeManager {
 
     public ThemeManager(LauncherContext host) {
         this.host = host;
+        this.customColor = new CustomThemeColor(host);
+    }
+
+    /** 自定义背景色管理者（设置页与本类共用同一实例，避免两份状态） */
+    public CustomThemeColor customColor() {
+        return customColor;
     }
 
     /** 选择背景图片文件并立即应用、持久化 */
@@ -48,8 +58,8 @@ public final class ThemeManager {
         );
         File f = fc.showOpenDialog(host.stage());
         if (f == null) return;
-        // 复制到启动器目录 Starlight-Launcher/wallpaper/ 并重命名为随机 10 位字符串（保留原扩展名）
-        File wallpaperDir = new File("Starlight-Launcher", "wallpaper");
+        // 复制到用户数据目录 wallpaper/ 并重命名为随机 10 位字符串（保留原扩展名）
+        File wallpaperDir = AppDirs.wallpaperDir().toFile();
         if (!wallpaperDir.isDirectory() && !wallpaperDir.mkdirs()) {
             host.ui().toast("无法创建 wallpaper 目录");
             return;
@@ -93,12 +103,24 @@ public final class ThemeManager {
             backgroundImageView = null;
         }
         String path = host.config().getOrDefault("BackgroundImage", "");
-        if (path.isEmpty()) return;
+        if (path.isEmpty()) {
+            // 没有壁纸：让自定义背景色接管（未设置则保持默认渐变）
+            customColor.apply();
+            return;
+        }
         File f = new File(path);
-        if (!f.isFile()) return;
+        if (!f.isFile()) {
+            customColor.apply();
+            return;
+        }
         try {
             Image img = new Image(f.toURI().toString());
-            if (img.isError()) return;
+            if (img.isError()) {
+                customColor.apply();
+                return;
+            }
+            // 有壁纸时自定义色让位（否则会盖住用户选的图）
+            customColor.apply();
             backgroundImageView = new ImageView(img);
             backgroundImageView.setPreserveRatio(false);
             backgroundImageView.setSmooth(true);
@@ -117,6 +139,7 @@ public final class ThemeManager {
             updateBackgroundOverlay();
         } catch (Exception e) {
             // 图片加载失败时静默忽略，保持默认背景
+            customColor.apply();
         }
     }
 
@@ -139,7 +162,7 @@ public final class ThemeManager {
         if (on) host.rootPane().getStyleClass().add("high-contrast");
     }
 
-    // ===== 主题 =====
+    // 主题 //
 
     /**
      * 按当前主题把 {@code dark-extra.css} 挂上 / 摘下主 Scene。
@@ -190,6 +213,8 @@ public final class ThemeManager {
         syncDarkExtraStylesheet();
         // 背景遮罩颜色跟随主题（保证壁纸上文字可读）
         updateBackgroundOverlay();
+        // 自定义背景色的可读性遮罩也随主题调整（深色下压暗、浅色下提亮）
+        customColor.refreshReadability();
 
         host.config().put("Theme", theme);
         host.saveConfig();

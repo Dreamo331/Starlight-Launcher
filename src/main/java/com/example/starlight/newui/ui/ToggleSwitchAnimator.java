@@ -52,7 +52,7 @@ import javafx.util.Duration;
  */
 public final class ToggleSwitchAnimator {
 
-    // ===== 几何：与 style.css 的轨道尺寸严格对应 =====
+    // 几何：与 style.css 的轨道尺寸严格对应 //
     private static final double TRACK_W = 52;
     private static final double TRACK_H = 30;
     private static final double BORDER = 0;
@@ -74,7 +74,7 @@ public final class ToggleSwitchAnimator {
     private static final double REST_OFF_X = GAP + KNOB_W / 2 - INNER_W / 2;
     private static final double REST_ON_X = INNER_W - GAP - KNOB_W / 2 - INNER_W / 2;
 
-    // ===== 曲线与时长 =====
+    // 曲线与时长 //
     /** 位移：cubic-bezier(0.34, 1.3, 0.64, 1)，1.3 > 1 才有过冲回弹（SPLINE 收不了这种曲线） */
     private static final Interpolator BOUNCE = new CubicBezierInterpolator(0.34, 1.30, 0.64, 1);
     /** 挤压：cubic-bezier(0.4, 0, 0.2, 1) */
@@ -92,7 +92,7 @@ public final class ToggleSwitchAnimator {
     /** 状态挂在控件的 properties 上：避免重复安装，也不用静态表持有控件 */
     private static final String KEY = "starlight.toggleSwitch";
 
-    // ===== 轨道底色过渡（与 style.css 各规则的层结构一一对应） =====
+    // 轨道底色过渡（与 style.css 各规则的层结构一一对应） //
     /** 关闭态轨道灰 = .toggle-switch 底色 */
     private static final Color TRACK_OFF = new Color(0, 0, 0, 0.12);
     /** 开启态轨道蓝 = :selected 本体层 */
@@ -231,7 +231,7 @@ public final class ToggleSwitchAnimator {
         running.play();
     }
 
-    // ===== 轨道底色过渡（设计 D4：setBackground 插值，不用 inline style） =====
+    // 轨道底色过渡（设计 D4：setBackground 插值，不用 inline style） //
 
     /**
      * 底色 0.3s 过渡：光晕 alpha 与本体色同时插值。
@@ -275,7 +275,7 @@ public final class ToggleSwitchAnimator {
         return new Background(fills);
     }
 
-    // ===== 图标 =====
+    // 图标 //
 
     private void applyIconState(boolean on) {
         if (checkIcon == null) return;

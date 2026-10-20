@@ -48,7 +48,7 @@ public final class RegionApiProvider implements ApiProvider {
         int chunkZ = Integer.parseInt(zStr);
 
         // 调用启动器原有的 region 读取能力，返回区块原始字节流。
-        // TODO: 接入真实实现后，本行无需任何改动 —— 包装层与业务层解耦。
+        // TODO: 接入真实实现后，本行无需任何改动（包装层与业务层解耦）。
         return RegionFileReader.readChunkData(regionFile, chunkX, chunkZ);
     }
 }

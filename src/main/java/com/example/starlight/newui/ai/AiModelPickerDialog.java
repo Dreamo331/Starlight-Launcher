@@ -101,7 +101,7 @@ public final class AiModelPickerDialog {
         new AiModelPickerDialog(host, baseUrl, apiKey, current, onPick).open();
     }
 
-    // ==================== 构建 ====================
+    // 构建 //
 
     private void open() {
         VBox body = new VBox(8);
@@ -246,7 +246,7 @@ public final class AiModelPickerDialog {
         return box;
     }
 
-    // ==================== 列表 ====================
+    // 列表 //
 
     /** 重新铺一遍模型列表；preset=true 表示这批是内置模型（会打「内置」徽章） */
     private void renderModels(List<String> models, boolean preset) {
@@ -391,7 +391,7 @@ public final class AiModelPickerDialog {
         onPick.accept(sel.model());
     }
 
-    // ==================== 在线获取 ====================
+    // 在线获取 //
 
     private void fetchAsync() {
         if (fetching) return;

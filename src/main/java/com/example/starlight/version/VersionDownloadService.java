@@ -1,11 +1,13 @@
 package com.example.starlight.version;
 
-import com.example.starlight.download.BMCLAPIDownloadProvider;
+import com.example.starlight.download.DownloadProviderHolder;
+import com.example.starlight.download.source.BMCLAPIDownloadProvider;
+import com.example.starlight.download.source.DownloadProvider;
+import com.example.starlight.download.source.MCBBSDownloadProvider;
+import com.example.starlight.download.source.MojangDownloadProvider;
+import com.example.starlight.download.task.VersionManifest;
 import com.example.starlight.newui.AppConfig;
 import com.example.starlight.util.DebugLog;
-import com.example.starlight.download.DownloadProvider;
-import com.example.starlight.download.MCBBSDownloadProvider;
-import com.example.starlight.download.MojangDownloadProvider;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -19,8 +21,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -35,16 +39,24 @@ import java.util.stream.Collectors;
  */
 public class VersionDownloadService {
 
-    // ==================== 常量 ====================
+    // 常量 //
 
-    private static final String MOJANG_MANIFEST_URL =
-            "https://launchermeta.mojang.com/mc/game/version_manifest.json";
     private static final String BMCLAPI_MANIFEST_URL =
             "https://bmclapi2.bangbang93.com/mc/game/version_manifest.json";
 
     /** 公共镜像源，供 LoaderProvider 和 InstallEngine 使用 */
     public static final String BMCLAPI_BASE =
             "https://bmclapi2.bangbang93.com";
+
+    /** BMCLAPI 镜像的静态实例：无论当前选中哪个下载源，元数据请求都自动把 BMCLAPI 镜像纳入兜底链 */
+    private static final BMCLAPIDownloadProvider BMCLAPI_PROVIDER =
+            new BMCLAPIDownloadProvider(BMCLAPI_BASE);
+
+    /** 元数据请求的镜像候选超时（较短：镜像只是首选，失败就切下一候选） */
+    private static final Duration METADATA_MIRROR_TIMEOUT = Duration.ofSeconds(6);
+
+    /** 元数据请求的官方候选超时（较长：官方是最后兜底，弱网下也能等它响应） */
+    private static final Duration METADATA_OFFICIAL_TIMEOUT = Duration.ofSeconds(20);
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -62,6 +74,17 @@ public class VersionDownloadService {
             .build();
 
     private static final Gson GSON = new Gson();
+
+    /**
+     * 加载器元数据候选链竞速线程池：每条候选（镜像/官方）同时发出，先成功者胜。
+     * <p>大小按「最坏情况同时竞速的候选数」估：单个 fetchString 最多 2~3 条候选，
+     * 7 个加载器并行时约 14~21 个候选同时在线；给 16 个守护线程足够又不至于连接风暴。
+     */
+    private static final ExecutorService METADATA_RACE_POOL = Executors.newFixedThreadPool(16, r -> {
+        Thread t = new Thread(r, "sl-metadata-race");
+        t.setDaemon(true);
+        return t;
+    });
 
     /**
      * 加载器查询专用线程池。
@@ -83,21 +106,18 @@ public class VersionDownloadService {
         return LOADER_QUERY_POOL;
     }
 
-    /** 当前使用的下载提供者（默认官方源，可切换至 BMCLAPI） */
-    private static DownloadProvider downloadProvider = new MojangDownloadProvider();
-
     /**
-     * 设置下载提供者
+     * 设置下载提供者（JUDGE-5：委托全局唯一持有者 DownloadProviderHolder，与其余下载类共享同一源）
      */
     public static void setDownloadProvider(DownloadProvider provider) {
-        downloadProvider = Objects.requireNonNull(provider);
+        DownloadProviderHolder.set(Objects.requireNonNull(provider));
     }
 
     /**
-     * 获取当前下载提供者
+     * 获取当前下载提供者（JUDGE-5：委托全局唯一持有者 DownloadProviderHolder）
      */
     public static DownloadProvider getDownloadProvider() {
-        return downloadProvider;
+        return DownloadProviderHolder.get();
     }
 
     /**
@@ -105,21 +125,17 @@ public class VersionDownloadService {
      * <p>
      * 支持：BMCLAPI / Mojang / MCBBS；未知值回退 BMCLAPI。
      * 切换后立即生效，后续版本清单获取、原版安装、资源补全等均使用新下载源。
+     * <p>
+     * JUDGE-5：源名解析与收敛统一委托 DownloadProviderHolder，本类不再自持静态 provider 字段，
+     * 与 GameResourceCompleter / VersionManifest / LoaderInstallEngine 共享同一下载源。
      *
      * @param source 下载源名称（大小写不敏感）
      * @return 实际应用后的下载提供者
      */
     public static DownloadProvider applyDownloadSource(String source) {
-        DownloadProvider provider;
-        if ("Mojang".equalsIgnoreCase(source)) {
-            provider = new MojangDownloadProvider();
-        } else if ("MCBBS".equalsIgnoreCase(source)) {
-            provider = new MCBBSDownloadProvider();
-        } else {
-            provider = new BMCLAPIDownloadProvider(BMCLAPI_BASE);
-        }
-        setDownloadProvider(provider);
-        return provider;
+        DownloadProvider p = DownloadProviderHolder.createForSource(source);
+        DownloadProviderHolder.set(p);
+        return p;
     }
 
     // 愚人节版本关键词
@@ -128,7 +144,7 @@ public class VersionDownloadService {
             "22w13oneblockatatime", "23w13a_or_b", "24w14potato"
     );
 
-    // ==================== 版本分类 ====================
+    // 版本分类 //
 
     public enum VersionCategory {
         RELEASE("release", "正式版", ""),
@@ -152,7 +168,7 @@ public class VersionDownloadService {
         public String getIcon() { return icon; }
     }
 
-    // ==================== 数据模型 ====================
+    // 数据模型 //
 
     /** 版本条目（含分类信息） */
     public static class VersionInfo {
@@ -264,7 +280,7 @@ public class VersionDownloadService {
         }
     }
 
-    // ==================== 版本清单获取 ====================
+    // 版本清单获取 //
 
     /** 清单成功缓存 TTL：5 分钟内的重复调用直接用内存结果 */
     private static final long MANIFEST_TTL_MS = 5 * 60_000L;
@@ -277,7 +293,8 @@ public class VersionDownloadService {
 
     /**
      * 获取版本清单，按发布时间降序排列，并附带分类信息。
-     * 先尝试 Mojang 官方 API，失败后自动回退到 BMCLAPI。
+     * 候选源（选中源 / BMCLAPI / piston-meta）并行竞速，任一成功即用；
+     * 冷启动 6h 内直接用磁盘缓存秒开，全部失败回退过期磁盘缓存。
      *
      * <p>成功结果缓存 5 分钟、失败结果缓存 30 秒；并发调用共享同一次网络拉取
      * （in-flight 去重）。之前页面里多个调用点各自拉全量清单，下载源不可用时
@@ -309,38 +326,53 @@ public class VersionDownloadService {
             future = manifestInFlight;
         }
         try {
-            return future.get(60, java.util.concurrent.TimeUnit.SECONDS);
+            return future.get(90, java.util.concurrent.TimeUnit.SECONDS);
         } catch (Exception e) {
             return Collections.emptyList();
         }
     }
 
-    /** 丢弃清单缓存，下次 {@link #fetchVersionManifest()} 强制重新联网拉取（刷新按钮用） */
+    /** 丢弃清单缓存（含磁盘缓存），下次 {@link #fetchVersionManifest()} 强制重新联网拉取（刷新按钮用） */
     public static void invalidateManifestCache() {
         synchronized (MANIFEST_LOCK) {
             manifestCache = Collections.emptyList();
             manifestCacheAt = 0;
             manifestInFlight = null;
         }
+        VersionManifest.deleteManifestDiskCache();
     }
 
-    /** 真正联网拉取并解析清单（无缓存，由 {@link #fetchVersionManifest()} 调度） */
+    /** 真正联网拉取并解析清单（无内存缓存，由 {@link #fetchVersionManifest()} 调度） */
     private static List<VersionInfo> doFetchVersionManifest() {
-        // 使用 DownloadProvider 获取版本清单 URL
-        List<URI> urls = downloadProvider.getVersionListURLs();
-        String json = null;
-        for (URI uri : urls) {
-            json = fetchString(uri.toString());
-            if (json != null) break;
+        // 冷启动秒开：磁盘缓存 6h 内直接用，不联网（刷新按钮 invalidate 时连磁盘缓存一起清）
+        String cached = VersionManifest.loadManifestDiskCache(true);
+        if (cached != null) {
+            return parseManifestJson(cached);
         }
-        // 回退：尝试 BMCLAPI（如果 DownloadProvider 不是 BMCLAPI）
-        if (json == null && !(downloadProvider instanceof BMCLAPIDownloadProvider)) {
-            json = fetchString(BMCLAPI_MANIFEST_URL);
+        // 候选链并行竞速：选中源 + BMCLAPI + 官方 piston-meta 同发，任一成功即用。
+        // 旧串行逐个尝试（选中源 → BMCLAPI → MCBBS → 官方×2）在「BMCLAPI 抖动 + 国内直连官方
+        // 被墙 + MCBBS 镜像已失效」时是 3~4 个 10~15s 超时叠加（2026-10-11 用户反馈
+        // 「版本列表特别慢/有时无法获取」的根因），并行后最坏延迟 ≈ 单个请求超时。
+        LinkedHashSet<String> urls = new LinkedHashSet<>();
+        DownloadProvider provider = DownloadProviderHolder.get();
+        for (URI uri : provider.getVersionListURLs()) {
+            urls.add(uri.toString());
+        }
+        urls.add(BMCLAPI_MANIFEST_URL);
+        urls.add("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json");
+        String json = VersionManifest.fetchFirstSuccessJson(urls);
+        if (json == null) {
+            // 全部失败：用过期磁盘缓存兜底（有数据总比空列表好）
+            json = VersionManifest.loadManifestDiskCache(false);
+            if (json != null) {
+                System.err.println("[VersionDownloadService] 网络全部失败，回退过期磁盘缓存");
+            }
         }
         if (json == null) {
             System.err.println("[VersionDownloadService] Failed to fetch version manifest from download source.");
             return Collections.emptyList();
         }
+        VersionManifest.saveManifestDiskCache(json);
         return parseManifestJson(json);
     }
 
@@ -372,7 +404,7 @@ public class VersionDownloadService {
         return result;
     }
 
-    // ==================== 加载器 API ====================
+    // 加载器 API //
 
     /** LoaderProvider 实例列表（可扩展） */
     public static final List<LoaderProvider> LOADER_PROVIDERS = List.of(
@@ -381,7 +413,13 @@ public class VersionDownloadService {
     );
 
     // 内存缓存：key = loaderType + "_" + mcVersion, value = LoaderVersion
-    private static final Map<String, LoaderVersion> LOADER_CACHE = new HashMap<>();
+    // 用 ConcurrentHashMap：多个加载器查询线程会并发 get/put（预加载与配置页查询时间重叠），
+    // 普通 HashMap 在此场景非线程安全（读到半构建的 entry / 丢失 put）。
+    private static final Map<String, LoaderVersion> LOADER_CACHE = new ConcurrentHashMap<>();
+
+    /** in-flight 去重：key 同上，value = 正在进行的查询。并发调用同一 key 只发一次网络请求 */
+    private static final Map<String, CompletableFuture<LoaderVersion>> LOADER_IN_FLIGHT =
+            new ConcurrentHashMap<>();
 
     /**
      * 异步获取某版本的所有加载器信息（并行请求，使用 LoaderProvider）
@@ -435,8 +473,13 @@ public class VersionDownloadService {
     /**
      * 异步获取某 MC 版本的全部可用加载器版本列表（各 Provider 并行查询完整列表）
      * @return 平铺列表（含 loaderName 分组信息），无可用版本时返回空列表
+     *
+     * <p>超时策略：等待 {@value #LOADER_LIST_DEADLINE_SECONDS} 秒（比底层单条候选的官方 20s 上限
+     * 略宽，给竞速留余量），到点后<b>保留已完成的加载器</b>，未完成的单独记入
+     * {@link LoaderQueryResult#timedOutLoaders()}，不再像旧实现那样把整批结果丢弃。
+     * 调用方据此把超时的加载器标成「可重试」，而不是误显示成「无」。
      */
-    public static CompletableFuture<List<LoaderVersion>> fetchAllLoaderVersionsListAsync(String mcVersion) {
+    public static CompletableFuture<LoaderQueryResult> fetchAllLoaderVersionsListAsync(String mcVersion) {
         return CompletableFuture.supplyAsync(() -> {
             List<CompletableFuture<List<LoaderVersion>>> futures = new ArrayList<>();
             for (LoaderProvider p : LOADER_PROVIDERS) {
@@ -448,30 +491,55 @@ public class VersionDownloadService {
                     }
                 }, LOADER_QUERY_POOL));
             }
+            boolean timedOut = false;
             try {
                 CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                        .get(10, java.util.concurrent.TimeUnit.SECONDS);
-            } catch (Exception ignored) {}
+                        .get(LOADER_LIST_DEADLINE_SECONDS, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                timedOut = true;
+            }
             List<LoaderVersion> result = new ArrayList<>();
-            for (CompletableFuture<List<LoaderVersion>> f : futures) {
-                List<LoaderVersion> list = f.getNow(List.of());
+            Set<String> timedOutNames = new LinkedHashSet<>();
+            for (int i = 0; i < futures.size(); i++) {
+                CompletableFuture<List<LoaderVersion>> f = futures.get(i);
+                List<LoaderVersion> list = f.getNow(null);
+                if (list == null) {
+                    // 到点仍未完成：该加载器「本轮超时」，记名供 UI 显示「重试」
+                    timedOutNames.add(LOADER_PROVIDERS.get(i).name());
+                    continue;
+                }
                 for (LoaderVersion lv : list) {
                     if (lv != null && lv.isAvailable() && lv.getVersion() != null) {
                         result.add(lv);
                     }
                 }
             }
-            return result;
+            return new LoaderQueryResult(result, timedOutNames, timedOut);
         }, LOADER_QUERY_POOL);
     }
 
-    /** 同步获取某 MC 版本的全部可用加载器版本列表（阻塞，最长 10s） */
-    public static List<LoaderVersion> fetchAllLoaderVersionsList(String mcVersion) {
-        try {
-            return fetchAllLoaderVersionsListAsync(mcVersion).get(10, java.util.concurrent.TimeUnit.SECONDS);
-        } catch (Exception e) {
-            return List.of();
+    /** 加载器列表查询的等待上限（秒）：略宽于单条官方候选的 20s，给并行竞速一点余量 */
+    private static final int LOADER_LIST_DEADLINE_SECONDS = 22;
+
+    /**
+     * 加载器列表查询结果：成功项 + 本轮超时的加载器名（供 UI 显示「重试」而非「无」）。
+     */
+    public static class LoaderQueryResult {
+        private final List<LoaderVersion> versions;
+        private final Set<String> timedOutLoaders;
+        private final boolean timedOut;
+
+        public LoaderQueryResult(List<LoaderVersion> versions, Set<String> timedOutLoaders, boolean timedOut) {
+            this.versions = versions == null ? List.of() : versions;
+            this.timedOutLoaders = timedOutLoaders == null ? Set.of() : timedOutLoaders;
+            this.timedOut = timedOut;
         }
+
+        public List<LoaderVersion> versions() { return versions; }
+        /** 本轮因超时未查到的加载器名 */
+        public Set<String> timedOutLoaders() { return timedOutLoaders; }
+        /** 是否发生了整体超时（存在未完成的加载器） */
+        public boolean timedOut() { return timedOut; }
     }
 
     /**
@@ -538,14 +606,44 @@ public class VersionDownloadService {
         }
     }
 
-    /** 通过 LoaderProvider 查询并缓存 */
+    /** 通过 LoaderProvider 查询并缓存（带 in-flight 去重） */
     private static LoaderVersion fetchWithCache(LoaderProvider provider, String mcVersion) {
         String cacheKey = provider.name().toLowerCase(Locale.ROOT) + "_" + mcVersion;
         LoaderVersion cached = LOADER_CACHE.get(cacheKey);
         if (cached != null) return cached;
-        LoaderVersion result = provider.fetchVersion(mcVersion);
-        LOADER_CACHE.put(cacheKey, result);
-        return result;
+
+        // 并发去重：同一 key 的并发调用共享同一次网络拉取，避免预加载与配置页查询时间重叠时
+        // 对同一个 URL 打两遍（日志里曾出现 fabric-meta/neoforge 同 URL 4 秒内发两次）
+        CompletableFuture<LoaderVersion> inFlight = LOADER_IN_FLIGHT.get(cacheKey);
+        if (inFlight != null) {
+            try {
+                return inFlight.join();
+            } catch (Exception ignored) {
+                return new LoaderVersion(provider.name(), null, false, null);
+            }
+        }
+        CompletableFuture<LoaderVersion> task = new CompletableFuture<>();
+        CompletableFuture<LoaderVersion> previous = LOADER_IN_FLIGHT.putIfAbsent(cacheKey, task);
+        if (previous != null) {
+            // 竞态：另一线程先放入了，共享它的结果
+            try {
+                return previous.join();
+            } catch (Exception ignored) {
+                return new LoaderVersion(provider.name(), null, false, null);
+            }
+        }
+        try {
+            LoaderVersion result = provider.fetchVersion(mcVersion);
+            LOADER_CACHE.put(cacheKey, result);
+            task.complete(result);
+            return result;
+        } catch (Exception e) {
+            LoaderVersion fail = new LoaderVersion(provider.name(), null, false, null);
+            task.complete(fail);
+            return fail;
+        } finally {
+            LOADER_IN_FLIGHT.remove(cacheKey);
+        }
     }
 
     /** 预加载热门版本的加载器信息（静默，不阻塞） */
@@ -579,9 +677,12 @@ public class VersionDownloadService {
     }
 
     public static int getCacheSize() { return LOADER_CACHE.size(); }
-    public static void clearCache() { LOADER_CACHE.clear(); }
+    public static void clearCache() {
+        LOADER_CACHE.clear();
+        LOADER_IN_FLIGHT.clear();
+    }
 
-    // ==================== 内部工具方法 ====================
+    // 内部工具方法 //
 
     private static LoaderVersion getCachedOrFallback(String type, String mcVersion) {
         LoaderVersion cached = LOADER_CACHE.get(type + "_" + mcVersion);
@@ -621,7 +722,7 @@ public class VersionDownloadService {
         } catch (Exception ignored) { return "未知"; }
     }
 
-    // ==================== HTTP 和 JSON 工具 ====================
+    // HTTP 和 JSON 工具 //
 
     /** Modrinth 官方 API 前缀与其 MCIM 镜像前缀（mod.mcimirror.top，与下载源的替换规则同一份地址） */
     private static final String MODRINTH_API_PREFIX = "https://api.modrinth.com";
@@ -636,51 +737,127 @@ public class VersionDownloadService {
 
     /** 公共可见，供 LoaderProvider 和 InstallEngine 使用 */
     public static String fetchString(String url) {
+        if (url == null || url.isBlank()) return null;
         // Modrinth 的请求（Fabric API / QSL 等加载器版本查询）先走 MCIM 镜像，失败回落官方域名
-        if (url != null && url.startsWith(MODRINTH_API_PREFIX)) {
+        if (url.startsWith(MODRINTH_API_PREFIX)) {
             if (MODRINTH_MIRROR_BREAKER.allowMirror()) {
                 String mirrorUrl = MCIM_MIRROR_PREFIX + url.substring(MODRINTH_API_PREFIX.length());
-                String body = fetchStringWith(HTTP_CLIENT, mirrorUrl, MIRROR_TIMEOUT);
-                if (body == null) body = fetchStringWith(HTTP_CLIENT_FALLBACK, mirrorUrl, MIRROR_TIMEOUT);
+                // 镜像与官方并行竞速：谁先拿到正文就用谁（镜像慢时官方往往更快，见下方主候选链说明）
+                String body = fetchFirstSuccess(List.of(mirrorUrl, url));
                 if (body != null) {
+                    // 竞速无法区分谁赢，按「官方是否也在」保守更新熔断：正文非空即说明至少一条成功，
+                    // 镜像是否健康留待下一次判断；这里不记录失败，避免把「镜像慢但官方快」误判成镜像挂掉
                     MODRINTH_MIRROR_BREAKER.recordSuccess();
                     return body;
                 }
                 MODRINTH_MIRROR_BREAKER.recordFailure();
+                return null;
             }
+            return fetchFirstSuccess(List.of(url));
         }
-        return fetchWithFallback(url);
+        // 候选链（对标 PCL DlSourceOrder：镜像优先、官方兜底）：
+        //   1) 当前选中下载源的镜像（BMCLAPI/MCBBS 的 URL 替换表，注入后已含官方原始 URL 兜底）
+        //   2) BMCLAPI 镜像（自动兜底：选中源为官方时，也给一条国内可达的镜像路径）
+        //   3) 官方原始 URL（最终兜底）
+        // 改为<b>全部候选并行竞速</b>：旧串行逐候选尝试（每个还 HTTP/2 + HTTP/1.1 两次、镜像 6s 官方 20s）
+        // 最坏要 12+40=52 秒叠加，超过 UI 的 10 秒预算，导致加载器显示「无」。
+        // 并行后最坏 ≈ 单条候选的最坏延迟，任何一条先成功即返回。
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        for (URI u : DownloadProviderHolder.get().injectURLWithCandidates(url)) {
+            candidates.add(u.toString());
+        }
+        candidates.add(BMCLAPI_PROVIDER.injectURL(url));
+        candidates.add(url);
+        return fetchFirstSuccess(candidates);
     }
 
-    /** HTTP/2 取一次，失败再用 HTTP/1.1 重试一次（部分服务器如 meta.quiltmc.org 与 HTTP/2 不兼容） */
-    private static String fetchWithFallback(String url) {
-        String body = fetchStringWith(HTTP_CLIENT, url);
-        if (body == null) {
-            body = fetchStringWith(HTTP_CLIENT_FALLBACK, url);
+    /**
+     * 候选链并行竞速：全部候选同时发出（每条先 HTTP/2，失败再 HTTP/1.1），
+     * 取先拿到正文的那个；全部失败返回 {@code null}。
+     *
+     * <p>与 {@link VersionManifest#fetchFirstSuccessJson} 同一思路：不押注单一路径，
+     * 被墙/失效的候选只会并行空转，不再串行拖慢整体。HTTP/1.1 降级只发生在
+     * 该候选的 HTTP/2 明确失败之后（例如 RST_STREAM），而不是无条件二次请求。
+     */
+    private static String fetchFirstSuccess(Collection<String> urls) {
+        if (urls == null || urls.isEmpty()) return null;
+        List<CompletableFuture<String>> pending = new ArrayList<>();
+        for (String url : urls) {
+            pending.add(CompletableFuture.supplyAsync(() -> fetchOnceWithFallback(url), METADATA_RACE_POOL)
+                    .exceptionally(e -> null));
         }
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(25);
+        while (!pending.isEmpty() && System.nanoTime() < deadline) {
+            try {
+                CompletableFuture.anyOf(pending.toArray(new CompletableFuture[0]))
+                        .get(5, TimeUnit.SECONDS);
+            } catch (Exception ignored) {
+                continue;
+            }
+            String firstSuccess = null;
+            Iterator<CompletableFuture<String>> it = pending.iterator();
+            while (it.hasNext()) {
+                CompletableFuture<String> f = it.next();
+                if (!f.isDone()) continue;
+                it.remove();
+                if (firstSuccess != null) continue;
+                try {
+                    String body = f.join();
+                    if (body != null && !body.isEmpty()) firstSuccess = body;
+                } catch (Exception ignored) {
+                    // 该候选失败，继续看其他
+                }
+            }
+            if (firstSuccess != null) return firstSuccess;
+        }
+        return null;
+    }
+
+    /**
+     * 单条候选：先 HTTP/2，明确失败（如 RST_STREAM）再降级 HTTP/1.1 重试一次。
+     * <p>超时按「是否官方域名」区分：镜像 6s、官方 20s。只有该候选的 HTTP/2 真的
+     * 失败才付第二次请求的代价，不再无条件两连。
+     */
+    private static String fetchOnceWithFallback(String url) {
+        boolean official = isOfficialCandidate(url);
+        Duration timeout = official ? METADATA_OFFICIAL_TIMEOUT : METADATA_MIRROR_TIMEOUT;
+        String body = fetchStringWith(HTTP_CLIENT, url, timeout);
+        if (body != null) return body;
+        body = fetchStringWith(HTTP_CLIENT_FALLBACK, url, timeout);
         return body;
     }
 
-    private static String fetchStringWith(HttpClient client, String url) {
-        return fetchStringWith(client, url, Duration.ofSeconds(15));
+    /** 是否为官方域名候选（官方给更长超时，镜像给短超时快速换源） */
+    private static boolean isOfficialCandidate(String url) {
+        if (url == null) return false;
+        return url.startsWith("https://meta.fabricmc.net")
+                || url.startsWith("https://maven.minecraftforge.net")
+                || url.startsWith("https://maven.neoforged.net")
+                || url.startsWith("https://meta.quiltmc.org")
+                || url.startsWith("https://api.modrinth.com");
     }
 
     private static String fetchStringWith(HttpClient client, String url, Duration timeout) {
         try {
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("User-Agent", AppConfig.USER_AGENT)
                     .timeout(timeout)
-                    .GET()
-                    .build();
+                    .GET();
+            // 显式请求 gzip：JDK HttpClient 不会自动带 Accept-Encoding。
+            // 这条路径供各 LoaderProvider 查 Modrinth 版本列表（FabricAPI / QSL 的
+            // /project/{id}/version 可达数 MB），不压缩会明显拖慢加载器版本查询。
+            com.example.starlight.util.HttpText.acceptGzip(builder);
+            HttpRequest request = builder.build();
             DebugLog.http(true, "GET", url, 0, 0, null, -1);
-            HttpResponse<String> response = client.send(request,
-                    HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+            HttpResponse<byte[]> response = client.send(request,
+                    HttpResponse.BodyHandlers.ofByteArray());
+            String body = response.statusCode() >= 200 && response.statusCode() < 300
+                    ? com.example.starlight.util.HttpText.decode(response) : null;
             DebugLog.http(false, null, url, response.statusCode(),
-                    response.body() != null ? response.body().length() : 0,
-                    response.body(), -1);
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                return response.body();
+                    body != null ? body.length() : 0, body, -1);
+            if (body != null) {
+                return body;
             } else {
                 System.err.println("[VersionDownloadService] HTTP " + response.statusCode() + " for " + url);
                 return null;

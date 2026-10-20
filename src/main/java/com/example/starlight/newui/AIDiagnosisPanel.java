@@ -46,7 +46,7 @@ public class AIDiagnosisPanel extends VBox {
     private String lastAiResponse;
     private volatile boolean analyzing = false;
 
-    // ===== 流式接收 =====
+    // 流式接收 //
     /** 正文增量（delta.content） */
     private final StringBuilder streamAnswer = new StringBuilder();
     /** 思考增量（delta.reasoning_content，推理模型会先吐这段） */
@@ -136,9 +136,7 @@ public class AIDiagnosisPanel extends VBox {
         startAnalysis();
     }
 
-    // ================================================================
-    //  分析流程
-    // ================================================================
+    // 分析流程 //
 
     private void startAnalysis() {
         if (analyzing) return;
@@ -312,9 +310,7 @@ public class AIDiagnosisPanel extends VBox {
         return sb.toString();
     }
 
-    // ================================================================
-    //  辅助方法
-    // ================================================================
+    // 辅助方法 //
 
     private void copyResult() {
         if (lastAiResponse == null || lastAiResponse.isEmpty()) {

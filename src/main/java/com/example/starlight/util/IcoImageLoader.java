@@ -26,7 +26,7 @@ public class IcoImageLoader {
     public static Image loadIcoAsImage(InputStream icoStream) throws IOException {
         DataInputStream dis = new DataInputStream(icoStream);
         try {
-            // --- ICO 文件头 (6 bytes) ---
+            // ICO 文件头 (6 bytes) //
             dis.readUnsignedShort(); // reserved, 必须为 0
             int type = dis.readUnsignedShort(); // 1 = 图标, 2 = 光标
             int count = dis.readUnsignedShort(); // 图像数量
@@ -38,7 +38,7 @@ public class IcoImageLoader {
                 throw new IOException("No image data in ICO file");
             }
 
-            // --- 读取目录项，找到最大的图像 ---
+            // 读取目录项，找到最大的图像 //
             byte[][] entries = new byte[count][16];
             for (int i = 0; i < count; i++) {
                 dis.readFully(entries[i]);
@@ -70,7 +70,7 @@ public class IcoImageLoader {
             int offset = (bestEntry[11] << 24) | (bestEntry[10] << 16)
                        | (bestEntry[9] << 8) | (bestEntry[8] & 0xFF);
 
-            // --- 读取图像数据 ---
+            // 读取图像数据 //
             byte[] imageData = new byte[size];
             // 跳过到 offset 位置
             int skipBytes = offset - 6 - count * 16;

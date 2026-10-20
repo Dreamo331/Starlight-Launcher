@@ -78,15 +78,11 @@ public class JavaFXLauncher extends Application {
 
         JavaFXLauncher.primaryStage = primaryStage;
 
-        // ============================================================
         // 必须先设置无边框透明窗口（必须在 show() 之前调用）
-        // ============================================================
         primaryStage.initStyle(StageStyle.TRANSPARENT);
 
-        // ============================================================
         // 先显示启动动画（Splash），再进入主界面
         // 开发者选项可关闭启动画面（ShowSplash=false），此时直接进入主界面
-        // ============================================================
         boolean showSplash = true;
         try {
             showSplash = !"false".equalsIgnoreCase(
@@ -143,15 +139,13 @@ public class JavaFXLauncher extends Application {
         try { JavaCacheManager.warmUp(); } catch (Exception ignored) {}
 
         SplashProgress.update("正在启动插件…", 0.85);
-        // ============================================================
-        // 插件系统初始化（顺序固定，不可颠倒）：
-        //   1) 先启动本地 API 服务 —— 绑定 0 端口，由操作系统分配空闲端口，
-        //      服务启动成功后立即把实际端口写入 .minecraft/starlight_api.port；
-        //   2) 再初始化插件管理器并扫描插件元数据（只读 JSON，不加载类）；
-        //   3) 最后自动启动所有【已启用】的插件子进程（java -jar，进程隔离）。
-        //   顺序颠倒会导致插件子进程读不到端口文件而握手失败。
+        // 插件系统初始化（顺序固定，不可颠倒）： //
+        // 1) 先启动本地 API 服务 —— 绑定 0 端口，由操作系统分配空闲端口，
+        // 服务启动成功后立即把实际端口写入 .minecraft/starlight_api.port；
+        // 2) 再初始化插件管理器并扫描插件元数据（只读 JSON，不加载类）；
+        // 3) 最后自动启动所有【已启用】的插件子进程（java -jar，进程隔离）。
+        // 顺序颠倒会导致插件子进程读不到端口文件而握手失败。
         // 插件系统异常不影响启动器主功能（整体兜底，不阻断 UI）。
-        // ============================================================
         try {
             String gameDir = cfg.getOrDefault("GameDir", ".minecraft");
             java.nio.file.Path minecraftDir = java.nio.file.Path.of(gameDir);
@@ -384,7 +378,7 @@ public class JavaFXLauncher extends Application {
         stage.setY(bounds.getMinY() + (bounds.getHeight() - height) / 2);
     }
 
-    // ==================== 图标加载 ====================
+    // 图标加载 //
 
     private Image loadIcon() {
         InputStream pngStream = getClass().getResourceAsStream("/images/icon.png");
@@ -400,7 +394,7 @@ public class JavaFXLauncher extends Application {
         }
     }
 
-    // ==================== 环境检测 ====================
+    // 环境检测 //
 
     private void checkRuntimeEnvironment() {
         String javaVersion = System.getProperty("java.version", "Unknown");
@@ -453,7 +447,10 @@ public class JavaFXLauncher extends Application {
     }
 
     public static void main(String[] args) {
-        // IDEA 运行配置若直接指向本类，也要先剥离 --console（命令行启动模式的显式开关）
-        launch(ConsoleMode.stripAndMaybeEnable(args));
+        // IDEA 运行配置若直接指向本类（而非 MainApp），也必须先初始化数据目录，
+        // 否则用户级配置会落到默认全局根目录、且历史数据不会被迁移。
+        String[] afterPortable = com.example.starlight.config.AppDirs.initAndStrip(args);
+        // 再剥离 --console（命令行启动模式的显式开关）
+        launch(ConsoleMode.stripAndMaybeEnable(afterPortable));
     }
 }

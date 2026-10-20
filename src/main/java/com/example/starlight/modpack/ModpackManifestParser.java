@@ -69,7 +69,7 @@ public final class ModpackManifestParser {
      * 这里用批量接口换成直链；作者关闭第三方分发时拿不到直链，会跳过并在日志里列出。
      */
     public static PackManifest parse(Path extractDir, Progress progress) throws IOException {
-        // ---- Modrinth .mrpack ----
+        // Modrinth .mrpack //
         Path mrIndex = extractDir.resolve("modrinth.index.json");
         if (Files.exists(mrIndex)) {
             JsonObject index = new Gson().fromJson(
@@ -104,7 +104,7 @@ public final class ModpackManifestParser {
                     loaderType, loaderVersion, "overrides", files);
         }
 
-        // ---- CurseForge zip ----
+        // CurseForge zip //
         Path cfManifest = extractDir.resolve("manifest.json");
         if (Files.exists(cfManifest)) {
             JsonObject m = new Gson().fromJson(

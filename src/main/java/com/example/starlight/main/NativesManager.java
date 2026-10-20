@@ -3,8 +3,9 @@ package com.example.starlight.main;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.JsonObject;
-import com.startgame.LaunchInfo;
-import com.startgame.launcher.VanillaLauncher;
+import com.example.starlight.config.VersionConfigManager;
+import com.example.starlight.startmc.LaunchInfo;
+import com.example.starlight.startmc.launcher.VanillaLauncher;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -26,9 +27,7 @@ import java.util.stream.Stream;
  */
 public class NativesManager {
 
-    // ================================================================
-    //  补全原生库（含启动前预检）
-    // ================================================================
+    // 补全原生库（含启动前预检） //
 
     /** Native 文件最低有效数量（低于此值认为不完整，参考 BaseLauncher.MIN_REQUIRED_DLLS） */
     private static final int MIN_REQUIRED_NATIVES = 5;
@@ -118,11 +117,15 @@ public class NativesManager {
             JsonObject versionJson = new Gson().fromJson(jsonStr, JsonObject.class);
 
             // 2. 构建最小 LaunchInfo（只需要启动器需要的信息）
+            // 隔离开关按该版本的有效配置读取，不能硬编码 false：
+            // 虽然 natives 路径本身走 versions/<版本>，但任何按 resolveEffectiveGameDir()
+            // 派生的逻辑都依赖这个标志保持一致
             LaunchInfo info = new LaunchInfo();
             info.setGameDirPath(Path.of(gameDir));
             info.setVersion(version);
             info.setJavaPath("java");
-            info.setVersionIsolation(false);
+            info.setVersionIsolation(VersionConfigManager.effectiveVersionIsolation(
+                    ConfigManager.readConfig(), gameDir, version));
 
             // 3. 使用 VanillaLauncher 调用原生库处理
             VanillaLauncher launcher = new VanillaLauncher(info);
@@ -156,9 +159,7 @@ public class NativesManager {
         }
     }
 
-    // ================================================================
-    //  清理原生库
-    // ================================================================
+    // 清理原生库 //
 
     /**
      * 清理多余的原生库文件

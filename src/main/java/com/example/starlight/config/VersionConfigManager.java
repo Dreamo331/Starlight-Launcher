@@ -58,9 +58,10 @@ public final class VersionConfigManager {
     public static final String OVERRIDES_FILENAME = "config.overrides.json";
     public static final int SCHEMA_VERSION = 1;
 
-    // ==================== 可覆盖字段路径（命名空间：java.* / game.*） ====================
+    // 可覆盖字段路径（命名空间：java.* / game.*） //
 
     public static final String PATH_JAVA_PATH          = "java.path";
+    public static final String PATH_AUTO_JAVA          = "java.autoJava";
     public static final String PATH_MIN_MEMORY         = "java.minMemory";
     public static final String PATH_MAX_MEMORY         = "java.maxMemory";
     public static final String PATH_JVM_ARGS           = "java.jvmArgs";
@@ -75,7 +76,7 @@ public final class VersionConfigManager {
 
     /** 全部可覆盖路径（UI 据此渲染；账户/令牌等运行时字段不参与版本覆盖） */
     public static final List<String> OVERRIDABLE_PATHS = List.of(
-            PATH_JAVA_PATH, PATH_MIN_MEMORY, PATH_MAX_MEMORY, PATH_JVM_ARGS,
+            PATH_JAVA_PATH, PATH_AUTO_JAVA, PATH_MIN_MEMORY, PATH_MAX_MEMORY, PATH_JVM_ARGS,
             PATH_WIDTH, PATH_HEIGHT, PATH_FULLSCREEN, PATH_VERSION_ISOLATION,
             PATH_GAME_ARGS, PATH_PRE_LAUNCH, PATH_POST_EXIT, PATH_GAME_LANGUAGE);
 
@@ -83,6 +84,7 @@ public final class VersionConfigManager {
     private static final Map<String, String> PATH_TO_INI_KEY = new LinkedHashMap<>();
     static {
         PATH_TO_INI_KEY.put(PATH_JAVA_PATH,         "JavaPath");
+        PATH_TO_INI_KEY.put(PATH_AUTO_JAVA,         "AutoJava");
         PATH_TO_INI_KEY.put(PATH_MIN_MEMORY,        "MinMemory");
         PATH_TO_INI_KEY.put(PATH_MAX_MEMORY,        "MaxMemory");
         PATH_TO_INI_KEY.put(PATH_JVM_ARGS,          "JvmArgs");
@@ -96,7 +98,7 @@ public final class VersionConfigManager {
         PATH_TO_INI_KEY.put(PATH_GAME_LANGUAGE,     "GameLanguage");
     }
 
-    // ==================== 旧配置迁移（version-settings.properties → config.overrides.json） ====================
+    // 旧配置迁移（version-settings.properties → config.overrides.json） //
 
     private static final String LEGACY_FILENAME = "version-settings.properties";
     private static final Map<String, String> LEGACY_KEY_TO_PATH = Map.ofEntries(
@@ -116,9 +118,7 @@ public final class VersionConfigManager {
 
     private VersionConfigManager() {}
 
-    // ================================================================
-    //  路径 / 存储
-    // ================================================================
+    // 路径 / 存储 //
 
     /** 版本覆盖文件的完整路径 */
     public static Path getOverridesPath(String gameDir, String version) {
@@ -180,9 +180,7 @@ public final class VersionConfigManager {
         return root;
     }
 
-    // ================================================================
-    //  覆盖状态查询 / 修改（HMCL overrideProperties 的增删查）
-    // ================================================================
+    // 覆盖状态查询 / 修改（HMCL overrideProperties 的增删查） //
 
     /** 该版本覆盖了哪些字段路径 */
     public static Set<String> overriddenPaths(String gameDir, String version) {
@@ -359,9 +357,7 @@ public final class VersionConfigManager {
         if (overridden) arr.add(path);
     }
 
-    // ================================================================
-    //  合并：全局 INI + 版本覆盖 → 有效配置（启动链路唯一入口）
-    // ================================================================
+    // 合并：全局 INI + 版本覆盖 → 有效配置（启动链路唯一入口） //
 
     /**
      * 构建有效配置：全局 ini 拷贝后应用版本覆盖。版本为空或无覆盖时原样返回。
@@ -395,6 +391,36 @@ public final class VersionConfigManager {
         String iniKey = PATH_TO_INI_KEY.get(path);
         if (iniKey == null) return "";
         return buildEffectiveIni(globalIni, gameDir, version).getOrDefault(iniKey, "");
+    }
+
+    /**
+     * 某版本「版本隔离」的有效开关（全局值 + 该版本覆盖合并后）。
+     *
+     * <p>所有需要按版本判定隔离位置的调用方都应走这里，而不是直接读全局配置：
+     * 版本独立设置页允许只对单个版本开/关隔离，直接读全局会把 mod 装错目录、
+     * 或把截图/options.txt 定位到错误的目录。
+     */
+    public static boolean effectiveVersionIsolation(Map<String, String> globalIni,
+                                                    String gameDir, String version) {
+        return "true".equalsIgnoreCase(effectiveScalar(globalIni, gameDir, version,
+                PATH_VERSION_ISOLATION).trim());
+    }
+
+    /**
+     * 某版本「自动选择 Java」的有效开关（全局值 + 该版本覆盖合并后）。
+     *
+     * <p>默认跟随全局 {@code AutoJava}；版本独立设置页可仅对该版本关闭自动选择
+     * （让手动指定的 {@code java.path} 生效），避免自动选择无差别覆盖所有版本。
+     */
+    public static boolean effectiveAutoJava(Map<String, String> globalIni,
+                                            String gameDir, String version) {
+        String v = effectiveScalar(globalIni, gameDir, version, PATH_AUTO_JAVA).trim();
+        // 未覆盖时回退全局 AutoJava（starlight.ini 的 AutoJava 键，默认 true）
+        if (v.isEmpty() && !isOverridden(gameDir, version, PATH_AUTO_JAVA)) {
+            return "true".equalsIgnoreCase(
+                    globalIni.getOrDefault("AutoJava", "true").trim());
+        }
+        return "true".equalsIgnoreCase(v);
     }
 
     /** 覆盖路径对应的 starlight.ini 键名 */
@@ -448,9 +474,7 @@ public final class VersionConfigManager {
         return el.toString();
     }
 
-    // ================================================================
-    //  JSON 点路径操作
-    // ================================================================
+    // JSON 点路径操作 //
 
     /** 按点路径取值；不存在返回 null（「未覆盖」与「覆盖为 null」由此区分） */
     private static JsonElement getElementAtPath(JsonObject overrides, String path) {
@@ -502,9 +526,7 @@ public final class VersionConfigManager {
         return true;
     }
 
-    // ================================================================
-    //  旧配置迁移（设计文档 §8：与全局逐字段比较，相同字段不写入）
-    // ================================================================
+    // 旧配置迁移（设计文档 §8：与全局逐字段比较，相同字段不写入） //
 
     /**
      * 一次性迁移：读取旧版 version-settings.properties，与全局比较后把不同的字段写入

@@ -19,28 +19,25 @@ public class StarlightConfig {
 
     private static final Logger log = LoggerFactory.getLogger(StarlightConfig.class);
 
-    private static final String CONFIG_DIR = "Starlight-Launcher";
-    private static final String CONFIG_FILE = CONFIG_DIR + "/starlight.ini";
-
     /** Launcher 段的关键键名列表 */
     public static final String[] LAUNCHER_KEYS = {
             "GameDir", "Version", "JavaPath",
             "MinMemory", "MaxMemory", "WindowWidth", "WindowHeight",
             "Fullscreen", "VersionIsolation", "JvmArgs", "GameArgs",
             "PreLaunchCommand", "PostExitCommand",
+            // 高级设置：自定义游戏窗口标题 / 进程优先级 / 游戏启动后的启动器可见性
+            "GameWindowTitle", "GameProcessPriority", "LauncherVisibility",
             "ServerUrl", "GameFolders", "GameDirNames", "GameLanguage", "ParallelLaunch",
             "ParallelVerify", "StreamingSha1", "FastVerify", "SilentLoginMode"
     };
 
-    // ================================================================
-    //  读取
-    // ================================================================
+    // 读取 //
 
     /** 读取全部配置 */
     public static Map<String, String> readConfig() {
         Map<String, String> config = new LinkedHashMap<>();
-        Path configPath = resolveConfigPath();
-        if (configPath == null) return config;
+        Path configPath = AppDirs.starlightIni();
+        if (!Files.isRegularFile(configPath)) return config;
         try {
             List<String> lines = Files.readAllLines(configPath, StandardCharsets.UTF_8);
             for (String line : lines) {
@@ -68,16 +65,14 @@ public class StarlightConfig {
         return new LinkedHashMap<>(readConfig());
     }
 
-    // ================================================================
-    //  保存
-    // ================================================================
+    // 保存 //
 
     /** 保存配置（保留其他段，仅覆写 [Launcher] 段） */
     public static void saveConfig(Map<String, String> config) {
         try {
-            Path configDir = Paths.get(CONFIG_DIR);
+            Path configDir = AppDirs.root();
             if (!Files.exists(configDir)) Files.createDirectories(configDir);
-            Path configPath = configDir.resolve("starlight.ini");
+            Path configPath = AppDirs.starlightIni();
 
             List<String> oldLines = Files.exists(configPath)
                     ? Files.readAllLines(configPath, StandardCharsets.UTF_8)
@@ -154,16 +149,7 @@ public class StarlightConfig {
         return !cfg.getOrDefault("Version", "").isEmpty();
     }
 
-    // ================================================================
-    //  内部
-    // ================================================================
-
-    private static Path resolveConfigPath() {
-        Path p = Paths.get(CONFIG_FILE);
-        if (Files.exists(p)) return p;
-        p = Paths.get(CONFIG_DIR, "starlight.ini");
-        return Files.exists(p) ? p : null;
-    }
+    // 内部 //
 
     private static void appendMissingKeys(List<String> lines, Map<String, String> config, Set<String> seen) {
         for (String key : LAUNCHER_KEYS) {

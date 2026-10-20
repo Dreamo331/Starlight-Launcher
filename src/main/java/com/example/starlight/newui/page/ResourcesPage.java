@@ -4,8 +4,13 @@ import com.example.starlight.ModsApi.RemoteMod;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.ui.PageKit;
+import com.example.starlight.newui.ui.SkeletonFactory;
 import com.example.starlight.crash.CrashReportParser;
 import com.example.starlight.gui.UIGeneralControlClass;
+import com.example.starlight.log.sendlogs;
+import com.example.starlight.model.LogUploadRecord;
+import com.example.starlight.newui.ui.LogUploadResultWindow;
+import com.example.starlight.service.LogUploadStore;
 import com.example.starlight.util.FormatUtils;
 import com.example.starlight.util.ResourceScanner;
 
@@ -70,7 +75,7 @@ public final class ResourcesPage {
         this.host = host;
     }
 
-    // ===== 资源页面 =====
+    // 资源页面 //
 
     public Node build() {
         HBox layout = new HBox(20);
@@ -99,6 +104,7 @@ public final class ResourcesPage {
                 {"resource_archives", "存档", "archive"}, {"resource_mods", "模组", "puzzle"},
                 {"resource_resourcepacks", "资源包", "image"}, {"resource_shaders", "光影包", "sun"},
                 {"resource_crashreports", "崩溃报告", "warning"}, {"resource_screenshots", "截图", "camera"},
+                {"resource_uploaded_logs", "上传的日志", "upload"},
                 {"resource_others", "其他", "ellipsis"}
         };
         for (String[] c : cats) {
@@ -135,6 +141,7 @@ public final class ResourcesPage {
             case "resource_shaders" -> "光影包";
             case "resource_crashreports" -> "崩溃报告";
             case "resource_screenshots" -> "截图";
+            case "resource_uploaded_logs" -> "上传的日志";
             default -> "其他资源";
         };
         Label titleLabel = new Label(title);
@@ -143,46 +150,58 @@ public final class ResourcesPage {
         String gameDir = host.config().getOrDefault("GameDir", ".minecraft");
         if (type.equals("resource_archives")) {
             // 扫描全局 saves + 所有版本隔离目录下的 saves，避免版本隔离导致存档显示不全；可按目录筛选
-            java.util.List<UIGeneralControlClass.SaveInfo> saves = ResourceScanner.listAllSaves(gameDir, currentFilterOrigin);
-            titleLabel.setText(title + " (" + saves.size() + ")");
-            addDirComboFilter(content, ResourceScanner.collectResourceDirs(gameDir, "saves"), gameDir,
-                    currentFilterOrigin, origin -> { currentFilterOrigin = origin; showResourceContent(type, container); });
-            if (saves.isEmpty()) {
-                content.getChildren().add(new Label("暂无存档") {{
-                    setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20;");
-                }});
-            } else {
-                // 搜索 + 分批渲染：一次只铺 20 张存档卡片，其余点底部按钮继续往下加载
-                content.getChildren().add(pagedSearchSection("搜索存档名称 / 版本目录...", saves,
-                        s -> s.worldName + " " + s.version + " " + s.path,
-                        s -> {
-                            String savePath = s.path;
-                            return createResourceCard(s.worldName, "来源: " + s.version,
-                                    new String[]{"备份", "删除", "打开文件夹"},
-                                    new Runnable[]{
-                                            () -> {
-                                                String backupDir = gameDir + "/backups";
-                                                var result = UIGeneralControlClass.backupSave(savePath, backupDir);
-                                                host.ui().toast(result.message);
-                                            },
-                                            () -> host.confirmDelete("确定要删除存档 \"" + s.worldName + "\" 吗？此操作不可恢复！", () -> {
-                                                try {
-                                                    java.nio.file.Path saveDir = java.nio.file.Paths.get(savePath);
-                                                    java.nio.file.Files.walk(saveDir)
-                                                            .sorted((a, b) -> b.toString().length() - a.toString().length())
-                                                            .forEach(p -> { try { java.nio.file.Files.deleteIfExists(p); } catch (Exception ignored) {} });
-                                                    host.ui().toast("已删除存档: " + s.worldName);
-                                                    showResourceContent(type, container);
-                                                } catch (Exception ex) {
-                                                    host.ui().toast("删除失败: " + ex.getMessage());
-                                                }
-                                            }),
-                                            () -> host.openFile(savePath)
-                                    });
-                        },
-                        false,
-                        n -> setCountTitle(titleLabel, title, n, saves.size())));
-            }
+            // 存档 NBT 解析是磁盘 IO 重活，移到后台线程执行，期间用骨架屏占位，避免阻塞 FX 线程导致窗口未响应。
+            List<Path> saveDirs = ResourceScanner.collectResourceDirs(gameDir, "saves");
+            Node skeleton = SkeletonFactory.buildListSkeleton(4);
+            content.getChildren().add(skeleton);
+            // 提交前捕获筛选值，避免后台扫描期间用户切换目录导致竞态
+            final String scanOrigin = currentFilterOrigin;
+            UIGeneralControlClass.ASYNC_POOL.submit(() -> {
+                java.util.List<UIGeneralControlClass.SaveInfo> saves =
+                        ResourceScanner.listAllSaves(gameDir, scanOrigin);
+                Platform.runLater(() -> {
+                    content.getChildren().remove(skeleton);
+                    titleLabel.setText(title + " (" + saves.size() + ")");
+                    addDirComboFilter(content, saveDirs, gameDir,
+                            scanOrigin, origin -> { currentFilterOrigin = origin; showResourceContent(type, container); });
+                    if (saves.isEmpty()) {
+                        content.getChildren().add(new Label("暂无存档") {{
+                            setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20;");
+                        }});
+                    } else {
+                        // 搜索 + 分批渲染：一次只铺 20 张存档卡片，其余点底部按钮继续往下加载
+                        content.getChildren().add(pagedSearchSection("搜索存档名称 / 版本目录...", saves,
+                                s -> s.worldName + " " + s.version + " " + s.path,
+                                s -> {
+                                    String savePath = s.path;
+                                    return createResourceCard(s.worldName, "来源: " + s.version,
+                                            new String[]{"备份", "删除", "打开文件夹"},
+                                            new Runnable[]{
+                                                    () -> {
+                                                        String backupDir = gameDir + "/backups";
+                                                        var result = UIGeneralControlClass.backupSave(savePath, backupDir);
+                                                        host.ui().toast(result.message);
+                                                    },
+                                                    () -> host.confirmDelete("确定要删除存档 \"" + s.worldName + "\" 吗？此操作不可恢复！", () -> {
+                                                        try {
+                                                            java.nio.file.Path saveDir = java.nio.file.Paths.get(savePath);
+                                                            java.nio.file.Files.walk(saveDir)
+                                                                    .sorted((a, b) -> b.toString().length() - a.toString().length())
+                                                                    .forEach(p -> { try { java.nio.file.Files.deleteIfExists(p); } catch (Exception ignored) {} });
+                                                            host.ui().toast("已删除存档: " + s.worldName);
+                                                            showResourceContent(type, container);
+                                                        } catch (Exception ex) {
+                                                            host.ui().toast("删除失败: " + ex.getMessage());
+                                                        }
+                                                    }),
+                                                    () -> host.openFile(savePath)
+                                            });
+                                },
+                                false,
+                                n -> setCountTitle(titleLabel, title, n, saves.size())));
+                    }
+                });
+            });
         } else if (type.equals("resource_mods")) {
             loadToggleableItems("模组", ResourceScanner.collectResourceDirs(gameDir, "mods"), container, type, true);
             return;
@@ -256,6 +275,64 @@ public final class ResourcesPage {
                         shot -> createScreenshotThumb(shot, ResourceScanner.dirOriginLabel(shot.getParent(), gameDir)),
                         true,
                         n -> setCountTitle(titleLabel, title, n, shots.size())));
+            }
+        } else if (type.equals("resource_uploaded_logs")) {
+            java.util.List<LogUploadRecord> records = LogUploadStore.load();
+            titleLabel.setText(title + " (" + records.size() + ")");
+            if (records.isEmpty()) {
+                content.getChildren().add(new Label("暂无上传的日志") {{
+                    setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20;");
+                }});
+            } else {
+                content.getChildren().add(pagedSearchSection("搜索文件名 / 链接...", records,
+                        r -> (r.name == null ? "" : r.name) + " " + (r.url == null ? "" : r.url),
+                        r -> {
+                            String timeStr = r.time > 0
+                                    ? new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                                            .format(new java.util.Date(r.time)) : "时间未知";
+                            String url = r.url == null ? "" : r.url;
+                            String sub = timeStr + "  |  " + (r.fileCount > 0 ? r.fileCount + " 个文件" : "1 个文件")
+                                    + "  |  " + (url.length() > 56 ? url.substring(0, 56) + "…" : url);
+                            return createResourceCard(
+                                    r.name == null || r.name.isEmpty() ? "日志" : r.name, sub,
+                                    new String[]{"再次分享", "复制链接", "删除"},
+                                    new Runnable[]{
+                                            () -> LogUploadResultWindow.show(host.stage(), r,
+                                                    host.ui()::toast,
+                                                    () -> {
+                                                        host.ui().toast("已撤回并删除该日志");
+                                                        showResourceContent(type, container);
+                                                    }),
+                                            () -> {
+                                                if (r.url != null && !r.url.isEmpty()) {
+                                                    ClipboardContent cc = new ClipboardContent();
+                                                    cc.putString(r.url);
+                                                    Clipboard.getSystemClipboard().setContent(cc);
+                                                    host.ui().toast("链接已复制到剪贴板");
+                                                }
+                                            },
+                                            () -> host.confirmDelete("确定要删除这条上传记录吗？（将同时尝试撤回线上日志）", () -> {
+                                                try {
+                                                    if (r.id != null && !r.id.isEmpty()) {
+                                                        try { sendlogs.deleteLog(r.id, r.token); } catch (Exception ignored) {}
+                                                        LogUploadStore.remove(r.id);
+                                                    } else {
+                                                        // 旧版记录无 id：按引用 + url + 时间兜底移除本地记录
+                                                        java.util.List<LogUploadRecord> all = LogUploadStore.load();
+                                                        all.removeIf(x -> x == r
+                                                                || (r.url != null && r.url.equals(x.url) && r.time == x.time));
+                                                        LogUploadStore.save(all);
+                                                    }
+                                                    host.ui().toast("已删除上传记录");
+                                                } catch (Exception ex) {
+                                                    host.ui().toast("删除失败: " + ex.getMessage());
+                                                }
+                                                showResourceContent(type, container);
+                                            })
+                                    });
+                        },
+                        false,
+                        n -> setCountTitle(titleLabel, title, n, records.size())));
             }
         } else {
             titleLabel.setText(title);
@@ -554,6 +631,35 @@ public final class ResourcesPage {
         });
     }
 
+    /** 截图缩略图解码并发上限：低配机上几十张大 PNG 同时解码会瞬间吃满 CPU/内存，
+     *  用 Semaphore 把同时进行的解码压到 4 个，其余排队，滚出视口的缩略图也不会堆积解码任务 */
+    private static final java.util.concurrent.Semaphore THUMB_DECODE_SEM = new java.util.concurrent.Semaphore(4);
+
+    /**
+     * 后台 + 限流地解码截图缩略图并回填到 ImageView。
+     * <p>替代原先在 FX 线程同步 {@code new Image(...)}：解码（含 PNG 解压）是重 CPU/内存操作，
+     * 移到 {@code ASYNC_POOL} 执行；Semaphore 保证同时最多 4 个解码，避免批量铺图时把低配机打满。
+     */
+    private void loadThumbnailThrottled(ImageView thumb, Path shot) {
+        UIGeneralControlClass.ASYNC_POOL.submit(() -> {
+            try {
+                THUMB_DECODE_SEM.acquire();
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            try {
+                // 指定目标尺寸后台解码：requestedWidth/Height 让 JavaFX 只解码到缩略图分辨率，省内存
+                Image img = new Image(shot.toUri().toString(), 320, 192, true, true, true);
+                if (!img.isError()) {
+                    Platform.runLater(() -> thumb.setImage(img));
+                }
+            } finally {
+                THUMB_DECODE_SEM.release();
+            }
+        });
+    }
+
     /** 截图缩略图卡片：点击预览大图，origin 为来源（全局/版本名） */
     private VBox createScreenshotThumb(Path shot, String origin) {
         VBox box = new VBox(6);
@@ -565,8 +671,7 @@ public final class ResourcesPage {
         thumb.setFitHeight(96);
         thumb.setPreserveRatio(true);
         thumb.setStyle("-fx-background-color: #f3f4f6; -fx-background-radius: 6;");
-        Image img = new Image(shot.toUri().toString(), 320, 192, true, true, true);
-        thumb.setImage(img);
+        loadThumbnailThrottled(thumb, shot);
         Label name = new Label("[" + origin + "] " + shot.getFileName());
         name.setStyle("-fx-font-size: 11px; -fx-text-fill: #6b7280; -fx-max-width: 176;");
         name.setTextOverrun(OverrunStyle.ELLIPSIS);
@@ -586,8 +691,7 @@ public final class ResourcesPage {
         thumb.setFitHeight(96);
         thumb.setPreserveRatio(true);
         thumb.setStyle("-fx-background-color: #f3f4f6; -fx-background-radius: 6;");
-        Image img = new Image(shot.toUri().toString(), 320, 192, true, true, true);
-        thumb.setImage(img);
+        loadThumbnailThrottled(thumb, shot);
 
         // 悬停显示的删除按钮（缩略图右上角），点击删除并刷新页面
         Button delBtn = new Button();
@@ -713,7 +817,7 @@ public final class ResourcesPage {
     }
 
 
-    // ===== 截图管理页面 =====
+    // 截图管理页面 //
 
     public Node buildScreenshots() {
         VBox root = PageKit.settingsPage(host, "截图管理", "home");

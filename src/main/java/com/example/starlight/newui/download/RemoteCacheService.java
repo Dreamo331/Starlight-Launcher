@@ -45,11 +45,24 @@ public final class RemoteCacheService {
         remoteSearchCache.put(key, new SearchCacheEntry(hits, totalPages));
     }
 
-    /** 清空下载中心的全部远程数据缓存（「刷新」按钮与设置变更后使用） */
+    /** 清空下载中心的全部远程数据缓存（设置变更后使用） */
     public void clear() {
         remoteSearchCache.clear();
         remoteVersionsCache.clear();
         remoteDetailCache.clear();
+    }
+
+    /**
+     * 只清某个面板的搜索结果缓存（key 以 {@code panelTitle + '|'} 开头，见 {@link #searchCacheKey}）。
+     *
+     * <p>面板上的「刷新」此前走 {@link #clear()}，会把其余 6 个面板的缓存一起清掉 ——
+     * 在模组面板点一次刷新，切到资源包面板就得重新联网。改为按面板前缀清理后，
+     * 刷新只影响自己。
+     */
+    public void clearSearchByPanel(String panelTitle) {
+        if (panelTitle == null) return;
+        String prefix = panelTitle + '|';
+        remoteSearchCache.keySet().removeIf(k -> k != null && k.startsWith(prefix));
     }
 
     /** 项目级缓存的 key：页面地址天然按站点区分（Modrinth / CurseForge 各一份），比 slug 更稳 */

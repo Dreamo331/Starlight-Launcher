@@ -114,7 +114,7 @@ public enum ModTranslations {
         }
     }
 
-    // ==================== 加载与索引构建 ====================
+    // 加载与索引构建 //
 
     /** 全部字典条目（懒加载，失败时为空列表） */
     public List<Mod> getMods() {
@@ -265,7 +265,7 @@ public enum ModTranslations {
         return Math.max(1, this.maxKeywordLength);
     }
 
-    // ==================== 中文召回 ====================
+    // 中文召回 //
 
     /**
      * 中文关键词召回：把查询串与字典中的中文名/英文名/缩写做最长公共子序列匹配，按相似度降序返回。
@@ -314,7 +314,7 @@ public enum ModTranslations {
         return result;
     }
 
-    // ==================== 反查 ====================
+    // 反查 //
 
     /** 按 curseforge slug 反查（与 HMCL 的 getModByCurseForgeId 等价） */
     public Mod getModByCurseForgeId(String slug) {
@@ -399,7 +399,7 @@ public enum ModTranslations {
     /** MC 百科页面地址；{@link #EMPTY} 返回空串 */
     public abstract String getMcmodUrl(Mod mod);
 
-    // ==================== 工具 ====================
+    // 工具 //
 
     /**
      * 清洗英文名：只保留字母数字与 {@code .+\}，剔除空白与常见标点；
@@ -429,7 +429,7 @@ public enum ModTranslations {
         return builder.length() == subname.length() ? subname : builder.toString();
     }
 
-    // ==================== 内部类型 ====================
+    // 内部类型 //
 
     /** 参与中文召回的关键词及其归属条目 */
     private record Keyword(String text, Mod mod) {

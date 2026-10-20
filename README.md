@@ -53,13 +53,17 @@
 ## 目录
 
 - [这是什么](#这是什么)
+- [系统架构](#系统架构)
 - [功能特性](#功能特性)
 - [技术栈](#技术栈)
 - [环境要求](#环境要求)
 - [快速开始](#快速开始)
+- [游戏启动流程](#游戏启动流程)
+- [下载体系](#下载体系)
+- [联机方案](#联机方案)
+- [启动器 MOD 扩展](#启动器-mod-扩展)
 - [项目结构](#项目结构)
 - [配置与数据目录](#配置与数据目录)
-- [启动器 MOD 扩展](#启动器-mod-扩展)
 - [打包原生单文件 EXE](#打包原生单文件-exe)
 - [本地化](#本地化)
 - [参与贡献](#参与贡献)
@@ -72,6 +76,51 @@
 Starlight Launcher（星光启动器）是一个完全用 **Java 17 + JavaFX** 编写的 Minecraft 启动器，界面与逻辑均为自研，不基于任何现成启动器壳。
 
 它提供一套完整的「启动游戏 + 管资源 + 找模组 + 拉朋友联机 + 出事能诊断」的闭环体验，并内置一套让第三方扩展启动器自身能力的 **MOD 插件系统**。
+
+## 系统架构
+
+```mermaid
+flowchart TB
+    subgraph UI["🎨 界面层 newui/"]
+        Home["首页 HomePage"]
+        Download["下载中心 DownloadCenterPage"]
+        Res["资源管理 ResourcesPage"]
+        Multi["联机 MultiplayerPage"]
+        Version["版本选择 VersionSelectPage"]
+        ModMgr["模组管理 ModManagerPage"]
+        Settings["设置页 settings/"]
+    end
+
+    subgraph Service["⚙️ 服务层 service/"]
+        GL["GameLauncherService 游戏启动"]
+        DL["DownloadService 下载调度"]
+        ModS["ModService 模组"]
+        Save["SaveService 存档"]
+        Auth["MicrosoftAuthService 登录"]
+        FrpS["FrpService 中继"]
+        JavaM["JavaEnvironmentManager"]
+    end
+
+    subgraph Engine["🔧 能力层"]
+        Launcher["启动引擎<br/>BaseLauncher(Vanilla/Forge/Fabric)"]
+        DEngine["下载引擎<br/>HttpDownloadEngine / MultiThreadDownloader"]
+        ModsApi["ModsApi<br/>Modrinth + CurseForge + 中文词典"]
+        Modpack["整合包解析 modpack/"]
+        Plugin["插件系统 plugin/ pluginapi/"]
+        Net["联机 SLan / Terracotta / FRP / LAN 监听"]
+        Crash["崩溃诊断 crash/ log/"]
+    end
+
+    subgraph Infra["🧱 基础设施"]
+        JavaFX["JavaFX 17.0.6"]
+        Maven["Maven"]
+        Libs["Gson / Jackson / ice4j / OSHI / ZXing / Logback"]
+    end
+
+    UI --> Service
+    Service --> Engine
+    Engine --> Infra
+```
 
 ## 功能特性
 
@@ -226,12 +275,141 @@ java -jar target/starlight-launcher-cli-1.0.0-jar-with-dependencies.jar
 java -jar target/starlight-launcher-cli-1.0.0-jar-with-dependencies.jar --console
 ```
 
+### 入口分流
+
+```mermaid
+flowchart TD
+    Start(["MainApp.main()"]) --> Crash["installCrashLogger()<br/>全局未捕获异常 → logs/launcher-crash.log"]
+    Crash --> Strip["ConsoleMode.stripAndMaybeEnable(args)<br/>识别 --console 开关"]
+    Strip --> Check{"剩余参数?"}
+    Check -- "有（CLI 命令）" --> CLI["CliHandler.processCommandArgs()<br/>命令行模式"]
+    Check -- "无" --> GUI["Application.launch(JavaFXLauncher)<br/>JavaFX GUI 模式"]
+```
+
+## 游戏启动流程
+
+`GameLauncherService.launchMinecraftAsync()` 在后台线程池中执行，按阶段上报进度：
+
+```mermaid
+flowchart TB
+    Start(["点击「启动游戏」"]) --> Cancel["重置取消标志"]
+    Cancel --> Token{"静默登录 Token 刷新<br/>模式一：启动时刷新（默认）<br/>模式二：启动器启动时已刷"}
+    Token --> ReadVer["读取版本信息<br/>合并继承链 inheritsFrom → 自包含 JSON<br/>库去重 deduplicateLibraries"]
+    ReadVer --> Detect["加载器检测<br/>LoaderDetector + VersionIconKit"]
+    Detect --> Res{"资源准备"}
+    Res -- "并行加速开启" --> Parallel["ParallelLaunchManager<br/>原生库检查 + 资源补全同时进行<br/>进度 25 → 60"]
+    Res -- "串行" --> Serial["GameResourceCompleter<br/>先补全资产与库，再查原生库<br/>进度 25 → 50"]
+    Parallel --> Launcher["创建启动引擎<br/>Vanilla / ForgeLegacy / ForgeModern / Fabric"]
+    Serial --> Launcher
+    Launcher --> Paths["initPaths() + initLogging()"]
+    Paths --> Natives{"原生库检查"}
+    Natives -- "缺失" --> FailN["报错：原生库准备失败"]
+    Natives -- "通过" --> ProcessN["processNatives() 处理原生库"]
+    ProcessN --> Settings["应用版本设置<br/>语言 / 全屏 → options.txt"]
+    Settings --> Skin{"离线账号 + 自定义皮肤?"}
+    Skin -- "是" --> SkinS["启动离线皮肤服务器<br/>authlib-injector 参数注入"]
+    Skin -- "否" --> Launch
+    SkinS --> Launch["launcher.launch() 启动游戏进程"]
+    Launch --> Reg["setOnProcessStarted 回调<br/>记录 PID → GameInstanceRegistry 注册实例"]
+    Reg --> Watch["游戏窗口检测（双阶段并行）"]
+    Watch --> HMCL["Phase 1：HMCL 方式<br/>轮询新 Java 进程"]
+    Watch --> PCL["Phase 2：PCL 方式<br/>监控日志出现 Setting user: / Created textures"]
+    HMCL --> Done(["任一成功 → 关闭启动动画"])
+    PCL --> Done
+```
+
+启动过程同时支持：
+
+- 启动前/后自定义命令、JVM 参数注入
+- 启动取消（`launchCancelled` 标志，各阶段检查点随时可取消）
+- 帧生成器 / 色盲辅助等伴生工具与界面回调共用「游戏就绪」信号（`gameStartedSignal`）
+
+## 下载体系
+
+所有下载统一走「多源候选 → 分块加速 → 校验落盘」的通道：
+
+```mermaid
+flowchart LR
+    Task["下载任务<br/>版本 / 资源 / 模组 / 整合包"] --> Holder{"下载源选择<br/>DownloadProviderHolder"}
+    Holder -- "Mojang 官方" --> Mojang["MojangDownloadProvider"]
+    Holder -- "BMCLAPI（默认）" --> BMCL["BMCLAPIDownloadProvider"]
+    Holder -- "MCBBS" --> MCBBS["MCBBSDownloadProvider"]
+    Mojang --> Chain["HttpDownloadEngine<br/>构建 URL 候选链<br/>官方 URL + 镜像候选（BMCLAPI / MCBBS / MCIM）"]
+    BMCL --> Chain
+    MCBBS --> Chain
+    Chain --> Breaker{"MirrorCircuitBreaker<br/>熔断判定（2 次失败 / 60s 窗口）"}
+    Breaker -- "允许镜像" --> Mirror["优先走镜像"]
+    Breaker -- "熔断" --> Official["回退官方源"]
+    Mirror --> MT["MultiThreadDownloader<br/>多线程分块 + 断点续传"]
+    Official --> MT
+    MT --> Panel["下载任务面板<br/>暂停 / 取消 / 重试 / 限速"]
+    Panel --> Verify["校验<br/>sha1 / 大小比对"]
+    Verify --> Done(["落盘完成，任务就绪"])
+```
+
+## 联机方案
+
+| 方案 | 原理 | 适用场景 |
+|---|---|---|
+| **SLan** | 局域网房间（邀请码 / 联机密码） | 同网段快速联机 |
+| **Terracotta** | ice4j 的 ICE / NAT 穿透，节点列表自动获取 | 跨网络直连 |
+| **FRP 中继** | 自建 FRP 服务器中继 | 需要稳定公网中继 |
+| **LAN 组播监听** | Minecraft 局域网组播协议自动发现同网段房间 | 一键发现房间 |
+
+## 启动器 MOD 扩展
+
+启动器支持第三方 MOD 扩展自身能力，与 Minecraft 模组**完全无关**：
+
+- MOD 放在 `~/.starlight/mod/`（便携模式下为 `Starlight-Launcher/mod/`），每个 MOD 是一个带 `launcher-plugin.json` 的 JAR
+- MOD 以**独立子进程**运行（`java -jar`），与启动器不共用 ClassLoader，崩溃互不影响
+- 启动器通过**本地 HTTP 服务**暴露数据接口（`PluginApiServer` + 近 30 个 `ApiProvider`），MOD 主动请求，自主实现 UI
+- 新 MOD 默认禁用，需在「模组」页手动启用，状态持久化到 `plugins-state.json`
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Launcher as 启动器进程
+    participant Scan as PluginScanner
+    participant User as 用户
+    participant Plugin as 插件子进程
+    participant Api as PluginApiServer
+
+    Launcher->>Scan: 启动时扫描 mod/*.jar（只读元数据，不加载类）
+    Scan-->>Launcher: pluginId / 版本 / 入口类
+    User->>Launcher: 模组页手动启用
+    Launcher->>Launcher: 写入 plugins-state.json
+    Launcher->>Plugin: java -jar 启动子进程<br/>-Dstarlight.minecraft.dir=游戏目录
+    Plugin->>Launcher: 读取 starlight_api.port 端口文件<br/>发现 API 地址并握手
+    Plugin->>Api: 主动请求本地 HTTP API（账号/版本/模组/存档…）
+    Api-->>Plugin: 原始 JSON 数据
+    Note over Plugin: 自主实现 UI，崩溃不影响启动器
+    Launcher->>Plugin: 退出时终止所有插件子进程
+```
+
+```jsonc
+// launcher-plugin.json（放在 MOD JAR 根目录）
+{
+  "id": "community.example.my_mod",
+  "name": "我的启动器MOD",
+  "version": "1.0.0",
+  "description": "在此描述功能",
+  "launcher_api_version": "1.0.0",
+  "main_class": "com.starlight.plugin.template.StarlightMod",
+  "plugin_type": "community"
+}
+```
+
+完整规范、API 清单与开发流程见 **[docs/启动器MOD技术文档.md](docs/启动器MOD技术文档.md)**。
+
 ## 项目结构
 
 ```
 starlight-launcher/
 ├── pom.xml                       # Maven 构建配置
 ├── lib/                          # 本地依赖：StarlightLauncher 核心库
+├── docs/                         # 项目文档（MOD 技术文档、下载重构、修复说明等）
+├── tools/                        # 工具脚本（check_env.ps1 等）
+├── temp/                         # 临时产物与依赖（jar-inspect、deps 等）
 ├── src/main/java/
 │   ├── com/example/starlight/
 │   │   ├── MainApp.java          # 入口：崩溃日志兜底 + GUI/CLI 分流
@@ -241,7 +419,7 @@ starlight-launcher/
 │   │   │   ├── page/settings/    # 设置页（账号、Java、主题、无障碍、关于 …）
 │   │   │   ├── ui/               # 自绘控件：图标、波纹、开关、骨架屏、主题
 │   │   │   └── download/         # 下载任务卡片与任务管理
-│   │   ├── version/              # 版本与加载器安装（Forge/Fabric/Quilt/OptiFine…）
+│   │   ├── version/              # 版本与加载器安装（Forge/NeoForge/Fabric/Quilt/OptiFine…）
 │   │   ├── download/             # 下载引擎、各镜像 Provider、资源补全
 │   │   ├── ModsApi/              # Modrinth / CurseForge / 中文词典
 │   │   ├── modpack/              # 整合包清单解析
@@ -259,50 +437,57 @@ starlight-launcher/
 │   ├── assets/                   # 端点配置、词典、许可清单
 │   ├── images/ logo/ svg/ Skins/ # 图片与矢量资源
 │   └── html/
-├── 示例插件/                      # 启动器 MOD 示例工程
-├── 启动器MOD模板/                  # 新建 MOD 的模板工程
-└── 启动器MOD技术文档.md             # MOD 开发文档
+├── native/                       # 原生组件源码（management_stub.c 等）
+├── references/                   # 参考工程（启动库 jar 源码、XMCL 启动器等）
+└── build-single-exe.bat          # 一键打包原生单文件 EXE
 ```
 
 ## 配置与数据目录
 
-启动器所有运行时数据都放在**工作目录**下的 `Starlight-Launcher/`（便携式，不写入注册表）：
+启动器所有运行时数据默认放在**用户主目录**下的 `.starlight/`（全局目录，跨启动器安装位置复用）：
 
 | 路径 | 说明 |
 |---|---|
-| `Starlight-Launcher/starlight.ini` | 主配置（`[Launcher]` 段：版本、游戏目录、Java、内存、代理等） |
-| `Starlight-Launcher/starlight-client.ini` | 个性化配置（主题、背景等） |
-| `Starlight-Launcher/mod/` | 启动器 MOD（插件）JAR |
-| `Starlight-Launcher/plugins-state.json` | 插件启用状态 |
-| `Starlight-Launcher/java-cache.json` | 本机 Java 扫描缓存 |
-| `~/.starlight-launcher/login.json` | 登录凭据（用户目录） |
-| `logs/launcher-crash.log` | 启动器自身崩溃日志 |
+| `~/.starlight/starlight.ini` | 主配置（`[Launcher]` 段：版本、游戏目录、Java、内存、代理等） |
+| `~/.starlight/starlight-client.ini` | 个性化配置（主题、背景、下载参数、AI Key 等） |
+| `~/.starlight/accounts.json` | 多账号（微软正版 / 离线 / 外置登录）与皮肤配置 |
+| `~/.starlight/.account.dat` | 账号令牌（轻量混淆存储） |
+| `~/.starlight/authlib-injector.jar` | 外置登录注入器（按需自动下载） |
+| `~/.starlight/avatars/` | 正版头像 / 皮肤缓存 |
+| `~/.starlight/mod/` | 启动器 MOD（插件）JAR |
+| `~/.starlight/plugins-state.json` | 插件启用状态 |
+| `~/.starlight/multiplayer.json` | 联机设置**覆盖项**（未填的键自动沿用内置默认值） |
+| `~/.starlight/java/` | 自动下载的 JDK（原 `<工作目录>/tools/java`） |
+| `~/.starlight/terracotta/`、`slan/`、`ColorBlindOverlay/` | 联机组件与色盲矫正工具 |
+| `~/.starlight/skin/`、`wallpaper/`、`mod-dictionary/` | 皮肤、背景图、模组中文词典 |
+| `~/.starlight/cache/`、`terracotta-cache/` 等 | 各类缓存与状态文件 |
+| `~/.starlight/framegen/config.properties` | 帧生成器配置（原 `%APPDATA%\StarlightFrameGen`） |
+| `~/.starlight/endpoints.local.json` | 真实密钥覆盖文件（可选，**免重新打包**） |
+| `<工作目录>/logs/` | 启动器与游戏日志（留在程序目录，便于就地排查） |
 
-> 想「重装」启动器：删掉 `Starlight-Launcher/` 目录即可。游戏文件在游戏目录里，不受影响。
+### 历史数据自动迁移
 
-## 启动器 MOD 扩展
+首次以新版启动时，会自动把下列旧位置的数据并入 `~/.starlight/`（**先复制、校验后再删源**，失败不阻断启动）：
 
-启动器支持第三方 MOD 扩展自身能力，与 Minecraft 模组**完全无关**：
+- `~/.starlight-launcher/`（已废弃的旧全局目录：账号、注入器、头像）
+- `<工作目录>/Starlight-Launcher/`（旧配置与运行时组件）
+- `<工作目录>/tools/java/`（旧 JDK 目录）
+- `%APPDATA%\StarlightFrameGen/`（帧生成器配置）
 
-- MOD 放在 `Starlight-Launcher/mod/`，每个 MOD 是一个带 `launcher-plugin.json` 的 JAR
-- MOD 以**独立子进程**运行（`java -jar`），与启动器不共用 ClassLoader，崩溃互不影响
-- 启动器通过**本地 HTTP 服务**暴露数据接口，MOD 主动请求，自主实现 UI
-- 新 MOD 默认禁用，需在「模组」页手动启用
+迁移后旧目录若已清空会被删除；若仍留有本迁移不认识的文件，则**原样保留**并打印提示，不会静默丢弃。
+`~/.starlight-launcher/` 里两个代码已不再引用的文件（`auth_servers.json`、`endpoints.real.json`）会被收进 `~/.starlight/legacy/`。
 
-```jsonc
-// launcher-plugin.json（放在 MOD JAR 根目录）
-{
-  "id": "community.example.my_mod",
-  "name": "我的启动器MOD",
-  "version": "1.0.0",
-  "description": "在此描述功能",
-  "launcher_api_version": "1.0.0",
-  "main_class": "com.starlight.plugin.template.StarlightMod",
-  "plugin_type": "community"
-}
+### 便携模式
+
+需要绿色版 / U 盘携带时，加 `--portable` 参数启动，全部数据回落工作目录下的 `Starlight-Launcher/`（与旧版行为一致）：
+
+```bash
+java -jar target/starlight-launcher-cli-1.0.0-jar-with-dependencies.jar --portable
 ```
 
-完整规范、API 清单与开发流程见 **[启动器MOD技术文档.md](启动器MOD技术文档.md)**，可直接参考 `示例插件/` 与 `启动器MOD模板/` 起步。
+> 想「重装」启动器：全局模式下删掉 `~/.starlight/`（会连账号一起删），
+> 便携模式下删掉 `Starlight-Launcher/`。游戏文件在游戏目录里，不受影响。
+
 
 ## 打包原生单文件 EXE
 
@@ -339,8 +524,27 @@ Windows 下可打包成无 JRE 依赖的原生单文件可执行程序：
 
 本项目以 **[MIT License](LICENSE)** 开源发布，Copyright (c) 2026 Starlight Launcher Contributors。
 
+完整法律文档见 [`docs/`](docs/README.md)：
+
+| 文档 | 说明 |
+|---|---|
+| [LICENSE-EN.md](docs/LICENSE-EN.md) | **开源协议正本（英文）**：MIT 原文 + 项目标识条款 + 第三方组件声明 |
+| [LICENSE-ZH.md](docs/LICENSE-ZH.md) | 中文参考译本 |
+| [用户服务协议](docs/用户服务协议.md) | EULA：软件性质、使用限制、第三方服务器免责、未成年人保护 |
+| [免责声明](docs/免责声明.md) | 首启弹窗/独立页面可用的完整免责说明 |
+| [隐私政策](docs/隐私政策.md) | 数据分类、日志上传边界、你的权利 |
+| [安全与合规](docs/安全与合规.md) | 面向平台审核的可核查技术事实 |
+| [商标与品牌使用规范](docs/商标与品牌使用规范.md) | 白/灰/黑名单：哪些用法需要书面许可 |
+| [第三方声明](docs/第三方声明-Third-Party-Notices-中文.md) | 第三方组件与服务清单（中/英） |
+| [存证说明](tools/legal-witness/README.md) | 法律文档的时间戳存证工具与台账（证明"这些规则在建仓之初已存在"） |
+
 第三方组件及其许可证清单见启动器内「设置 → 版权 → 开源许可」。
+
+> **开源不等于放弃标识权**
+> 代码依 MIT 协议授权，允许修改与分发；但**未经作者明确书面许可，任何二次修改、衍生版本均不得使用本启动器的原名、原图标或原作者名义进行发布或宣传**。MIT 协议从未授予商标、名称或商誉的使用权。
 
 > **免责声明**
 > Starlight Launcher 按「AS IS」提供，与 Mojang Studios / Microsoft 无隶属关系。
 > Minecraft 是 Mojang Studios 的商标，本启动器不是 Minecraft 的官方产品。
+> 本启动器作为中立的基础设施，仅提供游戏启动功能，未内置任何商业服务器，亦未与任何第三方服务器达成商业合作或利益绑定；任何通过本启动器连接的第三方服务器的行为（包括但不限于充值、赞助），均属于用户与该服务器运营方的独立契约，本软件开发者不承担任何连带责任。
+> 本启动器是**客户端**工具，不提供开服向导、服务端配置生成或端口映射；不得将其用于以营利为目的的「一键开服」整合包或私服客户端。

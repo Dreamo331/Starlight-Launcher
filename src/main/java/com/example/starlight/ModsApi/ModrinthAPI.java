@@ -37,7 +37,7 @@ public class ModrinthAPI {
         this.gson = new GsonBuilder().create();
     }
 
-    // ==================== 对外公开方法 ====================
+    // 对外公开方法 //
 
     /**
      * 通过项目ID或Slug获取单个项目信息
@@ -145,7 +145,7 @@ public class ModrinthAPI {
         return project != null ? project.getTitle() : null;
     }
 
-    // ==================== 内部辅助方法 ====================
+    // 内部辅助方法 //
 
     private String sendGetRequest(String url) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
@@ -172,7 +172,7 @@ public class ModrinthAPI {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    // ==================== 数据模型类 ====================
+    // 数据模型类 //
 
     /**
      * 项目信息（搜索结果或详情）

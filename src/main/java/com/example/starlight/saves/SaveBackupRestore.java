@@ -165,9 +165,7 @@ public class SaveBackupRestore {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Internal utilities
-    // -----------------------------------------------------------------------
+    // Internal utilities //
 
     /**
      * Recursively delete a directory tree.
@@ -188,9 +186,7 @@ public class SaveBackupRestore {
         });
     }
 
-    // -----------------------------------------------------------------------
-    // Simple lightweight ZIP utility (no external dependency)
-    // -----------------------------------------------------------------------
+    // Simple lightweight ZIP utility (no external dependency) //
 
     private static final class ZipUtil {
         private ZipUtil() {
@@ -256,9 +252,7 @@ public class SaveBackupRestore {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Result data class
-    // -----------------------------------------------------------------------
+    // Result data class //
 
     /**
      * Wraps the outcome of a backup or restore operation.

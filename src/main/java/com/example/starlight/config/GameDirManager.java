@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -45,9 +46,7 @@ public final class GameDirManager {
 
     private GameDirManager() {}
 
-    // ================================================================
-    //  目录项
-    // ================================================================
+    // 目录项 //
 
     /** 一个受管理的游戏目录：显示名称 + 路径 */
     public static final class GameDirEntry {
@@ -104,9 +103,40 @@ public final class GameDirManager {
         }
     }
 
-    // ================================================================
-    //  读取
-    // ================================================================
+    // 版本计数缓存（带 TTL）//
+
+    /** 版本计数缓存：key = 目录路径，value = 版本数（后台统计后写入，避免 UI 每次重建都同步 Files.list） */
+    private static final Map<String, Integer> VERSION_COUNT_CACHE = new ConcurrentHashMap<>();
+    /** 版本计数写入时刻（毫秒），超过 {@link #VERSION_COUNT_TTL_MS} 后重新统计 */
+    private static final Map<String, Long> VERSION_COUNT_TIME = new ConcurrentHashMap<>();
+    /** 版本计数缓存有效期：30 秒。切换文件夹是高频操作、版本数变化是低频操作，用 TTL 兼顾两者 */
+    private static final long VERSION_COUNT_TTL_MS = 30_000L;
+
+    /**
+     * 取目录版本数（优先缓存，TTL 内有效；未命中/过期时返回 null，由调用方决定是同步统计还是后台异步统计）。
+     * <p>用「返回 null 表示需重新统计」而非直接返回 -1，是为了让调用方能区分「确有 0 个版本」和「还没统计过」。
+     */
+    public static Integer cachedVersionCount(String path) {
+        Long t = VERSION_COUNT_TIME.get(path);
+        if (t != null && (System.currentTimeMillis() - t) < VERSION_COUNT_TTL_MS) {
+            return VERSION_COUNT_CACHE.get(path);
+        }
+        return null;
+    }
+
+    /** 写入版本计数缓存（后台统计完成后调用） */
+    public static void putVersionCount(String path, int count) {
+        VERSION_COUNT_CACHE.put(path, count);
+        VERSION_COUNT_TIME.put(path, System.currentTimeMillis());
+    }
+
+    /** 清除某目录的版本计数缓存（目录被删除/重命名后强制下次重算） */
+    public static void invalidateVersionCount(String path) {
+        VERSION_COUNT_CACHE.remove(path);
+        VERSION_COUNT_TIME.remove(path);
+    }
+
+    // 读取 //
 
     /**
      * 读取目录列表：{@code GameFolders} + {@code GameDirNames} 按序配对，
@@ -158,9 +188,7 @@ public final class GameDirManager {
         return entries;
     }
 
-    // ================================================================
-    //  写入
-    // ================================================================
+    // 写入 //
 
     /**
      * 把目录列表写回配置 Map（只改内存，不落盘）：
@@ -199,9 +227,7 @@ public final class GameDirManager {
         config.put(KEY_ACTIVE, active);
     }
 
-    // ================================================================
-    //  工具方法
-    // ================================================================
+    // 工具方法 //
 
     /** 列表中是否已包含该路径（Windows 下大小写不敏感，忽略末尾分隔符与 . / ..） */
     public static boolean containsPath(List<GameDirEntry> entries, String path) {

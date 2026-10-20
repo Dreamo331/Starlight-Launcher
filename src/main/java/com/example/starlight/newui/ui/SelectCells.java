@@ -105,7 +105,7 @@ public final class SelectCells {
         return String.valueOf(item);
     }
 
-    // ==================== 候选行 ====================
+    // 候选行 //
 
     /** 候选行：左侧 3px 悬停指示条 + 勾选图标 + 文本 */
     private static final class OptionCell extends ListCell<Object> {
@@ -189,7 +189,7 @@ public final class SelectCells {
         }
     }
 
-    // ==================== 值单元格（触发器上的文本） ====================
+    // 值单元格（触发器上的文本） //
 
     /** 值单元格：换选项时旧文本淡出上移、新文本下落淡入 */
     private static final class ValueCell extends ListCell<Object> {

@@ -1,7 +1,7 @@
 package com.example.starlight.util;
 
 import com.google.gson.JsonObject;
-import com.startgame.LaunchInfo;
+import com.example.starlight.startmc.LaunchInfo;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -33,10 +33,7 @@ public final class SLanConfig {
 
     private static final Logger log = LoggerFactory.getLogger(SLanConfig.class);
 
-    /** 配置文件所在目录（相对启动器工作目录，与 starlight.ini 同一目录） */
-    private static final String CONFIG_DIR = "Starlight-Launcher";
-
-    /** 配置文件文件名 */
+    /** 配置文件文件名（路径由 {@link com.example.starlight.config.AppDirs} 解析） */
     private static final String CONFIG_FILE = "multiplayer.json";
 
     /** 打包内置的默认模板（用于首次生成配置文件） */
@@ -55,14 +52,12 @@ public final class SLanConfig {
     private SLanConfig() {
     }
 
-    /** 配置文件完整路径：<user.dir>/Starlight-Launcher/multiplayer.json */
+    /** 配置文件完整路径（统一走 AppDirs） */
     public static Path configPath() {
-        return Paths.get(System.getProperty("user.dir", "."), CONFIG_DIR, CONFIG_FILE);
+        return com.example.starlight.config.AppDirs.multiplayerJson();
     }
 
-    // ================================================================
-    //  读取
-    // ================================================================
+    // 读取 //
 
     /**
      * 中继（房间）服务器地址，形如 {@code ws://主机:端口}。
@@ -189,7 +184,14 @@ public final class SLanConfig {
         }
     }
 
-    /** 进程内只生成一次默认文件：磁盘上没有 multiplayer.json 时从打包模板复制 */
+    /**
+     * 进程内只生成一次默认文件：磁盘上没有 multiplayer.json 时从打包模板复制。
+     *
+     * <p><b>语义（2026-10 起）</b>：打包模板是<b>运营默认值</b>，全局文件只承载
+     * <b>用户改动</b>。因此这里生成的初始文件不再「整文件覆盖模板」，而是显式写成一份
+     * 空覆盖文件（只有注释与空值），读取时逐键回落模板（见 {@link #getString}）——
+     * 这样运营方换服务器只需更新 jar 内模板，未改过该项的用户自动跟随。
+     */
     private static void ensureDefaultFile() {
         if (ensureAttempted) {
             return;
@@ -205,14 +207,15 @@ public final class SLanConfig {
                     return;
                 }
                 Files.createDirectories(path.getParent());
-                try (InputStream in = SLanConfig.class.getResourceAsStream(DEFAULT_TEMPLATE_RESOURCE)) {
-                    if (in == null) {
-                        log.warn("Cannot find bundled default template {}", DEFAULT_TEMPLATE_RESOURCE);
-                        return;
-                    }
-                    Files.copy(in, path);
-                    log.info("Generated default multiplayer config: {}", path.toAbsolutePath());
-                }
+                com.google.gson.JsonObject override = new com.google.gson.JsonObject();
+                override.addProperty("__comment__",
+                        "本文件只保存你对联机设置的改动；未填写的键自动沿用启动器内置默认值，"
+                                + "因此换服务器时无需手动同步。relayServer: 中继(房间)服务器地址"
+                                + "（可只填主机:端口，程序自动补 ws://）；moduleDownloadUrl: 联机模块安装包下载地址。");
+                String json = new com.google.gson.GsonBuilder()
+                        .setPrettyPrinting().disableHtmlEscaping().create().toJson(override);
+                Files.writeString(path, json, StandardCharsets.UTF_8);
+                log.info("Generated user override skeleton: {}", path.toAbsolutePath());
             } catch (IOException e) {
                 log.warn("Failed to generate default multiplayer config {}: {}",
                         path.toAbsolutePath(), e.getMessage());

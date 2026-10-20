@@ -38,7 +38,7 @@ public final class IconService {
         };
     }
 
-    // ==================== 下载页图标（src/main/resources/images） ====================
+    // 下载页图标（src/main/resources/images） //
 
     /** 已加载的界面图标缓存：文件名 → Image（图标会被反复复用，避免重复读盘） */
     private static final Map<String, Image> APP_IMAGE_CACHE = new ConcurrentHashMap<>();

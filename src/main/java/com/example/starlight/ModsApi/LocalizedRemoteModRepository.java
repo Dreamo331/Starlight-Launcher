@@ -1,6 +1,6 @@
 package com.example.starlight.ModsApi;
 
-import com.example.starlight.download.DownloadProvider;
+import com.example.starlight.download.source.DownloadProvider;
 import com.example.starlight.util.TextUtils;
 
 import java.io.IOException;
@@ -40,6 +40,14 @@ public class LocalizedRemoteModRepository implements RemoteModRepository {
     private static final int CONTAIN_CHINESE_WEIGHT = 10;
     /** 最多用多少个英文候选词去查后端 */
     private static final int MAX_ENGLISH_CANDIDATES = 3;
+
+    /** 中文 → 英文候选词并行查询专用线程池（守护线程；不与下载池争抢，也不污染公共池） */
+    private static final java.util.concurrent.ExecutorService CANDIDATE_POOL =
+            java.util.concurrent.Executors.newFixedThreadPool(4, r -> {
+                Thread t = new Thread(r, "sl-mod-candidate");
+                t.setDaemon(true);
+                return t;
+            });
 
     private final RemoteModRepository backed;
 
@@ -128,7 +136,7 @@ public class LocalizedRemoteModRepository implements RemoteModRepository {
         return backed.getType();
     }
 
-    // ==================== 搜索（中文翻译 + 结果重排） ====================
+    // 搜索（中文翻译 + 结果重排） //
 
     @Override
     public SearchResult search(DownloadProvider dp, String gameVersion, Category category,
@@ -158,6 +166,9 @@ public class LocalizedRemoteModRepository implements RemoteModRepository {
     @Override
     public SearchResult search(DownloadProvider dp, ModSearchQuery query) throws IOException {
         if (query == null) query = new ModSearchQuery();
+        // 匿名内部类 / lambda 捕获需要 final 或「有效 final」；query 上面可能被重新赋值，这里固定一份
+        final ModSearchQuery baseQuery = query;
+        final DownloadProvider provider = dp;
         String filter = query.getQuery();
         ModTranslations translations = ModTranslations.getTranslationsByAddonType(getType());
 
@@ -179,15 +190,40 @@ public class LocalizedRemoteModRepository implements RemoteModRepository {
             return backed.search(dp, query);
         }
 
-        // ③ 依次尝试候选词，取第一个有结果的那次查询
+        // ③ 候选词<b>并行</b>查询，再按候选顺序取第一个有结果的
+        //    （语义与原来的串行「取第一个有结果的候选词」一致，但最坏延迟从 3×单次超时
+        //     降到 max(单次超时)。此前中文搜索挂着转圈就是这个串行叠加。）
+        List<String> candidateList = new ArrayList<>(candidates);
+        List<java.util.concurrent.CompletableFuture<SearchResult>> futures = new ArrayList<>(candidateList.size());
+        for (String candidate : candidateList) {
+            final String word = candidate;
+            futures.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                try {
+                    return backed.search(provider, baseQuery.copy().setQuery(word));
+                } catch (Exception e) {
+                    return null;
+                }
+            }, CANDIDATE_POOL));
+        }
+
         SearchResult lastResult = null;
         List<RemoteMod> raw = List.of();
-        for (String candidate : candidates) {
-            SearchResult result = backed.search(dp, query.copy().setQuery(candidate));
+        // 按候选顺序收集：第一个「成功且有结果」的候选即采用，与串行版选择结果完全相同
+        for (java.util.concurrent.CompletableFuture<SearchResult> future : futures) {
+            SearchResult result;
+            try {
+                result = future.get(75, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception e) {
+                continue;
+            }
+            if (result == null) continue;
             List<RemoteMod> items = result.getResults().collect(Collectors.toList());
-            lastResult = result;
-            raw = items;
-            if (!items.isEmpty()) break;
+            if (lastResult == null) lastResult = result;   // 首个成功响应（即使无结果）作为兜底
+            if (!items.isEmpty()) {
+                lastResult = result;
+                raw = items;
+                break;
+            }
         }
         if (lastResult == null) {
             return backed.search(dp, query);
@@ -242,7 +278,7 @@ public class LocalizedRemoteModRepository implements RemoteModRepository {
     private record Scored(RemoteMod mod, int score) {
     }
 
-    // ==================== 其余方法一律委托 ====================
+    // 其余方法一律委托 //
 
     @Override
     public Optional<RemoteMod.Version> getRemoteVersionByLocalFile(LocalModFile localModFile, Path file) throws IOException {

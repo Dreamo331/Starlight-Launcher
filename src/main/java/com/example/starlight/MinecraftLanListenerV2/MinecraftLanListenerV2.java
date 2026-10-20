@@ -124,7 +124,7 @@ public class MinecraftLanListenerV2 {
     }
 
     /*
-    // ======================== 独立运行示例 ========================
+    // 独立运行示例 //
     public static void main(String[] args) throws IOException, InterruptedException {
         MinecraftLanListenerV2 listener = new MinecraftLanListenerV2();
 

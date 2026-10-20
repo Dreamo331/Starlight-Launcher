@@ -60,7 +60,7 @@ public final class TerracottaStatePoller {
         STATE.set(state);
     }
 
-    static TerracottaState getState() {
+    public static TerracottaState getState() {
         return STATE.get();
     }
 

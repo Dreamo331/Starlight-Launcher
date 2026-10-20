@@ -134,7 +134,7 @@ public final class GameProcessPanel extends VBox {
         startRefresh();
     }
 
-    // ==================== 渲染 ====================
+    // 渲染 //
 
     private void render() {
         rowNodes.clear();
@@ -387,7 +387,7 @@ public final class GameProcessPanel extends VBox {
         return row;
     }
 
-    // ==================== 交互 ====================
+    // 交互 //
 
     private void toggleSelection(long pid, HBox row) {
         if (selected.contains(pid)) {
@@ -530,7 +530,7 @@ public final class GameProcessPanel extends VBox {
         closeHandler.run();
     }
 
-    // ==================== 定时刷新 ====================
+    // 定时刷新 //
 
     private void startRefresh() {
         refreshTimer = new Timeline(new KeyFrame(Duration.seconds(1), e -> tick()));
@@ -599,7 +599,7 @@ public final class GameProcessPanel extends VBox {
         return false;
     }
 
-    // ==================== 小工具 ====================
+    // 小工具 //
 
     /** 进程工作集；取不到（无 OSHI / native 构建）显示「—」 */
     private static String memoryText(long pid) {

@@ -27,7 +27,8 @@ public final class LaunchRecordStore {
     private LaunchRecordStore() {
     }
 
-    private static final String RECORDS_FILE = "Starlight-Launcher/launcher.json";
+    private static final String RECORDS_FILE = com.example.starlight.config.AppDirs
+            .launcherJson().toString();
 
     public static void save(LaunchConfig config, String loaderType) {
         try {

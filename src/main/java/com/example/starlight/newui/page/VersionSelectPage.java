@@ -6,6 +6,10 @@ import com.example.starlight.util.ArchiveUtils;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.ui.PageKit;
+import com.example.starlight.newui.ui.SkeletonFactory;
+import com.example.starlight.gui.UIGeneralControlClass;
+
+import javafx.application.Platform;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -34,7 +38,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.example.starlight.newui.ui.VersionIconKit;
-import com.startgame.launcher.LoaderDetector;
+import com.example.starlight.startmc.launcher.LoaderDetector;
 import java.util.stream.Collectors;
 import javafx.scene.control.Tooltip;
 
@@ -54,7 +58,7 @@ public final class VersionSelectPage {
         this.host = host;
     }
 
-    // ===== 版本选择页面 =====
+    // 版本选择页面 //
 
     public Node build() {
         VBox root = PageKit.settingsPage(host, "版本选择", "home");
@@ -78,22 +82,11 @@ public final class VersionSelectPage {
 
         String gameDir = GameDirManager.activePath(host.config());
         Path versionsDir = Paths.get(gameDir, "versions");
-        List<String> versionList = new ArrayList<>();
-
-        if (Files.isDirectory(versionsDir)) {
-            try (var stream = Files.list(versionsDir)) {
-                versionList = stream
-                        .filter(Files::isDirectory)
-                        .map(p -> p.getFileName().toString())
-                        .sorted((a, b) -> b.compareToIgnoreCase(a))
-                        .collect(Collectors.toList());
-            } catch (Exception ignored) {}
-        }
 
         // 标题行：已安装版本数量 + 刷新；当前文件夹完整路径另起一行（可换行，不省略）
         HBox titleRow = new HBox(10);
         titleRow.setAlignment(Pos.CENTER_LEFT);
-        Label listTitle = new Label("已安装版本 (" + versionList.size() + ")");
+        Label listTitle = new Label("已安装版本（读取中…）");
         // 显式指定文字颜色（浅色背景上默认文字色偏白看不清），深色主题由 CSS 覆盖
         listTitle.getStyleClass().add("section-title");
         listTitle.setMinWidth(Region.USE_PREF_SIZE);
@@ -113,29 +106,48 @@ public final class VersionSelectPage {
         dirLabel.setWrapText(true);
         content.getChildren().add(new VBox(4, titleRow, dirLabel));
 
-        if (versionList.isEmpty()) {
-            Label empty = new Label("该文件夹暂无已安装的版本\n请先在启动器中下载游戏版本，或在左侧切换到其他文件夹"
-                    + (Files.isDirectory(Paths.get(gameDir, "versions"))
-                        ? ""
-                        : "\n（添加文件夹时会自动初始化标准目录结构）"));
-            empty.setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20; -fx-text-alignment: center;");
-            content.getChildren().add(empty);
-        } else {
-            // 分组：整合包单独一组，其余按加载器分组（一组一行，点行展开/收起组内已安装的版本，
-            // 与「版本下载配置页」的组件列表同款观感）
+        // 版本目录扫描 + 逐个读取 version.json（NBT/JSON 磁盘 IO）移到后台线程：
+        // 先铺骨架屏，扫描完成后 runLater 回填分组列表，避免阻塞 FX 线程。
+        VBox groupList = new VBox(6);
+        content.getChildren().add(groupList);
+        Node skeleton = SkeletonFactory.buildListSkeleton(5);
+        groupList.getChildren().add(skeleton);
+        UIGeneralControlClass.ASYNC_POOL.submit(() -> {
+            List<String> versionList = new ArrayList<>();
+            if (Files.isDirectory(versionsDir)) {
+                try (var stream = Files.list(versionsDir)) {
+                    versionList = stream
+                            .filter(Files::isDirectory)
+                            .map(p -> p.getFileName().toString())
+                            .sorted((a, b) -> b.compareToIgnoreCase(a))
+                            .collect(Collectors.toList());
+                } catch (Exception ignored) {}
+            }
+            final List<String> versions = versionList;
+            // 逐个读 version.json 判加载器/整合包（磁盘 IO），也在后台线程完成
             Map<String, List<VersionIconKit.Info>> grouped = new LinkedHashMap<>();
-            for (String ver : versionList) {
+            for (String ver : versions) {
                 VersionIconKit.Info info = VersionIconKit.read(gameDir, ver);
                 grouped.computeIfAbsent(groupKeyOf(info), k -> new ArrayList<>()).add(info);
             }
-
             String currentVer = host.config().getOrDefault("Version", "");
-            VBox groupList = new VBox(6);
-            for (String groupKey : orderedGroups(grouped.keySet())) {
-                groupList.getChildren().add(buildVersionGroup(gameDir, grouped.get(groupKey), currentVer));
-            }
-            content.getChildren().add(groupList);
-        }
+            Platform.runLater(() -> {
+                listTitle.setText("已安装版本 (" + versions.size() + ")");
+                groupList.getChildren().remove(skeleton);
+                if (versions.isEmpty()) {
+                    groupList.getChildren().add(new Label("该文件夹暂无已安装的版本\n请先在启动器中下载游戏版本，或在左侧切换到其他文件夹"
+                            + (Files.isDirectory(Paths.get(gameDir, "versions"))
+                                ? ""
+                                : "\n（添加文件夹时会自动初始化标准目录结构）")) {{
+                        setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20; -fx-text-alignment: center;");
+                    }});
+                } else {
+                    for (String groupKey : orderedGroups(grouped.keySet())) {
+                        groupList.getChildren().add(buildVersionGroup(gameDir, grouped.get(groupKey), currentVer));
+                    }
+                }
+            });
+        });
 
         Button addVerBtn = AppIcons.button("download", "下载新版本");
         addVerBtn.getStyleClass().add("btn-primary");
@@ -171,15 +183,33 @@ public final class VersionSelectPage {
 
         for (GameDirManager.GameDirEntry entry : dirs) {
             boolean isActive = GameDirManager.samePath(entry.getPath(), active);
-            int versions = entry.exists() ? entry.countVersions() : 0;
+            boolean exists = entry.exists();
+            // 版本计数：优先取缓存（TTL 内有效）；未命中或已过期时先显示占位文案，再后台异步统计并回填。
+            // 避免切换文件夹重建整页时，对每个目录都同步 Files.list（版本/目录多时这是卡顿主因）。
+            Integer cachedCount = GameDirManager.cachedVersionCount(entry.getPath());
+            boolean cacheValid = cachedCount != null;
+            int versions = cachedCount != null ? cachedCount : -1;
+            String countText = !exists ? "目录不存在"
+                    : (versions >= 0 ? versions + " 个版本" : "读取版本数…");
 
-            Button item = navItem("folder", entry.getName()
-                    + "\n" + (entry.exists() ? versions + " 个版本" : "目录不存在"));
+            Button item = navItem("folder", entry.getName() + "\n" + countText);
             item.setTooltip(new Tooltip(entry.getDisplayPath()
-                    + (entry.exists() ? "\n已安装 " + versions + " 个版本" : "\n目录不存在")));
+                    + (exists ? (versions >= 0 ? "\n已安装 " + versions + " 个版本" : "\n版本数读取中") : "\n目录不存在")));
             if (isActive) {
                 item.getStyleClass().add("selected");
                 AppIcons.apply(item, "bullet", 8, null);
+            }
+
+            // 后台统计版本数并回填（缓存有效期内不重复提交）
+            if (exists && !cacheValid) {
+                UIGeneralControlClass.ASYNC_POOL.submit(() -> {
+                    int count = entry.countVersions();
+                    GameDirManager.putVersionCount(entry.getPath(), count);
+                    Platform.runLater(() -> {
+                        item.setText(entry.getName() + "\n" + count + " 个版本");
+                        item.setTooltip(new Tooltip(entry.getDisplayPath() + "\n已安装 " + count + " 个版本"));
+                    });
+                });
             }
 
             item.setOnAction(e -> {
@@ -249,7 +279,7 @@ public final class VersionSelectPage {
         return btn;
     }
 
-    // ==================== 已安装版本：按「整合包 / 加载器」分组展示 ====================
+    // 已安装版本：按「整合包 / 加载器」分组展示 //
 
     /**
      * 「整合包」分组的键（不是加载器名，用一个不会与加载器冲突的哨兵值）。

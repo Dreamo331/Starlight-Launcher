@@ -3,11 +3,8 @@ chcp 65001>nul
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
-rem ============================================================
-rem  Starlight Launcher 一键打包 单EXE (GraalVM Native Image)
-rem  日志: temp\log\<时间戳>\stepN-*.log, 实时显示 + 保存
-rem ============================================================
-
+rem Starlight Launcher 一键打包 单EXE (GraalVM Native Image)
+rem 日志: temp\log\<时间戳>\stepN-*.log, 实时显示 + 保存
 set "LOGDIR=%~dp0temp\log"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%"
 for /f %%a in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set "TS=%%a"
@@ -68,8 +65,11 @@ call :logHas "%RUNLOG%\step6-link.log" "BUILD SUCCESS"
 if errorlevel 1 ( echo [6/7] LINK FAILED & pause & exit /b 1 )
 
 echo.
-echo [7/7] 写入图标与版本信息 ...
-call "%~dp0tools\set-metadata.bat" < nul 2>&1 | powershell -NoProfile -Command "$input | Tee-Object -FilePath '%RUNLOG%\step7-metadata.log'"
+echo [7/7] Apply metadata (icon embedded natively + version merged safely)...
+call "%~dp0tools\set-metadata.bat" 2>&1 | powershell -NoProfile -Command "$input | Tee-Object -FilePath '%RUNLOG%\step7-metadata.log'"
+if errorlevel 1 (
+    echo [7/7] WARNING: metadata step failed, EXE still usable (no version info).
+)
 
 if exist "target\gluonfx\x86_64-windows\Starlight Launcher.exe" (
     echo.

@@ -9,11 +9,14 @@ import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.gui.UIGeneralControlClass.LaunchConfig;
 import com.example.starlight.model.ActionResult;
 import com.example.starlight.model.ErrorCode;
-import com.example.starlight.service.LogService;
+import com.example.starlight.log.sendlogs;
+import com.example.starlight.model.LogUploadRecord;
+import com.example.starlight.newui.ui.LogUploadResultWindow;
+import com.example.starlight.service.LogUploadStore;
 import com.example.starlight.util.LogExporter;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.startgame.launcher.LoaderDetector;
+import com.example.starlight.startmc.launcher.LoaderDetector;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -27,6 +30,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
+import javafx.stage.Window;
 
 import java.io.File;
 import java.io.IOException;
@@ -55,15 +59,18 @@ public class GameCrashPanel extends VBox {
     private Button sendBtn;
     private Button exportBtn;
     private Label statusLabel;
+    private final Window ownerWindow;   // 上传结果弹窗的 owner（LauncherView 主窗口）
 
     public GameCrashPanel(CrashDiagnosticData crashData, Runnable restartHandler,
-                          Consumer<String> toast, Runnable openAIDiagnosis, Runnable closeHandler) {
+                          Consumer<String> toast, Runnable openAIDiagnosis, Runnable closeHandler,
+                          Window ownerWindow) {
         super(10);
         this.crashData = crashData;
         this.restartHandler = restartHandler;
         this.toast = toast;
         this.openAIDiagnosis = openAIDiagnosis;
         this.closeHandler = closeHandler;
+        this.ownerWindow = ownerWindow;
         setPadding(new Insets(10, 4, 0, 4));
 
         ErrorCode ec = crashData.getErrorCode();
@@ -196,7 +203,7 @@ public class GameCrashPanel extends VBox {
         toast.accept("错误信息已复制到剪贴板");
     }
 
-    /** 上传日志：优先 crash-report，其次 latest.log，最后 starlight.log */
+    /** 上传日志：优先 crash-report，其次 latest.log，最后 starlight.log；成功后存记录并弹出分享窗口 */
     private void handleSendLog() {
         final String logFileToUpload = findBestLogFile();
         if (logFileToUpload == null) {
@@ -208,8 +215,23 @@ public class GameCrashPanel extends VBox {
         statusLabel.setText("正在上传日志，请稍候...");
         new Thread(() -> {
             try {
-                ActionResult result = LogService.uploadLogAndGenerateQR(logFileToUpload, null);
-                Platform.runLater(() -> onSendLogResult(result));
+                sendlogs.UploadResult ur = sendlogs.uploadLogFileEx(logFileToUpload, null);
+                File f = new File(logFileToUpload);
+                LogUploadRecord record = new LogUploadRecord(ur.id, ur.url, ur.token,
+                        f.getName(), System.currentTimeMillis(), 1, f.length());
+                LogUploadStore.add(record);
+                Platform.runLater(() -> {
+                    sendBtn.setDisable(false);
+                    AppIcons.setText(sendBtn, "upload", "上传日志");
+                    statusLabel.setText("日志已上传，可在分享窗口查看二维码与链接");
+                    if (ownerWindow != null) {
+                        LogUploadResultWindow.show(ownerWindow, record,
+                                toast,
+                                () -> statusLabel.setText("已撤回并删除该日志"));
+                    } else {
+                        toast.accept("日志已上传: " + record.url);
+                    }
+                });
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     sendBtn.setDisable(false);
@@ -218,22 +240,6 @@ public class GameCrashPanel extends VBox {
                 });
             }
         }, "crash-log-upload").start();
-    }
-
-    private void onSendLogResult(ActionResult result) {
-        sendBtn.setDisable(false);
-        AppIcons.setText(sendBtn, "upload", "上传日志");
-        if (result.success && result.data instanceof LogService.LogUploadResult) {
-            LogService.LogUploadResult ur = (LogService.LogUploadResult) result.data;
-            if (ur.qrFilePath != null) {
-                statusLabel.setText("日志已上传: " + ur.url + "（二维码已保存至 " + ur.qrFilePath + "）");
-                LogExporter.openInExplorer(ur.qrFilePath);
-            } else {
-                statusLabel.setText("日志已上传: " + ur.url);
-            }
-        } else {
-            statusLabel.setText("上传失败: " + result.message);
-        }
     }
 
     /** 导出日志为 zip 压缩包 */
@@ -279,6 +285,21 @@ public class GameCrashPanel extends VBox {
         return null;
     }
 
+    /** 读取系统物理内存总量（MB），用于崩溃诊断的「物理内存」字段 */
+    private static String readTotalPhysicalMemory() {
+        try {
+            java.lang.management.OperatingSystemMXBean osBean =
+                    java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+            if (osBean instanceof com.sun.management.OperatingSystemMXBean sunOsBean) {
+                long bytes = sunOsBean.getTotalMemorySize();
+                if (bytes > 0) return (bytes / (1024 * 1024)) + " MB";
+            }
+        } catch (Throwable ignored) {
+            // 反射/兼容性失败时退回估算值
+        }
+        return (Runtime.getRuntime().maxMemory() / (1024 * 1024)) + " MB";
+    }
+
     /**
      * 由启动用的 java.exe 路径反查其版本号（读 Java 扫描缓存，不触发全盘扫描）。
      * 命中不了时（自定义路径 / 缓存缺失）回退到启动器自身 JVM 版本。
@@ -309,15 +330,26 @@ public class GameCrashPanel extends VBox {
      * @param launchStartTime 本次启动开始时间戳(ms)，latest.log 早于该值视为旧日志，不采用
      */
     public static CrashDiagnosticData collectCrashData(LaunchConfig config, int exitCode, String errorLogPath, long launchStartTime) {
-        // 入参 config 是重新从配置读出来的，AutoJava 在启动线程里覆盖的 javaPath 不在里面，
-        // 所以优先取本次启动实际使用的 Java（配置里那条只在自动选择失效时才是真的用过）
-        String launchedJava = UIGeneralControlClass.getLastLaunchJavaPath(config.version);
+        // 优先取「最近一次启动实例快照」：崩溃面板此前只拿当前选中版本的配置，
+        // 从「最近游玩」/插件启动非当前版本时会把当前版本元数据与旧崩溃报告拼到一起（串档）。
+        // 快照记录的是真正启动的版本/目录/加载器/Java/隔离，命中则以此为准。
+        UIGeneralControlClass.LaunchSnapshot snap = UIGeneralControlClass.getLastLaunchSnapshot();
+        String effectiveVersion = snap != null ? snap.version : config.version;
+        String effectiveGameDir = snap != null ? snap.gameDir : config.gameDir;
+        String effectiveLoader = snap != null ? snap.loader : null;
+        boolean effectiveIsolation = snap != null ? snap.versionIsolation : config.versionIsolation;
+        // 快照里的 startTime 与本次 launchStartTime 一致时优先用它（进程真正启动前已回填）
+        long snapshotStartTime = snap != null ? snap.launchStartTime : 0L;
+
+        // AutoJava 在启动线程里覆盖的 javaPath 不在重新读出的 config 里，
+        // 优先取本次启动实际使用的 Java（配置里那条只在自动选择失效时才是真的用过）
+        String launchedJava = UIGeneralControlClass.getLastLaunchJavaPath(effectiveVersion);
         String effectiveJava = launchedJava != null ? launchedJava : config.javaPath;
 
         CrashDiagnosticData data = new CrashDiagnosticData();
         data.setExitCode(exitCode);
-        data.setGameVersion(config.version);
-        data.setGameDir(config.gameDir);
+        data.setGameVersion(effectiveVersion);
+        data.setGameDir(effectiveGameDir);
         data.setJavaPath(effectiveJava);
         data.setMaxMemory(config.maxMemory);
         data.setOsInfo(System.getProperty("os.name"));
@@ -328,24 +360,28 @@ public class GameCrashPanel extends VBox {
         data.setJavaVersion(resolveGameJavaVersion(effectiveJava));
         data.setLauncherVersion(AppConfig.APP_VERSION);
 
-        // 检测加载器类型
-        String loaderType = "未知";
-        Path verJsonPath = Paths.get(config.gameDir, "versions", config.version, config.version + ".json");
-        if (Files.exists(verJsonPath)) {
-            try {
-                String verStr = Files.readString(verJsonPath);
-                JsonObject verJson = new Gson().fromJson(verStr, JsonObject.class);
-                // 统一判定入口（含补判），与启动路径、版本列表保持一致
-                loaderType = VersionIconKit.detectLoader(verJson, config.version);
-            } catch (Exception ignored) {}
+        // 检测加载器类型：快照命中直接用（含 AutoJava 等启动期覆盖），否则按版本 JSON 重判
+        String loaderType = effectiveLoader;
+        if (loaderType == null || loaderType.isBlank()) {
+            loaderType = "未知";
+            Path verJsonPath = Paths.get(effectiveGameDir, "versions", effectiveVersion, effectiveVersion + ".json");
+            if (Files.exists(verJsonPath)) {
+                try {
+                    String verStr = Files.readString(verJsonPath);
+                    JsonObject verJson = new Gson().fromJson(verStr, JsonObject.class);
+                    // 统一判定入口（含补判），与启动路径、版本列表保持一致
+                    loaderType = VersionIconKit.detectLoader(verJson, effectiveVersion);
+                } catch (Exception ignored) {}
+            }
         }
         data.setLoaderType(loaderType);
 
-        // 计算总物理内存
-        long totalMem = Runtime.getRuntime().maxMemory() / (1024 * 1024);
-        data.setTotalMemory(totalMem + " MB");
+        // 计算总物理内存（用 OS 提供的物理内存总量，而非启动器自身 JVM 堆上限）
+        data.setTotalMemory(readTotalPhysicalMemory());
 
-        // 构建启动命令摘要
+        // 构建启动命令摘要（用真实启动的 Java / 版本 / 隔离目录）
+        String effectiveGameDirArg = effectiveIsolation
+                ? effectiveGameDir + "/versions/" + effectiveVersion : effectiveGameDir;
         StringBuilder cmdBuilder = new StringBuilder();
         cmdBuilder.append(effectiveJava).append(" ");
         cmdBuilder.append("-Xms").append(config.minMemory).append("M ");
@@ -353,17 +389,18 @@ public class GameCrashPanel extends VBox {
         if (!config.jvmArgs.isEmpty()) cmdBuilder.append(config.jvmArgs).append(" ");
         cmdBuilder.append("net.minecraft.client.main.Main ");
         cmdBuilder.append("--username ").append(config.userName).append(" ");
-        cmdBuilder.append("--version ").append(config.version).append(" ");
-        cmdBuilder.append("--gameDir ").append(config.gameDir).append(" ");
-        cmdBuilder.append("--assetsDir ").append(config.gameDir).append("/assets ");
+        cmdBuilder.append("--version ").append(effectiveVersion).append(" ");
+        cmdBuilder.append("--gameDir ").append(effectiveGameDirArg).append(" ");
+        cmdBuilder.append("--assetsDir ").append(effectiveGameDir).append("/assets ");
         cmdBuilder.append("--uuid ").append(config.uuid).append(" ");
         cmdBuilder.append("--accessToken ").append("{HIDDEN}").append(" ");
         cmdBuilder.append("--userType ").append(config.userType);
         if (!config.gameArgs.isEmpty()) cmdBuilder.append(" ").append(config.gameArgs);
         data.setLaunchCommand(cmdBuilder.toString());
 
-        // 1. 查找 crash-report
-        String crashReportPath = CrashReportParser.findLatestCrashReport(config.gameDir);
+        // 1. 查找 crash-report（版本感知 + 时间过滤，避免串档 / 抓到历史残留）
+        String crashReportPath = CrashReportParser.findLatestCrashReport(
+                effectiveGameDir, effectiveVersion, snapshotStartTime);
         if (crashReportPath != null) {
             data.setCrashReportPath(crashReportPath);
             CrashReportParser.CrashInfo ci = CrashReportParser.parse(crashReportPath);
@@ -417,7 +454,11 @@ public class GameCrashPanel extends VBox {
         data.setErrorCode(ErrorCode.detectFromText(errorDesc));
 
         // 4. 读取 latest.log 末尾关键日志（仅当本次启动后有写入，避免误读上一次启动的旧日志）
-        Path latestLog = Paths.get(config.gameDir, "logs", "latest.log");
+        // 版本隔离开启时 latest.log 落在 versions/<版本>/logs，否则在游戏目录 logs
+        Path latestLog = Paths.get(effectiveGameDir, "versions", effectiveVersion, "logs", "latest.log");
+        if (!Files.exists(latestLog)) {
+            latestLog = Paths.get(effectiveGameDir, "logs", "latest.log");
+        }
         if (!Files.exists(latestLog)) {
             latestLog = Paths.get("logs", "latest.log");
         }

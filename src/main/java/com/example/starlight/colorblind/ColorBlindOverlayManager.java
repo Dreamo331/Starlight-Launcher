@@ -1,5 +1,6 @@
 package com.example.starlight.colorblind;
 
+import com.example.starlight.config.AppDirs;
 import com.example.starlight.config.Endpoints;
 import com.example.starlight.main.ConfigManager;
 
@@ -27,7 +28,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class ColorBlindOverlayManager {
 
-    // ==================== 配置键与默认值 ====================
+    // 配置键与默认值 //
 
     public static final String KEY_MODE = "ColorBlindMode";
     public static final String KEY_TYPE = "ColorBlindType";
@@ -46,9 +47,8 @@ public final class ColorBlindOverlayManager {
     public static final String DEFAULT_TYPE = "deuteranopia";
     public static final double DEFAULT_STRENGTH = 1.0;
 
-    /** 可执行文件相对路径（相对启动器运行目录） */
-    private static final String EXE_RELATIVE_PATH = "Starlight-Launcher" + File.separator
-            + "ColorBlindOverlay" + File.separator + "ColorBlindOverlay.exe";
+    /** 可执行文件路径（统一走 AppDirs：默认 ~/.starlight，--portable 回落工作目录） */
+    private static final String EXE_RELATIVE_PATH = AppDirs.colorBlindExe().toString();
 
     /** 矫正工具下载地址（Gitee Release）：本机找不到可执行文件时提示用户从这里手动下载 */
     public static final String DOWNLOAD_URL = Endpoints.colorBlindOverlayUrl();
@@ -69,7 +69,7 @@ public final class ColorBlindOverlayManager {
         TYPES = Collections.unmodifiableMap(types);
     }
 
-    // ==================== 运行状态 ====================
+    // 运行状态 //
 
     /** 已拉起的矫正工具进程（null = 未启动或已退出） */
     private static volatile Process overlayProcess;
@@ -82,7 +82,7 @@ public final class ColorBlindOverlayManager {
     private ColorBlindOverlayManager() {
     }
 
-    // ==================== 配置读写 ====================
+    // 配置读写 //
 
     /** 读取生效配置：starlight.ini 打底，starlight-client.ini（个性化项）覆盖 */
     public static Map<String, String> readMergedConfig() {
@@ -209,7 +209,7 @@ public final class ColorBlindOverlayManager {
         return result;
     }
 
-    // ==================== 游戏生命周期 ====================
+    // 游戏生命周期 //
 
     /** 游戏窗口就绪（启动器权威信号）：总开关开启时按当前配置拉起矫正工具 */
     public static synchronized void notifyGameStarted() {
@@ -285,15 +285,7 @@ public final class ColorBlindOverlayManager {
         if (dir != null && (dir.isDirectory() || dir.mkdirs())) {
             return primary;
         }
-        String userDir = System.getProperty("user.dir");
-        if (userDir != null) {
-            File alt = new File(userDir, EXE_RELATIVE_PATH);
-            File altDir = alt.getParentFile();
-            if (altDir != null && (altDir.isDirectory() || altDir.mkdirs())) {
-                return alt;
-            }
-        }
-        throw new IOException("无法创建矫正工具目录: " + EXE_RELATIVE_PATH);
+        throw new IOException("无法创建矫正工具目录: " + dir);
     }
 
     /** 游戏是否正在运行（由启动器检测信号维护） */
@@ -308,7 +300,7 @@ public final class ColorBlindOverlayManager {
                 + " · 矫正工具 " + (isRunning() ? "运行中" : "未运行");
     }
 
-    // ==================== 内部实现 ====================
+    // 内部实现 //
 
     /** 按当前配置启动矫正工具（已在运行则原样返回） */
     private static String ensureStarted() {
@@ -359,20 +351,10 @@ public final class ColorBlindOverlayManager {
         }
     }
 
-    /** 定位可执行文件：先按运行目录，再按 user.dir 兜底（jpackage 启动时运行目录可能不同） */
+    /** 定位可执行文件（路径已由 AppDirs 解析为绝对路径） */
     private static File resolveExe() {
         File file = new File(EXE_RELATIVE_PATH);
-        if (file.isFile()) {
-            return file;
-        }
-        String userDir = System.getProperty("user.dir");
-        if (userDir != null) {
-            File alt = new File(userDir, EXE_RELATIVE_PATH);
-            if (alt.isFile()) {
-                return alt;
-            }
-        }
-        return null;
+        return file.isFile() ? file : null;
     }
 
     /** 退出清理：启动器关闭时一并结束矫正工具，避免留下无主进程 */
@@ -389,7 +371,7 @@ public final class ColorBlindOverlayManager {
         }, "ColorBlindShutdownHook"));
     }
 
-    // ==================== 快速调节网页 ====================
+    // 快速调节网页 //
 
     /** 启动本地调节服务并返回访问地址（失败返回 null） */
     public static String tuneServerUrl() {

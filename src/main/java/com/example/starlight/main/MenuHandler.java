@@ -2,7 +2,13 @@ package com.example.starlight.main;
 
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.auth.AccountManager.Account;
+import com.example.starlight.auth.AuthlibInjectorSupport;
+import com.example.starlight.auth.offline.LocalYggdrasilServer;
+import com.example.starlight.auth.offline.LocalCapeProxy;
+import com.example.starlight.auth.offline.OfflineSkinManager;
+import com.example.starlight.auth.offline.Skin;
 import com.example.starlight.config.GameDirManager;
+import com.example.starlight.util.VanillaVersion;
 import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.google.gson.Gson;
@@ -22,6 +28,8 @@ import java.util.regex.Pattern;
  */
 public class MenuHandler {
 
+    /** 配置路径统一由 AppDirs 解析（默认 ~/.starlight，--portable 回落工作目录） */
+    @Deprecated
     private static final String CONFIG_FILE = "starlight.ini";
     private static final String LOG_DIR = "logs";
     private static final Gson GSON = new Gson();
@@ -33,10 +41,10 @@ public class MenuHandler {
     // 游戏进程引用
     private static Process gameProcess = null;
     private static Thread gameWatcher = null;
+    private static volatile LocalYggdrasilServer gameCapeServer = null;
+    private static volatile LocalCapeProxy gameCapeProxy = null;
 
-    // ====================================================================
-    //  quickLaunchMinecraft
-    // ====================================================================
+    // quickLaunchMinecraft //
 
     public static void quickLaunchMinecraft() {
         System.out.println("Quick launching Minecraft...");
@@ -65,6 +73,7 @@ public class MenuHandler {
             try {
                 String jsonString = Files.readString(versionJsonPath);
                 JsonObject versionJson = GSON.fromJson(jsonString, JsonObject.class);
+                applyOfflineSkinPack(config);
                 String command = buildMinecraftCommand(config, versionJson);
                 startGameProcess(config, command);
             } catch (Exception e) {
@@ -76,9 +85,7 @@ public class MenuHandler {
         System.out.println("Quick launch command sent!");
     }
 
-    // ====================================================================
-    //  账号管理菜单
-    // ====================================================================
+    // 账号管理菜单 //
 
     public static void accountManagement() {
         Scanner scanner = new Scanner(System.in);
@@ -189,9 +196,7 @@ public class MenuHandler {
         }
     }
 
-    // ====================================================================
-    //  FRP 隧道
-    // ====================================================================
+    // FRP 隧道 //
 
     public static void startFrpTunnel(String addr) {
         System.out.println("Starting FRP tunnel...");
@@ -242,9 +247,7 @@ public class MenuHandler {
         }, "frp-tunnel-thread").start();
     }
 
-    // ====================================================================
-    //  发送日志
-    // ====================================================================
+    // 发送日志 //
 
     public static void sendLogToServer(String logPath, String serverUrl) {
         System.out.println("Sending logs...");
@@ -290,9 +293,7 @@ public class MenuHandler {
         }, "send-logs-thread").start();
     }
 
-    // ====================================================================
-    //  AI 分析日志
-    // ====================================================================
+    // AI 分析日志 //
 
     public static void aiAnalyzeLogFile(String logPath) {
         System.out.println("Analyzing log: " + logPath);
@@ -415,13 +416,11 @@ public class MenuHandler {
         }, "ai-log-analysis-thread").start();
     }
 
-    // ====================================================================
-    //  配置管理
-    // ====================================================================
+    // 配置管理 //
 
     public static Map<String, String> readConfig() {
         Map<String, String> config = new LinkedHashMap<>();
-        Path configPath = Paths.get(CONFIG_FILE);
+        Path configPath = com.example.starlight.config.AppDirs.starlightIni();
 
         if (!Files.exists(configPath)) {
             System.out.println("Config file not found, using default configuration");
@@ -469,7 +468,7 @@ public class MenuHandler {
     }
 
     public static void saveConfig(Map<String, String> config) {
-        Path configPath = Paths.get(CONFIG_FILE);
+        Path configPath = com.example.starlight.config.AppDirs.starlightIni();
         try (BufferedWriter writer = Files.newBufferedWriter(configPath)) {
             writer.write("[Launcher]\n");
             for (Map.Entry<String, String> entry : config.entrySet()) {
@@ -481,9 +480,7 @@ public class MenuHandler {
         }
     }
 
-    // ====================================================================
-    //  账户管理
-    // ====================================================================
+    // 账户管理 //
 
     public static boolean isLoggedIn() {
         return loggedIn && currentAccount != null;
@@ -504,14 +501,19 @@ public class MenuHandler {
         if (currentAccount != null) {
             config.userName = currentAccount.name;
             config.uuid = currentAccount.id;
+            // 离线皮肤（PCL2 风格）：离线账号按皮肤配置微调 UUID，让游戏按期望模型渲染默认皮肤
+            if (currentAccount.type == AccountManager.AccountType.OFFLINE) {
+                String resolvedUuid = OfflineSkinManager.resolveUuid(currentAccount.id, currentAccount.getSkin());
+                if (resolvedUuid != null && !resolvedUuid.isEmpty()) {
+                    config.uuid = resolvedUuid;
+                }
+            }
             config.accessToken = currentAccount.accessToken;
             config.userType = currentAccount.getUserType();
         }
     }
 
-    // ====================================================================
-    //  核心启动方法
-    // ====================================================================
+    // 核心启动方法 //
 
     public static boolean isConfigReady() {
         Map<String, String> cfg = readConfig();
@@ -546,6 +548,9 @@ public class MenuHandler {
         config.gameArgs = effective.getOrDefault("GameArgs", "");
         config.preLaunchCommand = effective.getOrDefault("PreLaunchCommand", "");
         config.postExitCommand = effective.getOrDefault("PostExitCommand", "");
+        // 高级设置：自定义游戏窗口标题 / 进程优先级（与 UIGeneralControlClass.LaunchConfig 一致）
+        config.windowTitle = effective.getOrDefault("GameWindowTitle", "");
+        config.processPriority = effective.getOrDefault("GameProcessPriority", "normal");
 
         return config;
     }
@@ -559,9 +564,7 @@ public class MenuHandler {
         }
     }
 
-    // ====================================================================
-    //  构建 Minecraft 启动命令
-    // ====================================================================
+    // 构建 Minecraft 启动命令 //
 
     private static String buildMinecraftCommand(UIGeneralControlClass.LaunchConfig config, JsonObject versionJson) {
         String mainClass = "net.minecraft.client.main.Main";
@@ -607,6 +610,15 @@ public class MenuHandler {
         parts.add("--userType"); parts.add(config.userType);
         parts.add("--width"); parts.add(String.valueOf(config.windowWidth));
         parts.add("--height"); parts.add(String.valueOf(config.windowHeight));
+
+        // 1.17+ 本地玩家皮肤/披风直注入：SkinManager 对本地玩家直接取 Session profile
+        // 属性（--profileProperties），不走会话档案查询；无该参数时本地玩家永远没有
+        // textures 属性，皮肤/披风无法显示（1.17.1 反编译实证）
+        if (gameCapeServer != null) {
+            java.util.List<String> pp = OfflineSkinManager.profilePropertiesArgs(
+                    gameCapeServer, config.version);
+            for (String a : pp) parts.add(a);
+        }
 
         if (config.fullscreen) {
             parts.add("--fullscreen");
@@ -657,9 +669,7 @@ public class MenuHandler {
         return 8;
     }
 
-    // ====================================================================
-    //  构建 ClassPath
-    // ====================================================================
+    // 构建 ClassPath //
 
     private static String buildClassPath(UIGeneralControlClass.LaunchConfig config) {
         StringBuilder cp = new StringBuilder();
@@ -678,9 +688,7 @@ public class MenuHandler {
         return cp.toString();
     }
 
-    // ====================================================================
-    //  启动游戏进程（独立进程，不阻塞启动器）
-    // ====================================================================
+    // 启动游戏进程（独立进程，不阻塞启动器） //
 
     private static void startGameProcess(UIGeneralControlClass.LaunchConfig config, String command) {
         try {
@@ -697,6 +705,7 @@ public class MenuHandler {
                     int exitCode = gameProcess.waitFor();
                     System.out.println("\n[Game Monitor] Game exited, exit code: " + exitCode);
                     gameProcess = null;
+                    stopCapeServer();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -710,9 +719,7 @@ public class MenuHandler {
         }
     }
 
-    // ====================================================================
-    //  launchMinecraft（交互式启动）
-    // ====================================================================
+    // launchMinecraft（交互式启动） //
 
     public static void launchMinecraft(Scanner scanner) {
         System.out.println("========================================");
@@ -773,6 +780,7 @@ public class MenuHandler {
                 String jsonString = Files.readString(versionJsonPath);
                 JsonObject versionJson = GSON.fromJson(jsonString, JsonObject.class);
 
+                applyOfflineSkinPack(config);
                 String command = buildMinecraftCommand(config, versionJson);
                 startGameProcess(config, command);
 
@@ -785,5 +793,63 @@ public class MenuHandler {
         System.out.println("\nLaunch command sent, the game will start in background.");
         System.out.println("Enter 'stop' to force stop the game.");
         System.out.println("========================================\n");
+    }
+
+    /**
+     * CLI 启动前应用离线皮肤资源包（PCL2 风格：自定义皮肤以资源包覆盖默认贴图）。
+     * UUID 定制已在 applyCurrentAccount 完成（幂等，以账号基础 UUID 为起点）。
+     */
+    private static void applyOfflineSkinPack(UIGeneralControlClass.LaunchConfig config) {
+        try {
+            if (currentAccount == null || currentAccount.type != AccountManager.AccountType.OFFLINE) return;
+            VanillaVersion vanilla = VanillaVersion.resolve(
+                    java.nio.file.Path.of(config.gameDir), config.version);
+            OfflineSkinManager.applySkinPack(currentAccount.getSkin(), currentAccount.name,
+                    config.gameDir, config.version, config.versionIsolation, vanilla);
+            // 披风：本地 Yggdrasil 档案服务器（仅当配置了披风；无披风保持纯 PCL2 机制）
+            stopCapeServer();
+            if (vanilla == null || vanilla.major() >= 8) {
+                Skin.LoadedSkin loaded = OfflineSkinManager.loadForLaunch(
+                        currentAccount.getSkin(), currentAccount.name);
+                LocalYggdrasilServer capeServer = LocalYggdrasilServer.start(
+                        loaded, config.uuid, currentAccount.name);
+                if (capeServer != null) {
+                    gameCapeServer = capeServer;
+                    java.util.List<String> injectArgs = new java.util.ArrayList<>(
+                            AuthlibInjectorSupport.buildLaunchJvmArgs(capeServer.getApiBase()));
+                    // 本地披风代理：SOCKS5 劫持 OptiFine s.optifine.net 披风下载
+                    //（1.17.1 纯 OptiFine 本地玩家披风唯一原生通道；--proxyHost 由
+                    // Main 解析为 SOCKS 代理，HttpTexture 走 HttpPipeline SOCKS 隧道）
+                    LocalCapeProxy capeProxy = LocalCapeProxy.start(
+                            OfflineSkinManager.capePngBytes(loaded), currentAccount.name);
+                    if (capeProxy != null) {
+                        gameCapeProxy = capeProxy;
+                        String agentArg = capeProxy.agentJvmArg();
+                        if (agentArg != null) {
+                            injectArgs.add(agentArg);
+                        }
+                    }
+                    String extra = String.join(" ", injectArgs);
+                    config.jvmArgs = (config.jvmArgs == null || config.jvmArgs.isBlank())
+                            ? extra : config.jvmArgs.trim() + " " + extra;
+                    System.out.println("Local cape server enabled: " + capeServer.getApiBase());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Offline skin pack apply failed: " + e.getMessage());
+        }
+    }
+
+    private static void stopCapeServer() {
+        LocalYggdrasilServer s = gameCapeServer;
+        if (s != null) {
+            gameCapeServer = null;
+            s.stop();
+        }
+        LocalCapeProxy p = gameCapeProxy;
+        if (p != null) {
+            gameCapeProxy = null;
+            p.stop();
+        }
     }
 }

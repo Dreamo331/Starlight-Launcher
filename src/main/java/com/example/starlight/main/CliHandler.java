@@ -8,7 +8,7 @@ import com.example.starlight.auth.AccountManager;
 import com.example.starlight.auth.AccountManager.Account;
 import com.example.starlight.gamebat.MinecraftLauncherBuilder;
 import com.example.starlight.gui.UIGeneralControlClass;
-import com.example.starlight.installjava.JavaInstall;
+import com.example.starlight.download.task.JavaInstall;
 import com.example.starlight.listjava.FindAllJavaWindows;
 import com.example.starlight.listsaves.listsaves;
 

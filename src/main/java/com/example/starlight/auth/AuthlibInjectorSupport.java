@@ -1,6 +1,9 @@
 package com.example.starlight.auth;
 
+import com.example.starlight.config.AppDirs;
 import com.example.starlight.newui.AppConfig;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -30,10 +33,10 @@ import java.util.List;
  */
 public class AuthlibInjectorSupport {
 
-    private static final String CONFIG_DIR = System.getProperty("user.home") + "/.starlight-launcher";
     private static final String JAR_NAME = "authlib-injector.jar";
     private static final String LATEST_BUILD_URL = "https://authlib-injector.yushi.moe/artifact/latest.json";
     private static final String GITHUB_LATEST_URL = "https://github.com/yushijinhun/authlib-injector/releases/latest/download/authlib-injector.jar";
+    private static final String GITHUB_API_LATEST_URL = "https://api.github.com/repos/yushijinhun/authlib-injector/releases/latest";
 
     /** 低于此大小视为不完整下载（真实 jar 约 300KB+） */
     private static final long MIN_JAR_SIZE = 100_000;
@@ -73,20 +76,24 @@ public class AuthlibInjectorSupport {
      */
     public static synchronized Path getOrDownloadArtifact() {
         try {
-            Path dir = Paths.get(CONFIG_DIR);
-            Files.createDirectories(dir);
-            Path jar = dir.resolve(JAR_NAME);
+            Path jar = AppDirs.authlibInjectorJar();
+            Files.createDirectories(jar.getParent());
             if (Files.isRegularFile(jar) && Files.size(jar) >= MIN_JAR_SIZE) {
                 return jar;
             }
             try {
                 downloadFromOfficial(jar);
             } catch (Exception e) {
-                System.err.println("[AuthlibInjector] 官方源下载失败，尝试 GitHub 直链: " + e.getMessage());
+                System.err.println("[AuthlibInjector] 官方源下载失败，尝试 GitHub API: " + e.getMessage());
                 try {
-                    downloadTo(GITHUB_LATEST_URL, jar, null);
+                    downloadFromGitHubApi(jar);
                 } catch (Exception e2) {
-                    System.err.println("[AuthlibInjector] GitHub 直链下载失败: " + e2.getMessage());
+                    System.err.println("[AuthlibInjector] GitHub API 下载失败，尝试 GitHub 直链: " + e2.getMessage());
+                    try {
+                        downloadTo(GITHUB_LATEST_URL, jar, null);
+                    } catch (Exception e3) {
+                        System.err.println("[AuthlibInjector] GitHub 直链下载失败: " + e3.getMessage());
+                    }
                 }
             }
             if (Files.isRegularFile(jar) && Files.size(jar) >= MIN_JAR_SIZE) {
@@ -98,19 +105,63 @@ public class AuthlibInjectorSupport {
         return null;
     }
 
-    /** 官方源：latest.json 提供 downloadUrl + sha256，下载并校验 */
+    /** 官方源：latest.json 提供 download_url + sha256，下载并校验（兼容 downloadUrl 旧字段名） */
     private static void downloadFromOfficial(Path target) throws Exception {
         String metaJson = httpGetString(LATEST_BUILD_URL);
         JsonObject root = JsonParser.parseString(metaJson).getAsJsonObject();
-        if (!root.has("downloadUrl")) {
-            throw new IOException("latest.json 缺少 downloadUrl 字段");
+        String downloadUrl = null;
+        if (root.has("download_url") && !root.get("download_url").isJsonNull()) {
+            downloadUrl = root.get("download_url").getAsString();
+        } else if (root.has("downloadUrl") && !root.get("downloadUrl").isJsonNull()) {
+            downloadUrl = root.get("downloadUrl").getAsString();
         }
-        String downloadUrl = root.get("downloadUrl").getAsString();
+        if (downloadUrl == null || downloadUrl.isEmpty()) {
+            throw new IOException("latest.json 缺少 download_url/downloadUrl 字段");
+        }
         String sha256 = null;
         if (root.has("checksums") && root.getAsJsonObject("checksums").has("sha256")) {
             sha256 = root.getAsJsonObject("checksums").get("sha256").getAsString();
         }
         downloadTo(downloadUrl, target, sha256);
+    }
+
+    /** GitHub API 回退源：取最新 release 的 jar 资产（资产名带版本号，/latest/download 直链可能 404） */
+    private static void downloadFromGitHubApi(Path target) throws Exception {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(GITHUB_API_LATEST_URL))
+                .header("User-Agent", AppConfig.USER_AGENT)
+                .header("Accept", "application/vnd.github+json")
+                .timeout(Duration.ofSeconds(20))
+                .GET()
+                .build();
+        HttpResponse<String> resp;
+        try {
+            resp = CLIENT.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("请求 GitHub API 被中断", e);
+        }
+        if (resp.statusCode() >= 400) {
+            throw new IOException("HTTP " + resp.statusCode() + " (GET GitHub API)");
+        }
+        JsonObject root = JsonParser.parseString(resp.body()).getAsJsonObject();
+        JsonArray assets = root.has("assets") ? root.getAsJsonArray("assets") : null;
+        if (assets == null || assets.isEmpty()) {
+            throw new IOException("GitHub latest release 无资产");
+        }
+        String downloadUrl = null;
+        for (JsonElement el : assets) {
+            JsonObject asset = el.getAsJsonObject();
+            if (asset.has("browser_download_url")
+                    && asset.get("browser_download_url").getAsString().endsWith(".jar")) {
+                downloadUrl = asset.get("browser_download_url").getAsString();
+                break;
+            }
+        }
+        if (downloadUrl == null) {
+            throw new IOException("GitHub latest release 缺少 jar 资产");
+        }
+        downloadTo(downloadUrl, target, null);
     }
 
     private static void downloadTo(String url, Path target, String expectedSha256) throws IOException {

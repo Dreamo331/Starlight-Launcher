@@ -39,6 +39,61 @@ public final class MarkdownRenderer {
             "&lt;(/?)(?:" + ALLOWED_TAGS + ")((?:\\s[^<>]*?)?)\\s*(/?)&gt;",
             Pattern.CASE_INSENSITIVE);
 
+    /** Markdown 表格的分隔行：{@code |---|:--:|---|} 这类只由 - : | 与空格组成 */
+    private static final Pattern TABLE_DELIM = Pattern.compile(
+            "^\\s*\\|?\\s*:?-{1,}:?\\s*(\\|\\s*:?-{1,}:?\\s*)*\\|?\\s*$");
+
+    /**
+     * 当前行是否是表格的第一行（表头）：本行含 {@code |}，且下一行是分隔行。
+     * 只认这种组合，避免把正文里偶然出现的 {@code a | b} 误判成表格。
+     */
+    private static boolean isTableStart(String[] lines, int i) {
+        if (i + 1 >= lines.length) return false;
+        String head = lines[i];
+        if (head == null || head.indexOf('|') < 0) return false;
+        String delim = lines[i + 1];
+        if (delim == null || !TABLE_DELIM.matcher(delim).matches()) return false;
+        // 分隔行至少要有一个 '-'，否则匹配到的是空的 "|" 行
+        return delim.indexOf('-') >= 0;
+    }
+
+    /** 按 {@code |} 切分表格行；首尾的空管线不算单元格 */
+    private static String[] splitRow(String line) {
+        String s = line.trim();
+        if (s.startsWith("|")) s = s.substring(1);
+        if (s.endsWith("|")) s = s.substring(0, s.length() - 1);
+        String[] cells = s.split("\\|", -1);
+        for (int i = 0; i < cells.length; i++) cells[i] = cells[i].trim();
+        return cells;
+    }
+
+    /** 把 i 起始的表格渲染为 HTML，返回表格结束后的下一行下标 */
+    private static int renderTable(String[] lines, int i, StringBuilder out) {
+        String[] headCells = splitRow(lines[i]);
+        out.append("<table><thead><tr>");
+        for (String cell : headCells) {
+            out.append("<th>").append(inline(cell)).append("</th>");
+        }
+        out.append("</tr></thead><tbody>");
+        int row = i + 2;   // 跳过表头与分隔行
+        while (row < lines.length) {
+            String line = lines[row];
+            // 表格在空行 / 不含 | 的行 / 新的块级语法处结束
+            if (line == null || line.isBlank() || line.indexOf('|') < 0) break;
+            if (FENCE.matcher(line).matches() || HEADING.matcher(line).matches()
+                    || HR.matcher(line).matches() || QUOTE.matcher(line).matches()) break;
+            String[] cells = splitRow(line);
+            out.append("<tr>");
+            for (int c = 0; c < headCells.length; c++) {
+                out.append("<td>").append(inline(c < cells.length ? cells[c] : "")).append("</td>");
+            }
+            out.append("</tr>");
+            row++;
+        }
+        out.append("</tbody></table>");
+        return row;
+    }
+
     private static final Pattern FENCE = Pattern.compile("^\\s*(```|~~~)\\s*([A-Za-z0-9_+-]*)\\s*$");
     private static final Pattern HEADING = Pattern.compile("^(#{1,6})\\s+(.*)$");
     private static final Pattern HR = Pattern.compile("^\\s*([-*_])(\\s*\\1){2,}\\s*$");
@@ -62,10 +117,7 @@ public final class MarkdownRenderer {
      * @param dark     true 使用深色配色（跟随启动器深色主题）
      */
     public static String toDocument(String markdown, boolean dark) {
-        return "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
-                + "<style>" + css(dark) + "</style></head><body>"
-                + toHtml(markdown)
-                + "</body></html>";
+        return document(toHtml(markdown), dark);
     }
 
     /**
@@ -76,11 +128,44 @@ public final class MarkdownRenderer {
     public static String htmlDocument(String htmlBody, boolean dark) {
         String safe = htmlBody == null ? "" : htmlBody;
         // 先整体转义，再把白名单标签还原回来，等价于「只允许展示型标签」
-        safe = restoreAllowedTags(escape(safe));
+        return document(restoreAllowedTags(escape(safe)), dark);
+    }
+
+    /**
+     * 把正文片段包成完整 HTML 文档（两个入口共用，保证样式与 meta 只维护一份）。
+     *
+     * <p>加 {@code viewport} 是为了让 WebView 按视口宽度排版、而不是按一个很宽的虚拟画布，
+     * 否则正文里的图片与表格会被按超大宽度计算，出现「图片很小、右边一大片空白」。
+     */
+    private static String document(String bodyHtml, boolean dark) {
         return "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
                 + "<style>" + css(dark) + "</style></head><body>"
-                + safe
+                + bodyHtml
                 + "</body></html>";
+    }
+
+    /**
+     * 把文档以 <b>base64 data URI</b> 的形式喂给 WebView。
+     *
+     * <h3>为什么不能直接用 {@code engine.loadContent(html)}</h3>
+     * JavaFX 的 {@code loadContent(String)} 在把 String 交给 WebKit 时会<b>损坏增补平面字符</b>
+     * （U+10000 以上，即 emoji、`𠮷` 这类生僻汉字、数学字母 `𝕏`），每个字符变成一串 U+FFFD，
+     * 渲染出来就是「�」。实测对照（同一段「A😀B中𠮷C」）：
+     * <pre>
+     *   loadContent(html)               -> A������B中������C   含 U+FFFD
+     *   loadContent(html, "text/html")  -> A������B中������C   含 U+FFFD
+     *   data:base64(UTF-8 字节)         -> A😀B中𠮷C        正确
+     * </pre>
+     * 所以这里先把文档按 UTF-8 取字节再 base64，绕开那条有损路径。
+     * 顺带好处：真正的字节流 + {@code <meta charset>}，编码不再依赖 JVM 默认值。
+     */
+    public static void loadInto(javafx.scene.web.WebEngine engine, String html) {
+        if (engine == null) return;
+        if (html == null) html = "";
+        String base64 = java.util.Base64.getEncoder()
+                .encodeToString(html.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        engine.load("data:text/html;charset=utf-8;base64," + base64);
     }
 
     /** 把 Markdown 渲染为 HTML 片段 */
@@ -101,10 +186,21 @@ public final class MarkdownRenderer {
         boolean inQuote = false;
         StringBuilder paragraph = new StringBuilder();
 
-        for (String rawLine : lines) {
-            String line = rawLine;
+        // 用索引循环而不是 for-each：表格需要向后看一行（分隔行）才能判定起始
+        for (int li = 0; li < lines.length; li++) {
+            String line = lines[li];
 
-            // ===== 围栏代码块：内部不做任何 Markdown 解析 =====
+            // 表格：本行含 | 且下一行是分隔行 //
+            if (!inFence && isTableStart(lines, li)) {
+                closeParagraph(out, paragraph);
+                closeLists(out, inUl, inOl);
+                inUl = false;
+                inOl = false;
+                li = renderTable(lines, li, out) - 1;   // renderTable 返回表格后的下一行
+                continue;
+            }
+
+            // 围栏代码块：内部不做任何 Markdown 解析 //
             Matcher fenceMatcher = FENCE.matcher(line);
             if (fenceMatcher.matches()) {
                 if (!inFence) {
@@ -130,7 +226,7 @@ public final class MarkdownRenderer {
                 continue;
             }
 
-            // ===== 空行：结束当前段落/列表/引用 =====
+            // 空行：结束当前段落/列表/引用 //
             if (line.isBlank()) {
                 closeParagraph(out, paragraph);
                 closeLists(out, inUl, inOl);
@@ -143,7 +239,7 @@ public final class MarkdownRenderer {
                 continue;
             }
 
-            // ===== 标题 =====
+            // 标题 //
             Matcher h = HEADING.matcher(line);
             if (h.matches()) {
                 closeParagraph(out, paragraph);
@@ -157,7 +253,7 @@ public final class MarkdownRenderer {
                 continue;
             }
 
-            // ===== 水平线 =====
+            // 水平线 //
             if (HR.matcher(line).matches()) {
                 closeParagraph(out, paragraph);
                 closeLists(out, inUl, inOl);
@@ -167,7 +263,7 @@ public final class MarkdownRenderer {
                 continue;
             }
 
-            // ===== 引用 =====
+            // 引用 //
             Matcher q = QUOTE.matcher(line);
             if (q.matches()) {
                 closeParagraph(out, paragraph);
@@ -185,7 +281,7 @@ public final class MarkdownRenderer {
                 inQuote = false;
             }
 
-            // ===== 列表 =====
+            // 列表 //
             Matcher ul = UL_ITEM.matcher(line);
             Matcher ol = OL_ITEM.matcher(line);
             if (ul.matches()) {
@@ -218,7 +314,7 @@ public final class MarkdownRenderer {
             inUl = false;
             inOl = false;
 
-            // ===== 普通段落：连续行拼成一段（Markdown 的软换行不产生 <br>） =====
+            // 普通段落：连续行拼成一段（Markdown 的软换行不产生 <br>） //
             if (paragraph.length() > 0) paragraph.append(' ');
             paragraph.append(line.trim());
         }
@@ -346,36 +442,88 @@ public final class MarkdownRenderer {
         return escape(v);
     }
 
-    /** 详情页正文样式：只描述正文块自身，颜色随启动器深浅主题切换 */
+    /**
+     * 详情页正文样式。
+     *
+     * <p>只描述正文块自身，颜色随启动器深浅主题切换。这些规则写进 WebView 加载的 HTML 文档里，
+     * 因此必须自包含（不能用 JavaFX 样式表的 {@code -sl-*} 变量）。
+     *
+     * <p>排版要点：
+     * <ul>
+     *   <li>正文左右留白，避免文字贴着 WebView 边框；</li>
+     *   <li>标题按层级递减且带下边距，{@code h1/h2} 加一条细分隔线区分章节；</li>
+     *   <li>表格加斑马纹与横向滚动（Modrinth 正文里表格经常很宽）；</li>
+     *   <li>图片限宽 + 圆角，并给 {@code <img>} 居中；</li>
+     *   <li>代码块横向滚动而不换行，保留缩进。</li>
+     * </ul>
+     */
     private static String css(boolean dark) {
         String text = dark ? "#d7dce5" : "#333a45";
+        String heading = dark ? "#ffffff" : "#1f2937";
         String muted = dark ? "#8b94a5" : "#6b7280";
         String codeBg = dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)";
         String border = dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)";
         String accent = dark ? "#6aa6ff" : "#2563eb";
         String quoteBg = dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)";
+        String stripeBg = dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)";
         return "html,body{margin:0;padding:0;background:transparent;}"
-                + "body{font-family:'Microsoft YaHei','Segoe UI',sans-serif;font-size:13px;line-height:1.75;"
-                + "color:" + text + ";word-wrap:break-word;}"
-                + "p{margin:0 0 10px;}"
-                + "h1,h2,h3,h4,h5,h6{color:" + (dark ? "#ffffff" : "#1f2937") + ";margin:18px 0 8px;line-height:1.35;}"
-                + "h1{font-size:20px;}h2{font-size:17px;}h3{font-size:15px;}h4,h5,h6{font-size:13px;}"
-                + "a{color:" + accent + ";text-decoration:none;}a:hover{text-decoration:underline;}"
-                + "ul,ol{margin:0 0 10px;padding-left:24px;}li{margin:2px 0;}"
-                + "hr{border:none;border-top:1px solid " + border + ";margin:16px 0;}"
-                + "blockquote{margin:10px 0;padding:8px 14px;border-left:3px solid " + accent + ";"
-                + "background:" + quoteBg + ";color:" + muted + ";}"
-                + ".md-code{background:" + codeBg + ";border:1px solid " + border + ";border-radius:6px;"
-                + "padding:10px 12px;overflow-x:auto;font-size:12px;}"
-                + ".md-code code{font-family:Consolas,'Courier New',monospace;white-space:pre;}"
+                // 强制页面背景透明：WebView 默认给文档铺一层白底，
+                // 在浅色/深色卡片上都是一块突兀的白砖。这里连 html 一起设透明，
+                // 让启动器卡片的底色透上来。
+                + "html{background:transparent!important;}"
+                + "body{background:transparent!important;}"
+                // 滚动条换成细窄样式，和启动器整体观感一致（WebKit 内核）
+                + "::-webkit-scrollbar{width:10px;height:10px;}"
+                + "::-webkit-scrollbar-thumb{background:" + border + ";border-radius:6px;}"
+                + "::-webkit-scrollbar-thumb:hover{background:" + muted + ";}"
+                + "::-webkit-scrollbar-track{background:transparent;}"
+                + "body{font-family:'Microsoft YaHei','Segoe UI',sans-serif;font-size:13px;line-height:1.78;"
+                + "color:" + text + ";word-wrap:break-word;padding:14px 16px 18px;}"
+                + "p{margin:0 0 12px;}"
+                + "p:last-child{margin-bottom:0;}"
+                + "h1,h2,h3,h4,h5,h6{color:" + heading + ";margin:20px 0 10px;line-height:1.35;"
+                + "font-weight:700;}"
+                + "h1:first-child,h2:first-child,h3:first-child{margin-top:2px;}"
+                + "h1{font-size:20px;padding-bottom:8px;border-bottom:1px solid " + border + ";}"
+                + "h2{font-size:17px;padding-bottom:6px;border-bottom:1px solid " + border + ";}"
+                + "h3{font-size:15px;}"
+                + "h4,h5,h6{font-size:13px;}"
+                + "a{color:" + accent + ";text-decoration:none;}"
+                + "a:hover{text-decoration:underline;}"
+                + "ul,ol{margin:0 0 12px;padding-left:26px;}"
+                + "li{margin:3px 0;}"
+                + "li>ul,li>ol{margin:3px 0;}"
+                + "hr{border:none;border-top:1px solid " + border + ";margin:18px 0;}"
+                + "blockquote{margin:12px 0;padding:9px 14px;border-left:3px solid " + accent + ";"
+                + "border-radius:0 6px 6px 0;background:" + quoteBg + ";color:" + muted + ";}"
+                + "blockquote p:last-child{margin-bottom:0;}"
+                + "strong{color:" + heading + ";font-weight:700;}"
+                + "del{color:" + muted + ";}"
+                + ".md-code{background:" + codeBg + ";border:1px solid " + border + ";border-radius:8px;"
+                + "padding:11px 13px;overflow-x:auto;font-size:12px;line-height:1.6;margin:12px 0;}"
+                + ".md-code code{font-family:Consolas,'Courier New',monospace;white-space:pre;"
+                + "color:" + text + ";background:none;padding:0;}"
                 + ".md-inline-code{background:" + codeBg + ";border-radius:4px;padding:1px 5px;"
-                + "font-family:Consolas,'Courier New',monospace;font-size:12px;}"
-                + ".md-img{max-width:100%;border-radius:8px;margin:6px 0;}"
-                + "img{max-width:100%;}"
-                + "table{border-collapse:collapse;margin:10px 0;}"
-                + "td,th{border:1px solid " + border + ";padding:5px 9px;font-size:12px;}"
-                + "details{margin:8px 0;padding:6px 10px;border:1px solid " + border + ";border-radius:6px;}"
-                + "summary{cursor:pointer;color:" + muted + ";}"
+                + "font-family:Consolas,'Courier New',monospace;font-size:12px;color:" + text + ";}"
+                + ".md-img{max-width:100%;height:auto;border-radius:8px;margin:8px 0;display:block;"
+                + "border:1px solid " + border + ";}"
+                + "img{max-width:100%;height:auto;}"
+                // 宽表格横向滚动而不是撑破正文宽度
+                + "table{display:block;overflow-x:auto;max-width:100%;"
+                + "border-collapse:collapse;margin:12px 0;}"
+                + "td,th{border:1px solid " + border + ";padding:6px 10px;font-size:12px;"
+                + "vertical-align:top;}"
+                + "th{background:" + stripeBg + ";font-weight:700;color:" + heading + ";}"
+                + "tr:nth-child(even) td{background:" + stripeBg + ";}"
+                + "details{margin:10px 0;padding:8px 12px;border:1px solid " + border + ";"
+                + "border-radius:8px;background:" + stripeBg + ";}"
+                + "summary{cursor:pointer;color:" + muted + ";font-weight:600;}"
+                + "summary:hover{color:" + accent + ";}"
+                + "center{display:block;text-align:center;}"
+                + "kbd{background:" + codeBg + ";border:1px solid " + border + ";border-radius:4px;"
+                + "padding:1px 6px;font-size:12px;font-family:Consolas,monospace;}"
+                + "mark{background:" + (dark ? "rgba(250,204,21,0.30)" : "#fef08a") + ";color:inherit;"
+                + "border-radius:3px;padding:0 2px;}"
                 + ".md-empty{color:" + muted + ";font-style:italic;}";
     }
 }

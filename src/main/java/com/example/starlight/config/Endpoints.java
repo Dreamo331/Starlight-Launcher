@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
 /**
@@ -42,7 +44,35 @@ public final class Endpoints {
         if (local != null) {
             merge(base, local);
         }
+        // 用户级全局覆盖：~/.starlight/endpoints.local.json（优先级最高，免重新打包）
+        JsonObject global = readGlobalFile();
+        if (global != null) {
+            merge(base, global);
+            // 也支持 reference 形态：{"keys":{...},"services":{...}} 直接递归合并
+        }
         return base;
+    }
+
+    /**
+     * 读取用户数据目录下的 {@code endpoints.local.json}。
+     *
+     * <p>历史上真实密钥只能塞进 jar 内的 {@code /assets/endpoints.local.json}，
+     * 改一次密钥就得重新打包。现在同时支持放在 {@code ~/.starlight/endpoints.local.json}
+     * （便携模式下为 {@code <工作目录>/Starlight-Launcher/endpoints.local.json}），
+     * 与内置文件按 key 深度合并，缺失或解析失败一律静默跳过。
+     */
+    private static JsonObject readGlobalFile() {
+        try {
+            Path p = AppDirs.endpointsLocalJson();
+            if (!Files.isRegularFile(p)) {
+                return null;
+            }
+            return JsonParser.parseString(Files.readString(p, StandardCharsets.UTF_8))
+                    .getAsJsonObject();
+        } catch (Exception e) {
+            // 覆盖文件写坏不能拖垮启动：退回内置值
+            return null;
+        }
     }
 
     /**
@@ -100,7 +130,7 @@ public final class Endpoints {
         return new IllegalStateException(RESOURCE + " 缺少配置项 " + path);
     }
 
-    // ==================== 密钥（keys 节） ====================
+    // 密钥（keys 节） //
 
     /** CurseForge 传统 API Key（x-api-key 认证；以 cfc_pat_ 开头时 CurseForgeAPI 会自动改用 Bearer） */
     public static String curseforgeApiKey() {
@@ -142,7 +172,7 @@ public final class Endpoints {
         return str("keys.smtp.to");
     }
 
-    // ==================== 自家服务（services 节） ====================
+    // 自家服务（services 节） //
 
     /** 星光MC社区接口地址（auth.php） */
     public static String communityApiUrl() {

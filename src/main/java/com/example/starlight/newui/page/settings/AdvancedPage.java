@@ -5,6 +5,7 @@ import com.example.starlight.newui.ai.AiModelPickerDialog;
 import com.example.starlight.newui.ai.AiProviders;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.LauncherContext;
+import com.example.starlight.newui.LauncherVisibility;
 import com.example.starlight.lang.GameLanguage;
 import com.example.starlight.main.ConfigManager;
 import com.example.starlight.gui.UIGeneralControlClass;
@@ -13,11 +14,9 @@ import com.example.starlight.newui.ui.PageKit;
 import com.example.starlight.service.ParallelLaunchManager;
 import com.example.starlight.service.SilentLoginManager;
 import com.example.starlight.download.VerifySettings;
-import com.example.starlight.util.FormatUtils;
-import com.example.starlight.util.ResourceScanner;
+import com.example.starlight.util.GameProcessTweaks;
 
 import javafx.application.Platform;
-import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.Node;
@@ -35,25 +34,25 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
-import javafx.stage.DirectoryChooser;
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.example.starlight.download.DownloadSettings;
 import com.example.starlight.version.VersionDownloadService;
-import javafx.scene.control.Slider;
 import javafx.scene.layout.FlowPane;
 
-/** 
-设置 → 高级设置页（启动 / 窗口 / 版本隔离 / 参数 / 下载 / 内存）
-（从 LauncherView 抽离，方法体逐字搬运，样式未改动） */
+/**
+ * 设置 → 高级设置页（重构 §6.6：分区折叠 + 去重）。
+ *
+ * <p>分区：启动选项 / 窗口 / 游戏默认值 / 性能与校验 / 社区资源 / 登录 / AI 配置。
+ * 「启动选项」「窗口」默认展开，其余默认收起。内存优化卡已迁至「Java 与内存」页（§6.6）。
+ */
 public final class AdvancedPage {
 
     private final LauncherContext host;
+
+    /** 折叠分区展开状态（同一会话内保持，页面重建时沿用；重构 §8） */
+    private final java.util.Map<String, Boolean> sectionOpen = new java.util.HashMap<>();
 
 
     public AdvancedPage(LauncherContext host) {
@@ -63,7 +62,113 @@ public final class AdvancedPage {
     public Node build() {
         VBox root = PageKit.settingsPage(host, "高级设置");
 
-        // 窗口宽度
+        // 分区 1：启动选项（默认展开，重构 §6.6 验收） //
+        VBox startupBox = new VBox(12,
+                gpuCard(),
+                preheatCard());
+        root.getChildren().add(section("startup", "启动选项",
+                "高性能显卡 / JVM 预热", startupBox, true));
+
+        // 分区 2：窗口（默认展开） //
+        VBox windowBox = new VBox(12,
+                windowSizeCard(),
+                fullscreenCard(),
+                windowTitleCard(),
+                priorityCard(),
+                visibilityCard());
+        root.getChildren().add(section("window", "窗口",
+                "尺寸 / 全屏 / 标题 / 优先级 / 可见性", windowBox, true));
+
+        // 分区 3：游戏默认值（全局默认，可被版本独立设置覆盖） //
+        VBox defaultsBox = new VBox(12,
+                gameLangCard(),
+                versionIsolationCard(),
+                quickSaveCard(),
+                gameArgsCard(),
+                preLaunchCard(),
+                postExitCard());
+        root.getChildren().add(section("defaults", "游戏默认值",
+                "语言 / 隔离 / 参数 / 启动前后命令", defaultsBox, false));
+
+        // 分区 4：性能与校验 //
+        VBox perfBox = new VBox(12,
+                parallelCard(),
+                parallelVerifyCard(),
+                streamingSha1Card(),
+                fastVerifyCard(),
+                stateCacheCard());
+        root.getChildren().add(section("perf", "性能与校验",
+                "并行准备 / 文件校验策略", perfBox, false));
+
+        // 分区 5：社区资源 //
+        VBox communityBox = new VBox(12,
+                fileNameFormatCard(),
+                modDisplayStyleCard(),
+                ignoreQuiltCard());
+        root.getChildren().add(section("community", "社区资源",
+                "文件名格式 / Mod 管理样式", communityBox, false));
+
+        // 分区 6：登录 //
+        VBox loginBox = new VBox(12, loginModeCard());
+        root.getChildren().add(section("login", "登录",
+                "静默登录时机", loginBox, false));
+
+        // 分区 7：AI 配置 //
+        VBox aiBox = new VBox(12);
+        addAiConfigCards(aiBox);
+        root.getChildren().add(section("ai", "AI 配置",
+                "服务商 / API / 模型（崩溃日志诊断用）", aiBox, false));
+
+        return root;
+    }
+
+    /** 包装一个折叠分区（展开状态记录到 sectionOpen，同一会话保持） */
+    private Node section(String key, String title, String summary, VBox content, boolean defaultOpen) {
+        boolean open = sectionOpen.getOrDefault(key, defaultOpen);
+        return PageKit.collapsibleSection(title, summary, content, open,
+                nowOpen -> sectionOpen.put(key, nowOpen));
+    }
+
+    // —— 启动选项 —— //
+
+    private Node gpuCard() {
+        CheckBox gpuToggle = PageKit.toggle(PageKit.boolConfig(host, "UseHighPerformanceGPU", true));
+        gpuToggle.setOnAction(e -> {
+            boolean on = gpuToggle.isSelected();
+            host.config().put("UseHighPerformanceGPU", String.valueOf(on));
+            host.saveConfig();
+            // 写入 Windows 注册表的显卡偏好，让系统为 Java 进程选用独显
+            String javaPath = host.config().getOrDefault("JavaPath", "javaw");
+            UIGeneralControlClass.ASYNC_POOL.submit(() -> {
+                boolean ok = com.example.starlight.util.MemoryOptimizer.setGpuPreference(javaPath, on);
+                Platform.runLater(() -> host.ui().toast(on
+                        ? (ok ? "已登记「使用高性能显卡」" : "登记失败（仅 Windows 支持，或 Java 路径无效）")
+                        : (ok ? "已恢复系统自动选择显卡" : "恢复失败")));
+            });
+        });
+        return PageKit.settingsCard("使用高性能显卡",
+                "在 Windows 显卡设置中把 Java 进程登记为「高性能」，避免笔记本用核显跑游戏"
+                        + "（需要 Java 路径为完整路径才生效）", gpuToggle);
+    }
+
+    private Node preheatCard() {
+        CheckBox preheatToggle = PageKit.toggle(PageKit.boolConfig(host, "JvmPreheat", false));
+        preheatToggle.setOnAction(e -> {
+            host.config().put("JvmPreheat", String.valueOf(preheatToggle.isSelected()));
+            host.saveConfig();
+            host.ui().toast("JVM 预热启动: " + (preheatToggle.isSelected() ? "开启" : "关闭"));
+            if (preheatToggle.isSelected()) host.preheatJvmAsync();
+        });
+        VBox preheatBox = new VBox(4, preheatToggle,
+                PageKit.hintLabel("空闲时预加载 JVM，加速游戏首次启动（占用约 100MB 内存）"));
+        return PageKit.settingsCard("JVM 预热启动",
+                "启动器启动后在后台跑一次轻量 JVM，把运行时与类库读进系统缓存，"
+                        + "让游戏首次启动更快；关闭启动器即回收", preheatBox);
+    }
+
+    // —— 窗口 —— //
+
+    private Node windowSizeCard() {
         String curW = host.config().getOrDefault("WindowWidth", "854");
         TextField widthField = new TextField(curW);
         widthField.getStyleClass().add("input-field");
@@ -84,18 +189,125 @@ public final class AdvancedPage {
         });
         HBox winRow = new HBox(10, new Label("宽:"), widthField, xLabel, new Label("高:"), heightField, saveWin);
         winRow.setAlignment(Pos.CENTER_LEFT);
-        root.getChildren().add(PageKit.settingsCard("窗口大小", "", winRow));
+        return PageKit.settingsCard("窗口大小",
+                "游戏窗口初始尺寸；单个版本可在「版本独立设置」覆盖", winRow);
+    }
 
-        // 全屏模式
+    private Node fullscreenCard() {
         CheckBox fullscreenToggle = PageKit.toggle("true".equals(host.config().getOrDefault("Fullscreen", "false")));
         fullscreenToggle.setOnAction(e -> {
             host.config().put("Fullscreen", String.valueOf(fullscreenToggle.isSelected()));
             host.saveConfig();
             host.ui().toast("全屏模式: " + (fullscreenToggle.isSelected() ? "开启" : "关闭"));
         });
-        root.getChildren().add(PageKit.settingsCard("全屏模式", "以全屏模式启动游戏", fullscreenToggle));
+        return PageKit.settingsCard("全屏模式", "以全屏模式启动游戏", fullscreenToggle);
+    }
 
-        // 游戏语言（启动前写入 options.txt 的 lang 字段；单个版本可在「版本独立设置」页单独覆盖）
+    private Node windowTitleCard() {
+        // 自定义游戏窗口标题（支持 {version} / {username} 变量）
+        TextField titleField = new TextField(host.config().getOrDefault(GameProcessTweaks.CONFIG_WINDOW_TITLE, ""));
+        titleField.getStyleClass().add("input-field");
+        titleField.setPrefWidth(300);
+        titleField.setMinWidth(200);
+        titleField.setMaxWidth(Double.MAX_VALUE);
+        titleField.setPromptText("例如：Minecraft-{version}；留空 = 保持游戏默认标题");
+        // 实时预览：输入时按当前版本/玩家名展开变量，用户不用保存再启动游戏来验证写法
+        Label previewLabel = new Label();
+        previewLabel.getStyleClass().add("settings-card-desc");
+        previewLabel.setWrapText(true);
+        previewLabel.setVisible(false);
+        previewLabel.setManaged(false);
+        Runnable updatePreview = () -> {
+            String expanded = GameProcessTweaks.expandTitle(titleField.getText(),
+                    host.config().getOrDefault("Version", ""),
+                    host.config().getOrDefault("UserName", ""));
+            boolean show = !expanded.isEmpty();
+            previewLabel.setText(show ? "实际效果: " + expanded : "");
+            previewLabel.setVisible(show);
+            previewLabel.setManaged(show);
+        };
+        titleField.textProperty().addListener((obs, old, now) -> updatePreview.run());
+        updatePreview.run();
+        Button saveTitle = AppIcons.button("save", "保存");
+        saveTitle.getStyleClass().add("btn-primary");
+        Runnable commitTitle = () -> {
+            // 模板原样保存（变量在启动时才展开），只做规范化（去换行 / 限长）
+            String value = GameProcessTweaks.normalizeTitle(titleField.getText());
+            titleField.setText(value);
+            host.config().put(GameProcessTweaks.CONFIG_WINDOW_TITLE, value);
+            host.saveConfig();
+            String expanded = GameProcessTweaks.expandTitle(value,
+                    host.config().getOrDefault("Version", ""),
+                    host.config().getOrDefault("UserName", ""));
+            host.ui().toast(value.isEmpty()
+                    ? "已恢复游戏默认窗口标题"
+                    : "游戏窗口标题已保存: " + expanded);
+            updatePreview.run();
+        };
+        saveTitle.setOnAction(e -> commitTitle.run());
+        // 回车即保存，与其它输入框一致
+        titleField.setOnAction(e -> commitTitle.run());
+        HBox titleRow = new HBox(10, titleField, saveTitle);
+        titleRow.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(titleField, Priority.ALWAYS);
+        VBox titleBox = new VBox(8, titleRow, previewLabel);
+        return PageKit.settingsCardStacked("自定义游戏窗口标题",
+                "游戏窗口标题改成任意文字（仅 Windows 生效，下次启动游戏时应用）。"
+                        + "支持变量：" + GameProcessTweaks.VAR_VERSION + " = 游戏版本名、"
+                        + GameProcessTweaks.VAR_USERNAME + " = 玩家名，例如 Minecraft-{version}。"
+                        + "注意：改标题后按标题匹配游戏窗口的功能要跟着改 —— "
+                        + "「色盲辅助 → 游戏窗口标题」默认抓 Minecraft，标题里没有这个词就抓不到窗口",
+                titleBox);
+    }
+
+    private Node priorityCard() {
+        ComboBox<String> priorityCombo = new ComboBox<>();
+        for (String[] option : GameProcessTweaks.PRIORITY_OPTIONS) {
+            priorityCombo.getItems().add(option[1]);
+        }
+        priorityCombo.setValue(GameProcessTweaks.priorityLabel(
+                host.config().getOrDefault(GameProcessTweaks.CONFIG_PRIORITY, GameProcessTweaks.PRIORITY_NORMAL)));
+        priorityCombo.getStyleClass().add("select-field");
+        priorityCombo.setPrefWidth(PageKit.SETTINGS_CONTROL_WIDTH);
+        priorityCombo.setOnAction(e -> {
+            String val = priorityCombo.getValue();
+            if (val == null) return;
+            host.config().put(GameProcessTweaks.CONFIG_PRIORITY, GameProcessTweaks.priorityValueOf(val));
+            host.saveConfig();
+            host.ui().toast("游戏进程优先级: " + val + "（下次启动游戏时应用）");
+        });
+        return PageKit.settingsCard("进程优先级",
+                "给游戏进程分配更多（或更少）的 CPU 时间。切到「高」可缓解大型整合包加载卡顿；"
+                        + "「实时」会抢占系统关键线程，可能让鼠标键盘卡顿，不建议长期使用。仅下次启动游戏时应用",
+                priorityCombo);
+    }
+
+    private Node visibilityCard() {
+        ComboBox<String> visibilityCombo = new ComboBox<>();
+        for (String[] option : LauncherVisibility.OPTIONS) {
+            visibilityCombo.getItems().add(option[1]);
+        }
+        visibilityCombo.setValue(LauncherVisibility.labelOf(
+                host.config().getOrDefault(LauncherVisibility.KEY, LauncherVisibility.KEEP)));
+        visibilityCombo.getStyleClass().add("select-field");
+        visibilityCombo.setPrefWidth(PageKit.SETTINGS_CONTROL_WIDTH);
+        visibilityCombo.setOnAction(e -> {
+            String val = visibilityCombo.getValue();
+            if (val == null) return;
+            host.config().put(LauncherVisibility.KEY, LauncherVisibility.valueOfLabel(val));
+            host.saveConfig();
+            host.ui().toast("启动器可见性: " + val);
+        });
+        return PageKit.settingsCard("启动器可见性",
+                "游戏窗口出现后启动器怎么处理：保持不变 / 立即关闭 / 隐藏并在游戏退出后自动关闭或重新打开 / 最小化。"
+                        + "选「立即关闭」或「隐藏后自动关闭」时启动器会真的退出（游戏继续运行不受影响），"
+                        + "想再看启动器的话重新打开即可",
+                visibilityCombo);
+    }
+
+    // —— 游戏默认值 —— //
+
+    private Node gameLangCard() {
         ComboBox<String> gameLangCombo = new ComboBox<>();
         String playerFollow = "不修改（跟随游戏内设置）";
         gameLangCombo.getItems().add(playerFollow);
@@ -113,19 +325,21 @@ public final class AdvancedPage {
             host.saveConfig();
             host.ui().toast("游戏语言: " + (follow ? "不修改" : val));
         });
-        root.getChildren().add(PageKit.settingsCard("游戏语言",
-                "启动前写入游戏 options.txt 的 lang 字段；单个版本可在「版本独立设置」页覆盖", gameLangCombo));
+        return PageKit.settingsCard("游戏语言",
+                "启动前写入游戏 options.txt 的 lang 字段；单个版本可在「版本独立设置」页覆盖", gameLangCombo);
+    }
 
-        // 版本隔离
+    private Node versionIsolationCard() {
         CheckBox viToggle = PageKit.toggle("true".equals(host.config().getOrDefault("VersionIsolation", "false")));
         viToggle.setOnAction(e -> {
             host.config().put("VersionIsolation", String.valueOf(viToggle.isSelected()));
             host.saveConfig();
             host.ui().toast("版本隔离: " + (viToggle.isSelected() ? "开启" : "关闭"));
         });
-        root.getChildren().add(PageKit.settingsCard("版本隔离", "每个版本使用独立的游戏目录", viToggle));
+        return PageKit.settingsCard("版本隔离", "每个版本使用独立的游戏目录（全局默认）", viToggle);
+    }
 
-        // 主页快速进入存档
+    private Node quickSaveCard() {
         CheckBox quickSaveToggle = PageKit.toggle("true".equals(host.config().getOrDefault("HomeQuickLaunchSave", "false")));
         quickSaveToggle.setOnAction(e -> {
             host.config().put("HomeQuickLaunchSave", String.valueOf(quickSaveToggle.isSelected()));
@@ -134,9 +348,12 @@ public final class AdvancedPage {
             // 立即重建主页（当前停留在主页时原地刷新）
             host.refreshHomePage();
         });
-        root.getChildren().add(PageKit.settingsCard("主页快速进入存档", "在主页显示存档列表，点击即可启动游戏并快速进入对应存档（1.20.2+ 直接进存档，旧版本仅启动游戏）", quickSaveToggle));
+        return PageKit.settingsCard("主页快速进入存档",
+                "在主页显示存档列表，点击即可启动游戏并快速进入对应存档（1.20.2+ 直接进存档，旧版本仅启动游戏）",
+                quickSaveToggle);
+    }
 
-        // 游戏参数
+    private Node gameArgsCard() {
         String curGameArgs = host.config().getOrDefault("GameArgs", "");
         TextField gameArgsField = new TextField(curGameArgs);
         gameArgsField.getStyleClass().add("input-field");
@@ -149,9 +366,10 @@ public final class AdvancedPage {
             host.ui().toast("游戏参数已保存");
         });
         HBox gameArgsRow = new HBox(10, gameArgsField, saveGameArgs);
-        root.getChildren().add(PageKit.settingsCard("游戏参数", "传递给 Minecraft 的额外参数", gameArgsRow));
+        return PageKit.settingsCard("游戏参数", "传递给 Minecraft 的额外参数（全局默认）", gameArgsRow);
+    }
 
-        // 启动前命令
+    private Node preLaunchCard() {
         String curPre = host.config().getOrDefault("PreLaunchCommand", "");
         TextField preField = new TextField(curPre);
         preField.getStyleClass().add("input-field");
@@ -164,9 +382,10 @@ public final class AdvancedPage {
             host.ui().toast("启动前命令已保存");
         });
         HBox preRow = new HBox(10, preField, savePre);
-        root.getChildren().add(PageKit.settingsCard("启动前命令", "游戏启动前执行的系统命令", preRow));
+        return PageKit.settingsCard("启动前命令", "游戏启动前执行的系统命令（全局默认）", preRow);
+    }
 
-        // 退出后命令
+    private Node postExitCard() {
         String curPost = host.config().getOrDefault("PostExitCommand", "");
         TextField postField = new TextField(curPost);
         postField.getStyleClass().add("input-field");
@@ -179,49 +398,70 @@ public final class AdvancedPage {
             host.ui().toast("退出后命令已保存");
         });
         HBox postRow = new HBox(10, postField, savePost);
-        root.getChildren().add(PageKit.settingsCard("退出后命令", "游戏退出后执行的系统命令", postRow));
+        return PageKit.settingsCard("退出后命令", "游戏退出后执行的系统命令（全局默认）", postRow);
+    }
 
-        // 并行资源准备（加速启动：原生库与游戏资源补全并行执行）
+    // —— 性能与校验 —— //
+
+    private Node parallelCard() {
         CheckBox parallelToggle = PageKit.toggle(ParallelLaunchManager.isEnabled());
         parallelToggle.setOnAction(e -> {
             host.config().put(ParallelLaunchManager.CONFIG_KEY, String.valueOf(parallelToggle.isSelected()));
             host.saveConfig();
             host.ui().toast("并行资源准备: " + (parallelToggle.isSelected() ? "开启" : "关闭"));
         });
-        root.getChildren().add(PageKit.settingsCard("并行资源准备",
-                "启动时同时补全原生库与游戏资源，缩短启动等待时间", parallelToggle));
+        return PageKit.settingsCard("并行资源准备",
+                "启动时同时补全原生库与游戏资源，缩短启动等待时间", parallelToggle);
+    }
 
-        // 并行文件校验（多线程校验已存在的资源文件，加快启动校验速度）
+    private Node parallelVerifyCard() {
         CheckBox parallelVerifyToggle = PageKit.toggle(VerifySettings.isParallelVerifyEnabled());
         parallelVerifyToggle.setOnAction(e -> {
             host.config().put(VerifySettings.KEY_PARALLEL, String.valueOf(parallelVerifyToggle.isSelected()));
             host.saveConfig();
             host.ui().toast("并行文件校验: " + (parallelVerifyToggle.isSelected() ? "开启" : "关闭"));
         });
-        root.getChildren().add(PageKit.settingsCard("并行文件校验",
-                "多线程校验已存在的资源文件，加快启动校验速度", parallelVerifyToggle));
+        return PageKit.settingsCard("并行文件校验",
+                "多线程校验已存在的资源文件，加快启动校验速度", parallelVerifyToggle);
+    }
 
-        // 流式哈希校验（分块读取计算 SHA-1，降低大文件内存占用）
+    private Node streamingSha1Card() {
         CheckBox streamingSha1Toggle = PageKit.toggle(VerifySettings.isStreamingSha1Enabled());
         streamingSha1Toggle.setOnAction(e -> {
             host.config().put(VerifySettings.KEY_STREAMING, String.valueOf(streamingSha1Toggle.isSelected()));
             host.saveConfig();
             host.ui().toast("流式哈希校验: " + (streamingSha1Toggle.isSelected() ? "开启" : "关闭"));
         });
-        root.getChildren().add(PageKit.settingsCard("流式哈希校验",
-                "分块读取计算文件哈希，降低大文件内存占用", streamingSha1Toggle));
+        return PageKit.settingsCard("流式哈希校验",
+                "分块读取计算文件哈希，降低大文件内存占用", streamingSha1Toggle);
+    }
 
-        // 快速校验（文件大小一致即视为完整，不计算哈希；下载时仍完整校验）
+    private Node fastVerifyCard() {
         CheckBox fastVerifyToggle = PageKit.toggle(VerifySettings.isFastVerifyEnabled());
         fastVerifyToggle.setOnAction(e -> {
             host.config().put(VerifySettings.KEY_FAST, String.valueOf(fastVerifyToggle.isSelected()));
             host.saveConfig();
             host.ui().toast("快速校验: " + (fastVerifyToggle.isSelected() ? "开启" : "关闭"));
         });
-        root.getChildren().add(PageKit.settingsCard("快速校验（跳过哈希）",
-                "文件大小一致即视为完整，不计算哈希；下载时仍做完整性校验", fastVerifyToggle));
+        return PageKit.settingsCard("快速校验（跳过哈希）",
+                "文件大小一致即视为完整，不计算哈希；下载时仍做完整性校验", fastVerifyToggle);
+    }
 
-        // 静默登录时机（两种模式：启动游戏时静默登录 / 开启启动器静默登录）
+    private Node stateCacheCard() {
+        CheckBox stateCacheToggle = PageKit.toggle(VerifySettings.isStateCacheEnabled());
+        stateCacheToggle.setOnAction(e -> {
+            host.config().put(VerifySettings.KEY_STATE_CACHE, String.valueOf(stateCacheToggle.isSelected()));
+            host.saveConfig();
+            host.ui().toast("校验状态缓存: " + (stateCacheToggle.isSelected() ? "开启" : "关闭"));
+        });
+        return PageKit.settingsCard("校验状态缓存",
+                "记住上次校验通过且之后未被修改的文件，二次补全不再重复计算哈希，可大幅加快启动校验"
+                        + "（仅在「快速校验」关闭时生效；关闭本项则每次都完整校验）", stateCacheToggle);
+    }
+
+    // —— 登录 —— //
+
+    private Node loginModeCard() {
         ComboBox<String> loginModeCombo = new ComboBox<>();
         loginModeCombo.getItems().addAll("启动游戏时静默登录", "开启启动器静默登录");
         String curLoginMode = host.config().getOrDefault(SilentLoginManager.CONFIG_KEY, SilentLoginManager.MODE_LAUNCH);
@@ -237,50 +477,13 @@ public final class AdvancedPage {
             host.saveConfig();
             host.ui().toast("静默登录时机: " + (startupMode ? "开启启动器时" : "启动游戏时"));
         });
-        root.getChildren().add(PageKit.settingsCard("静默登录时机",
-                "微软账号令牌过期时自动静默刷新：启动游戏时刷新，或开启启动器时提前刷新（启动更快）", loginModeCombo));
+        return PageKit.settingsCard("静默登录时机",
+                "微软账号令牌过期时自动静默刷新：启动游戏时刷新，或开启启动器时提前刷新（启动更快）", loginModeCombo);
+    }
 
-        // ==================== 启动选项 ====================
-        Label launchSection = new Label("启动选项");
-        launchSection.getStyleClass().add("config-section-title");
-        root.getChildren().add(launchSection);
+    // —— 社区资源 —— //
 
-        CheckBox gpuToggle = PageKit.toggle(PageKit.boolConfig(host, "UseHighPerformanceGPU", true));
-        gpuToggle.setOnAction(e -> {
-            boolean on = gpuToggle.isSelected();
-            host.config().put("UseHighPerformanceGPU", String.valueOf(on));
-            host.saveConfig();
-            // 写入 Windows 注册表的显卡偏好，让系统为 Java 进程选用独显
-            String javaPath = host.config().getOrDefault("JavaPath", "javaw");
-            UIGeneralControlClass.ASYNC_POOL.submit(() -> {
-                boolean ok = com.example.starlight.util.MemoryOptimizer.setGpuPreference(javaPath, on);
-                Platform.runLater(() -> host.ui().toast(on
-                        ? (ok ? "已登记「使用高性能显卡」" : "登记失败（仅 Windows 支持，或 Java 路径无效）")
-                        : (ok ? "已恢复系统自动选择显卡" : "恢复失败")));
-            });
-        });
-        root.getChildren().add(PageKit.settingsCard("使用高性能显卡",
-                "在 Windows 显卡设置中把 Java 进程登记为「高性能」，避免笔记本用核显跑游戏"
-                        + "（需要 Java 路径为完整路径才生效）", gpuToggle));
-
-        CheckBox preheatToggle = PageKit.toggle(PageKit.boolConfig(host, "JvmPreheat", false));
-        preheatToggle.setOnAction(e -> {
-            host.config().put("JvmPreheat", String.valueOf(preheatToggle.isSelected()));
-            host.saveConfig();
-            host.ui().toast("JVM 预热启动: " + (preheatToggle.isSelected() ? "开启" : "关闭"));
-            if (preheatToggle.isSelected()) host.preheatJvmAsync();
-        });
-        VBox preheatBox = new VBox(4, preheatToggle,
-                PageKit.hintLabel("空闲时预加载 JVM，加速游戏首次启动（占用约 100MB 内存）"));
-        root.getChildren().add(PageKit.settingsCard("JVM 预热启动",
-                "启动器启动后在后台跑一次轻量 JVM，把运行时与类库读进系统缓存，"
-                        + "让游戏首次启动更快；关闭启动器即回收", preheatBox));
-
-        // ==================== 社区资源 ====================
-        Label communitySection = new Label("社区资源");
-        communitySection.getStyleClass().add("config-section-title");
-        root.getChildren().add(communitySection);
-
+    private Node fileNameFormatCard() {
         ComboBox<String> fileNameFormat = new ComboBox<>();
         fileNameFormat.getItems().addAll(ModFileFormatter.FILENAME_FORMATS);
         fileNameFormat.setValue(host.config().getOrDefault("ModFileNameFormat", ModFileFormatter.FILENAME_FORMATS[0]));
@@ -291,9 +494,11 @@ public final class AdvancedPage {
             host.saveConfig();
             host.ui().toast("文件名格式已保存");
         });
-        root.getChildren().add(PageKit.settingsCard("文件名格式",
-                "下载模组时写入磁盘的文件名格式（示例：「" + ModFileFormatter.FILENAME_SAMPLE + "」）", fileNameFormat));
+        return PageKit.settingsCard("文件名格式",
+                "下载模组时写入磁盘的文件名格式（示例：「" + ModFileFormatter.FILENAME_SAMPLE + "」）", fileNameFormat);
+    }
 
+    private Node modDisplayStyleCard() {
         ComboBox<String> modDisplayStyle = new ComboBox<>();
         modDisplayStyle.getItems().addAll(ModFileFormatter.DISPLAY_STYLES);
         modDisplayStyle.setValue(host.config().getOrDefault("ModDisplayStyle", ModFileFormatter.DISPLAY_STYLES[0]));
@@ -304,46 +509,29 @@ public final class AdvancedPage {
             host.saveConfig();
             host.ui().toast("Mod 管理样式已保存");
         });
-        root.getChildren().add(PageKit.settingsCard("Mod 管理样式",
-                "模组列表里标题显示译名还是文件名，详情页显示另一种", modDisplayStyle));
+        return PageKit.settingsCard("Mod 管理样式",
+                "模组列表里标题显示译名还是文件名，详情页显示另一种", modDisplayStyle);
+    }
 
+    private Node ignoreQuiltCard() {
         CheckBox ignoreQuiltToggle = PageKit.toggle(PageKit.boolConfig(host, "IgnoreQuiltLoader", false));
         ignoreQuiltToggle.setOnAction(e -> {
             host.config().put("IgnoreQuiltLoader", String.valueOf(ignoreQuiltToggle.isSelected()));
             host.saveConfig();
             host.ui().toast("忽略 Quilt: " + (ignoreQuiltToggle.isSelected() ? "开启" : "关闭"));
         });
-        root.getChildren().add(PageKit.settingsCard("在显示 Mod 加载器时忽略 Quilt",
-                "开启后模组详情页与筛选里不再显示 Quilt 加载器", ignoreQuiltToggle));
-
-        // ==================== 内存优化 ====================
-        root.getChildren().add(host.buildMemoryOptimizeCard());
-
-        // ==================== AI 配置 ====================
-        Label aiSection = new Label("AI 配置");
-        aiSection.getStyleClass().add("config-section-title");
-        root.getChildren().add(aiSection);
-
-        addAiConfigCards(root);
-
-        return root;
+        return PageKit.settingsCard("在显示 Mod 加载器时忽略 Quilt",
+                "开启后模组详情页与筛选里不再显示 Quilt 加载器", ignoreQuiltToggle);
     }
 
-    // ==================== AI 配置 ====================
+    // —— AI 配置 —— //
 
     /**
-     * AI 配置区：预设服务商 + API 地址 + API Key + 模型。
+     * AI 配置区：预设服务商 + API 地址 + API Key + 模型（纵向一步一行，重构 §6.6 验收）。
      *
      * <p>启动器里的 AI 只服务一件事——<b>分析错误脚本</b>：把崩溃日志 / 错误日志交给大模型，
      * 让它给出错误概述、可能原因与解决步骤（见 {@code AIDiagnosisPanel} 与 {@code AIService}）。
      * 所以这里的配置从<b>空</b>开始：不带内置密钥、不带默认模型，谁用谁填。
-     *
-     * <p>填起来只要两步：点一个服务商图标（自动补 API 地址 + 默认模型），再贴自己的 API Key。
-     * 模型栏旁边是「选择模型」，会打开启动器内置的伪弹窗（遮罩 + 卡片），
-     * 既能在线问服务商的 {@code /models} 拉取完整模型列表，也能直接用内置常见模型兜底。
-     *
-     * <p>三项配置都写进 {@code starlight-client.ini}（键名见 {@link AiConfig}），
-     * 由 {@code LongCatChat} 在真正发起请求时读取，改完即刻生效、无需重启。
      */
     private void addAiConfigCards(VBox root) {
         // 三个输入框先建出来：服务商图标点完要回填地址与模型
@@ -366,7 +554,7 @@ public final class AdvancedPage {
         modelField.setPromptText("deepseek-chat");
         HBox.setHgrow(modelField, Priority.ALWAYS);
 
-        // ===== 1. 预设服务商：点图标即填入 API 地址 + 默认模型 =====
+        // 1. 预设服务商：点图标即填入 API 地址 + 默认模型 //
         FlowPane providerRow = new FlowPane(8, 8);
         providerRow.setPrefWrapLength(PageKit.SETTINGS_CONTROL_WIDTH);
         List<VBox> chips = new ArrayList<>();
@@ -398,7 +586,7 @@ public final class AdvancedPage {
         root.getChildren().add(PageKit.settingsCardStacked("服务商预设",
                 "内置 " + AiProviders.ALL.size() + " 家常见服务商（图标取自启动器内置 logo）", providerBox));
 
-        // ===== 2. API 地址 =====
+        // 2. API 地址 //
         Button saveAiApi = AppIcons.button("save", "保存");
         saveAiApi.getStyleClass().add("btn-primary");
         saveAiApi.setOnAction(e -> {
@@ -411,7 +599,7 @@ public final class AdvancedPage {
         root.getChildren().add(PageKit.settingsCard("API 地址",
                 "OpenAI 兼容接口基址（不含 /chat/completions），例如 https://api.deepseek.com/v1", aiApiRow));
 
-        // ===== 3. API Key =====
+        // 3. API Key //
         Button saveAiApiKey = AppIcons.button("save", "保存");
         saveAiApiKey.getStyleClass().add("btn-primary");
         saveAiApiKey.setOnAction(e -> {
@@ -424,7 +612,7 @@ public final class AdvancedPage {
         root.getChildren().add(PageKit.settingsCard("API Key",
                 "服务商控制台申请的密钥：只写在本机 starlight-client.ini，只会发给你填写的接口地址", aiapiKeyRow));
 
-        // ===== 4. 模型（内置伪弹窗选择，支持在线获取模型列表） =====
+        // 4. 模型（内置伪弹窗选择，支持在线获取模型列表） //
         Button pickModel = AppIcons.button("list", "选择模型");
         pickModel.getStyleClass().add("btn-primary");
         pickModel.setMinWidth(Region.USE_PREF_SIZE);
@@ -525,5 +713,3 @@ public final class AdvancedPage {
     }
 
 }
-
-

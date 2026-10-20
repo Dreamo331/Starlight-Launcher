@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.example.starlight.config.AppDirs;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,14 +40,20 @@ public final class JavaCacheManager {
 
     private static final Logger log = LoggerFactory.getLogger(JavaCacheManager.class);
 
-    /** 与 starlight.ini / launcher.json 同目录：相对运行目录的 Starlight-Launcher 文件夹 */
-    private static final String CONFIG_DIR = "Starlight-Launcher";
-    private static final String CACHE_FILE = CONFIG_DIR + "/java-cache.json";
+    /** 缓存文件（路径统一由 AppDirs 解析：默认 ~/.starlight，--portable 回落工作目录） */
+    private static final String CACHE_FILE = AppDirs.javaCacheJson().toString();
+
+    /**
+     * 缓存有效期（毫秒）。旧实现只在「某条已缓存路径失效」时才重扫，
+     * 新装 Java（不在缓存里）要等某条旧路径消失或用户手动点「搜索」才进列表，
+     * 自动选择 Java 因此「不灵敏」。这里加上 TTL：超过该时长即视为过期重扫。
+     */
+    private static final long CACHE_TTL_MS = 30L * 60 * 1000; // 30 分钟
 
     private JavaCacheManager() {}
 
     /**
-     * 获取本机所有 Java 安装（优先读缓存；缓存缺失/失效时全盘扫描并写缓存）。
+     * 获取本机所有 Java 安装（优先读缓存；缓存缺失/失效/过期时全盘扫描并写缓存）。
      * 线程安全：预热线程与启动线程可能同时访问。
      */
     public static synchronized List<FindAllJavaWindows.JavaEntry> getAvailable() {
@@ -80,10 +87,10 @@ public final class JavaCacheManager {
         }
     }
 
-    // ======================== 缓存读写 ========================
+    // 缓存读写 //
 
     /**
-     * 读取缓存。缓存有效（文件存在 + 每条路径的 java.exe 仍存在）返回条目列表，
+     * 读取缓存。缓存有效（文件存在 + 未过期 + 每条路径的 java.exe 仍存在）返回条目列表，
      * 否则返回 null（调用方触发重新扫描）。
      */
     private static List<FindAllJavaWindows.JavaEntry> loadCache() {
@@ -93,6 +100,11 @@ public final class JavaCacheManager {
             String content = Files.readString(file, StandardCharsets.UTF_8);
             JsonObject root = JsonParser.parseString(content).getAsJsonObject();
             if (!root.has("entries") || !root.get("entries").isJsonArray()) return null;
+            // TTL 过期判定：超过有效期即整体视为过期，重新全盘扫描以感知新装 Java
+            if (root.has("scannedAt") && root.get("scannedAt").isJsonPrimitive()) {
+                long scannedAt = root.get("scannedAt").getAsLong();
+                if (System.currentTimeMillis() - scannedAt > CACHE_TTL_MS) return null;
+            }
             JsonArray arr = root.getAsJsonArray("entries");
             List<FindAllJavaWindows.JavaEntry> entries = new ArrayList<>(arr.size());
             for (JsonElement el : arr) {
@@ -119,7 +131,7 @@ public final class JavaCacheManager {
     /** 写入缓存（原子写入：临时文件 + 重命名，避免半截文件） */
     private static void saveCache(List<FindAllJavaWindows.JavaEntry> entries) {
         try {
-            Files.createDirectories(Paths.get(CONFIG_DIR));
+            Files.createDirectories(AppDirs.root());
             JsonObject root = new JsonObject();
             root.addProperty("scannedAt", System.currentTimeMillis());
             JsonArray arr = new JsonArray();

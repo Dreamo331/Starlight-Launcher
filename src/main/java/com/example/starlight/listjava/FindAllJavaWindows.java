@@ -159,9 +159,7 @@ public class FindAllJavaWindows {
         }
     }
 
-    // ================================================================
-    //  Java 信息采集（参考 HMCL JavaInfo.fromReleaseFile）
-    // ================================================================
+    // Java 信息采集（参考 HMCL JavaInfo.fromReleaseFile） //
 
     /** Java 信息聚合 */
     private static class JavaInfo {
@@ -268,9 +266,7 @@ public class FindAllJavaWindows {
         return null;
     }
 
-    // ================================================================
-    //  注册表查询
-    // ================================================================
+    // 注册表查询 //
 
     /** 查询注册表指定键下的所有子键，提取 JavaHome 值 */
     private static List<String> queryRegistry(String regKey) {
@@ -303,9 +299,7 @@ public class FindAllJavaWindows {
         return homes;
     }
 
-    // ================================================================
-    //  文件系统扫描
-    // ================================================================
+    // 文件系统扫描 //
 
     /** 扫描 Program Files 下的常见 Java 目录 */
     private static List<String> scanCommonDirs() {
@@ -420,9 +414,7 @@ public class FindAllJavaWindows {
         return homes;
     }
 
-    // ================================================================
-    //  工具方法
-    // ================================================================
+    // 工具方法 //
 
     /** 判断目录是否是一个有效的 Java 安装主目录 */
     private static boolean isValidJavaHome(String dir) {

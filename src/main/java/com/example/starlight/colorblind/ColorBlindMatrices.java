@@ -128,15 +128,8 @@ public final class ColorBlindMatrices {
     }
 
     private static File resolveExe() {
-        File file = new File("Starlight-Launcher" + File.separator + "ColorBlindOverlay"
-                + File.separator + "ColorBlindOverlay.exe");
-        if (file.isFile()) {
-            return file;
-        }
-        String userDir = System.getProperty("user.dir");
-        File alt = userDir == null ? null : new File(userDir,
-                "Starlight-Launcher" + File.separator + "ColorBlindOverlay" + File.separator + "ColorBlindOverlay.exe");
-        return (alt != null && alt.isFile()) ? alt : null;
+        File file = com.example.starlight.config.AppDirs.colorBlindExe().toFile();
+        return file.isFile() ? file : null;
     }
 
     /** 逐行解析：类型行开新块，S/E 行各收三行系数 */

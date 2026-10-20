@@ -3,7 +3,7 @@ package com.example.starlight.service;
 
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.model.JavaInfo;
-import com.example.starlight.installjava.JavaInstall;
+import com.example.starlight.download.task.JavaInstall;
 import com.example.starlight.listjava.FindAllJavaWindows;
 
 import java.io.ByteArrayOutputStream;

@@ -4,7 +4,7 @@ package com.example.starlight.ModsApi;
  * 远程资源搜索条件。
  *
  * <p>对应 VersePc2 下载页工具条上的「搜索 + 加载器 + 游戏版本 + 分类 + 排序 + 来源」六项输入，
- * 作为 {@link RemoteModRepository#search(com.example.starlight.download.DownloadProvider, ModSearchQuery)}
+ * 作为 {@link RemoteModRepository#search(com.example.starlight.download.source.DownloadProvider, ModSearchQuery)}
  * 的参数载体，避免为每个仓库单独扩展一长串方法签名。
  *
  * <p>本类是<b>可变</b>的：界面上的下拉框每次触发搜索时复用同一个实例并就地改写字段，

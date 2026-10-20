@@ -64,7 +64,7 @@ public final class AccessibilityPage {
             ctx.toast(inertiaToggle.isSelected() ? "惯性滚动: 关闭" : "惯性滚动: 开启");
         });
         root.getChildren().add(PageKit.settingsCard("停用惯性滚动",
-                "关闭后滚轮/拖拽/键盘改为直接跳转、不再播放滚动动画，适合对动效敏感、易眩晕的用户",
+                "关闭后滚轮/键盘改为直接跳转、不再播放滚动动画，适合对动效敏感、易眩晕的用户",
                 inertiaToggle));
         return root;
     }

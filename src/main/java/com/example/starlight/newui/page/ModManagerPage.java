@@ -27,6 +27,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -105,7 +106,7 @@ public final class ModManagerPage {
         betaNotice.setWrapText(true);
         root.getChildren().add(betaNotice);
 
-        // ===== 上传模组：选择 .jar 文件复制到 Starlight-Launcher\Mod =====
+        // 上传模组：选择 .jar 文件复制到 Starlight-Launcher\Mod //
         Label uploadStatus = new Label("支持多选，重复上传会覆盖同名文件");
         uploadStatus.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
         uploadStatus.setWrapText(true);
@@ -116,9 +117,9 @@ public final class ModManagerPage {
         uploadRow.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(uploadStatus, Priority.ALWAYS);
         root.getChildren().add(PageKit.settingsCard("上传模组",
-                "选择本地的 .jar 模组文件，复制到 Starlight-Launcher\\Mod 目录", uploadRow));
+                "选择本地的 .jar 模组文件，复制到用户数据目录的 mod 文件夹", uploadRow));
 
-        // ===== 已安装模组列表 =====
+        // 已安装模组列表 //
         VBox modArea = new VBox(8);
         // 搜索框：同时匹配文件名、modId 与中文名（如输入「机械动力」能找到 create-*.jar）
         TextField modSearchField = new TextField();
@@ -136,7 +137,7 @@ public final class ModManagerPage {
         modArea.getChildren().addAll(modSearchField, modCountLabel, modListContainer);
         refreshList();
         root.getChildren().add(PageKit.settingsCard("已安装模组",
-                "Starlight-Launcher\\Mod 目录下的模组文件；已收录于中文名字典的模组会额外显示中文名", modArea));
+                "用户数据目录 mod 文件夹下的模组文件；已收录于中文名字典的模组会额外显示中文名", modArea));
         return root;
     }
 
@@ -149,7 +150,7 @@ public final class ModManagerPage {
         List<File> files = chooser.showOpenMultipleDialog(host.stage());
         if (files == null || files.isEmpty()) return;
 
-        File modDir = new File("Starlight-Launcher", "Mod");
+        File modDir = com.example.starlight.config.AppDirs.pluginsDir().toFile();
         int ok = 0;
         List<String> copied = new ArrayList<>();
         for (File f : files) {
@@ -176,7 +177,7 @@ public final class ModManagerPage {
             }
         }
         if (ok > 0) {
-            host.ui().toast("已复制 " + ok + " 个模组文件到 Starlight-Launcher\\Mod");
+            host.ui().toast("已复制 " + ok + " 个模组文件到 " + modDir.getAbsolutePath());
         }
         // 已安装列表与数量原地刷新
         refreshList();
@@ -189,7 +190,7 @@ public final class ModManagerPage {
     public void refreshList() {
         if (modListContainer == null || modCountLabel == null) return;
         modListContainer.getChildren().clear();
-        File modDir = new File("Starlight-Launcher", "Mod");
+        File modDir = com.example.starlight.config.AppDirs.pluginsDir().toFile();
         File[] jars = modDir.isDirectory()
                 ? modDir.listFiles((d, name) -> {
                     String n = name.toLowerCase(java.util.Locale.ROOT);
@@ -212,6 +213,19 @@ public final class ModManagerPage {
         String lowerKeyword = keyword.toLowerCase(java.util.Locale.ROOT);
         int shown = 0;
         PluginManager pluginManager = PluginManager.getInstance();
+
+        // 先一次性建「jar 文件名 → 插件元数据」索引，避免在列表循环里对每个 jar 重复做全量线性扫描（O(n×m) → O(n+m)）
+        Map<String, PluginMetadata> metadataByJarName = new HashMap<>();
+        if (pluginManager != null) {
+            for (PluginMetadata metadata : pluginManager.allMetadata()) {
+                if (metadata.sourceJar() != null) {
+                    metadataByJarName.put(
+                            metadata.sourceJar().getFileName().toString().toLowerCase(java.util.Locale.ROOT),
+                            metadata);
+                }
+            }
+        }
+
         for (File jar : jars) {
             String fname = jar.getName();
             boolean disabledFile = fname.endsWith(".disabled");
@@ -228,7 +242,7 @@ public final class ModManagerPage {
             row.setAlignment(Pos.CENTER_LEFT);
 
             // 若该 jar 是插件（含 launcher-plugin.json），用展示名/版本替代文件名
-            PluginMetadata metadata = findMetadataForJar(jar, pluginManager);
+            PluginMetadata metadata = metadataByJarName.get(jar.getName().toLowerCase(java.util.Locale.ROOT));
             String displayName = metadata != null
                     ? metadata.name() + " " + metadata.version()
                     : fileBase;

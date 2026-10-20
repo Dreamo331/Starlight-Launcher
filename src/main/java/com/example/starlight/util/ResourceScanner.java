@@ -3,11 +3,7 @@ package com.example.starlight.util;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.listsaves.listsaves;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.OutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -102,7 +98,7 @@ public final class ResourceScanner {
         List<UIGeneralControlClass.SaveInfo> saves = new ArrayList<>();
         for (Path savesDir : collectResourceDirs(gameDir, "saves")) {
             if (filterOrigin != null && !dirOriginLabel(savesDir, gameDir).equals(filterOrigin)) continue;
-            saves.addAll(listSavesInDir(savesDir, gameDir));
+            saves.addAll(listSavesInDirCached(savesDir, gameDir));
         }
         // 按路径去重（同名存档存在于不同目录时保留各自条目）
         Map<String, UIGeneralControlClass.SaveInfo> byPath = new LinkedHashMap<>();
@@ -110,57 +106,61 @@ public final class ResourceScanner {
         return new ArrayList<>(byPath.values());
     }
 
-    /** 解析单个 saves 目录中的存档（复用 listsaves 的 NBT 解析，拦截控制台输出），version 字段记录来源标签 */
+    /** 解析单个 saves 目录中的存档。直接调用 {@link listsaves#parseLevelName}/{@link listsaves#parseLevelVersion}
+     *  读取 level.dat，不再走 main 的 stdout 捕获链路（原实现全局重定向 System.out/err，既慢又有并发隐患）。 */
     public static List<UIGeneralControlClass.SaveInfo> listSavesInDir(Path savesDir, String gameDir) {
         String origin = dirOriginLabel(savesDir, gameDir);
-        PrintStream originalOut = System.out;
-        PrintStream originalErr = System.err;
-        List<String> capturedLines = new ArrayList<>();
-        try {
-            PrintStream capturingPs = new PrintStream(new OutputStream() {
-                // 按字节累积后整体按 UTF-8 解码，避免中文（多字节字符）被逐字节拆成乱码
-                final ByteArrayOutputStream buf = new ByteArrayOutputStream();
-                @Override
-                public void write(int b) {
-                    buf.write(b);
-                    if (b == '\n') {
-                        capturedLines.add(buf.toString(StandardCharsets.UTF_8).stripTrailing());
-                        buf.reset();
-                    }
-                }
-                @Override
-                public void write(byte[] b, int off, int len) {
-                    for (int i = off; i < off + len; i++) write(b[i]);
-                }
-            }, true, StandardCharsets.UTF_8);
-            System.setOut(capturingPs);
-            System.setErr(capturingPs);
-            listsaves.main(new String[]{savesDir.toString(), savesDir.toString()});
-            System.out.flush();
-            System.err.flush();
-        } catch (Exception e) {
-            return Collections.emptyList();
-        } finally {
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-        }
-        // 解析输出（格式：Save name: / Save path:），版本字段替换为来源标签
+        File[] dirs = savesDir.toFile().listFiles(File::isDirectory);
+        if (dirs == null) return Collections.emptyList();
         List<UIGeneralControlClass.SaveInfo> saves = new ArrayList<>();
-        String currentName = null;
-        String currentPath = null;
-        for (String line : capturedLines) {
-            if (line.startsWith("Save name:")) {
-                currentName = line.substring(line.indexOf(':') + 1).trim();
-            } else if (line.startsWith("Save path:")) {
-                currentPath = line.substring(line.indexOf(':') + 1).trim();
-                if (currentName != null && currentPath != null) {
-                    saves.add(new UIGeneralControlClass.SaveInfo(currentName,
-                            new File(currentPath).getName(), currentPath, origin));
-                    currentName = null;
-                }
-            }
+        for (File dir : dirs) {
+            if (!new File(dir, "level.dat").isFile()) continue;
+            String worldName = listsaves.parseLevelName(dir);
+            if (worldName == null || worldName.isEmpty()) worldName = dir.getName();
+            String levelVersion = listsaves.parseLevelVersion(dir);
+            if (levelVersion == null || levelVersion.isEmpty()) levelVersion = "";
+            saves.add(new UIGeneralControlClass.SaveInfo(
+                    worldName, dir.getName(), dir.getAbsolutePath(), origin));
         }
         return saves;
+    }
+
+    /** 存档目录缓存条目：上次扫描的指纹 + 结果列表 */
+    private record SavesCacheEntry(String fingerprint, List<UIGeneralControlClass.SaveInfo> result) {
+    }
+
+    /** 存档结果缓存：key = "存档目录绝对路径"。目录内容（条目名+level.dat 修改时间+大小）不变时直接复用，跳过 NBT 解析 */
+    private static final Map<String, SavesCacheEntry> SAVES_CACHE = new LinkedHashMap<>();
+
+    /** 计算单个存档目录的指纹（目录名 + level.dat 修改时间 + 大小），用于判断是否需要重扫 */
+    private static String saveDirFingerprint(Path savesDir) {
+        File[] dirs = savesDir.toFile().listFiles(File::isDirectory);
+        if (dirs == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (File dir : dirs) {
+            File levelDat = new File(dir, "level.dat");
+            sb.append(dir.getName()).append('|')
+              .append(levelDat.isFile() ? levelDat.lastModified() : 0).append('|')
+              .append(levelDat.isFile() ? levelDat.length() : 0).append(';');
+        }
+        return sb.toString();
+    }
+
+    /** 带结果缓存的存档目录扫描：目录内容未变时直接复用上次结果，跳过 NBT 解析 */
+    public static List<UIGeneralControlClass.SaveInfo> listSavesInDirCached(Path savesDir, String gameDir) {
+        String key = savesDir.toAbsolutePath().toString();
+        String fp = saveDirFingerprint(savesDir);
+        synchronized (SAVES_CACHE) {
+            SavesCacheEntry cached = SAVES_CACHE.get(key);
+            if (cached != null && cached.fingerprint().equals(fp)) {
+                return cached.result();
+            }
+        }
+        List<UIGeneralControlClass.SaveInfo> result = listSavesInDir(savesDir, gameDir);
+        synchronized (SAVES_CACHE) {
+            SAVES_CACHE.put(key, new SavesCacheEntry(fp, result));
+        }
+        return result;
     }
 
     /** 列出全部崩溃报告（全局 + 各版本隔离目录，crash-*.txt），按修改时间倒序；filterOrigin 为 null 时不筛选 */

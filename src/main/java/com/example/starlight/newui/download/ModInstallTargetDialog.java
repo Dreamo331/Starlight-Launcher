@@ -1,5 +1,6 @@
 package com.example.starlight.newui.download;
 
+import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.ui.PageKit;
@@ -87,9 +88,12 @@ public final class ModInstallTargetDialog {
         this.host = host;
         String dir = (gameDir == null || gameDir.isBlank()) ? ".minecraft" : gameDir;
         this.root = Paths.get(dir).toAbsolutePath();
-        Map<String, String> cfg = host.config();
-        this.isolation = cfg != null && "true".equalsIgnoreCase(cfg.getOrDefault("VersionIsolation", "false"));
         this.currentVersion = currentVersion == null ? "" : currentVersion.trim();
+        // 隔离判定必须按当前版本的有效配置：版本独立设置页允许只对单个版本开/关隔离，
+        // 读全局值会把 mod 装进游戏根本不加载的目录
+        Map<String, String> cfg = host.config();
+        this.isolation = cfg != null && VersionConfigManager.effectiveVersionIsolation(
+                cfg, dir, this.currentVersion);
         this.what = what == null || what.isBlank() ? "模组" : what;
         this.onConfirm = onConfirm;
     }
@@ -107,7 +111,7 @@ public final class ModInstallTargetDialog {
         new ModInstallTargetDialog(host, gameDir, currentVersion, what, onConfirm).open();
     }
 
-    // ==================== 构建 ====================
+    // 构建 //
 
     private void open() {
         List<String> versions = new ArrayList<>();
@@ -124,7 +128,7 @@ public final class ModInstallTargetDialog {
         body.getChildren().add(centered("选择" + what + "的下载位置", "modal-desc"));
         body.getChildren().add(centered(isolationHintText(), "modal-hint"));
 
-        // ===== 候选列表：全局 / 版本 / 自定义（临时） =====
+        // 候选列表：全局 / 版本 / 自定义（临时） //
         VBox list = new VBox(6);
         list.getStyleClass().add("install-target-list");
 
@@ -328,7 +332,7 @@ public final class ModInstallTargetDialog {
         return box;
     }
 
-    // ==================== 交互 ====================
+    // 交互 //
 
     private Label groupLabel(String text) {
         Label l = new Label(text);
@@ -436,7 +440,7 @@ public final class ModInstallTargetDialog {
         if (dir != null && Files.isDirectory(dir)) host.openFile(dir.toString());
     }
 
-    // ==================== 路径规则 ====================
+    // 路径规则 //
 
     /**
      * 用户在资源管理器里选中的文件夹 → 实际使用的 mods 目录。

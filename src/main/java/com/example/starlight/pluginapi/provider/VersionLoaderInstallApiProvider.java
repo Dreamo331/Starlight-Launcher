@@ -2,7 +2,7 @@ package com.example.starlight.pluginapi.provider;
 
 import com.example.starlight.pluginapi.ApiProvider;
 import com.example.starlight.pluginapi.ApiRequest;
-import com.example.starlight.version.LoaderInstallEngine;
+import com.example.starlight.download.task.LoaderInstallEngine;
 
 /**
  * 功能类（包装）：{@code version/loader/install} —— 安装 Minecraft 加载器（Fabric/Forge/NeoForge）。

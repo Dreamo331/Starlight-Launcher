@@ -104,7 +104,7 @@ public final class ModCategories {
         return List.copyOf(MODRINTH_CATEGORY_ZH.keySet());
     }
 
-    // ==================== 加载器 ====================
+    // 加载器 //
 
     /**
      * 加载器筛选项：值（Modrinth facet 用的小写键）+ 显示名。

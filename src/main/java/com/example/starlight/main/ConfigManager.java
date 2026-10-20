@@ -2,6 +2,7 @@ package com.example.starlight.main;
 
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.auth.AccountManager.Account;
+import com.example.starlight.config.AppDirs;
 import com.example.starlight.util.CredentialStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,23 +32,16 @@ public class ConfigManager {
 
     private static final Logger log = LoggerFactory.getLogger(ConfigManager.class);
 
-    private static final String CONFIG_DIR = "Starlight-Launcher";
-    private static final String CONFIG_FILE = CONFIG_DIR + "/starlight.ini";
-    private static final String CLIENT_CONFIG_FILE = CONFIG_DIR + "/starlight-client.ini";
+    // 配置路径统一由 AppDirs 解析（默认 ~/.starlight，--portable 时回落工作目录）
 
-    // ================================================================
-    //  读取配置
-    // ================================================================
+    // 读取配置 //
 
     /**
      * 读取 starlight.ini 配置文件
      */
     public static Map<String, String> readConfig() {
         Map<String, String> config = new HashMap<>();
-        Path configPath = Paths.get(CONFIG_FILE);
-        if (!Files.exists(configPath)) {
-            configPath = Paths.get(CONFIG_DIR, "starlight.ini");
-        }
+        Path configPath = AppDirs.starlightIni();
         if (!Files.exists(configPath)) return config;
 
         try {
@@ -83,20 +77,18 @@ public class ConfigManager {
         return readConfig().get(key);
     }
 
-    // ================================================================
-    //  保存配置
-    // ================================================================
+    // 保存配置 //
 
     /**
      * 保存配置到 starlight.ini（保留 [Account] 段，仅覆盖 [Launcher] 段内容）
      */
     public static void saveConfig(Map<String, String> config) {
         try {
-            Path configDir = Paths.get(CONFIG_DIR);
+            Path configDir = AppDirs.root();
             if (!Files.exists(configDir)) {
                 Files.createDirectories(configDir);
             }
-            Path configPath = configDir.resolve("starlight.ini");
+            Path configPath = AppDirs.starlightIni();
 
             // 读取现有文件
             List<String> oldLines = new ArrayList<>();
@@ -112,6 +104,8 @@ public class ConfigManager {
                 "Fullscreen", "VersionIsolation",
                 "JvmArgs", "GameArgs", "GameLanguage",
                 "PreLaunchCommand", "PostExitCommand",
+                // 高级设置：自定义游戏窗口标题 / 进程优先级 / 游戏启动后的启动器可见性
+                "GameWindowTitle", "GameProcessPriority", "LauncherVisibility",
                 "ServerUrl", "GameFolders", "GameDirNames", "ParallelLaunch",
                 "ParallelVerify", "StreamingSha1", "FastVerify", "SilentLoginMode"
             };
@@ -211,20 +205,38 @@ public class ConfigManager {
         }
     }
 
-    // ================================================================
-    //  客户端配置 (starlight-client.ini)
-    // ================================================================
+    // 客户端配置 (starlight-client.ini) //
 
     private static final String[] CLIENT_KEYS = {
         "Theme", "Language", "ScreenshotDir",
         "DownloadSource", "DownloadThreads",
+        // 高级下载设置（设置 → 下载 → 高级下载设置）：分块阈值 / 分裂点 / 最小碎片 /
+        // 慢速触发线 / 限速。未登记的话点「保存」写不进 starlight-client.ini，重启就丢。
+        "DownloadPieceLimitKB", "DownloadSplitPercent", "DownloadMultithreadThresholdMB",
+        "DownloadLowSpeedKBps", "DownloadSpeedLimitKBps",
+        // 停滞看门狗（M1）：单次 read 无字节超过 DownloadStallTimeoutSec 即判该源卡死并换源。
+        // 补全的文件传输走 HttpURLConnection（HttpClient 无 socket read timeout，已实测）。
+        // DownloadFirstTryStallSec：非最后候选的快速停滞判定（2026-09-30 等待池增强 B）。
+        "DownloadStallTimeoutSec", "DownloadFirstTryStallSec", "DownloadConnectTimeoutSec",
+        // 开发者选项页：合并重试 / 退避 / 慢速掐线 / 镜像熔断阈值与冷却（2026-10-11 二期运行时参数）
+        "DownloadMergeRetry", "DownloadMergeBackoffMs", "DownloadSlowGapSec",
+        "DownloadBreakerThreshold", "DownloadBreakerCooldownSec",
+        // 开发者选项页：调试日志环形缓冲上限 / 单线程 Host 黑名单用户片段（| 分隔）
+        "DebugLogMaxEntries", "SingleThreadHosts",
         "ShowSplash", "LastPlayed",
         "WindowX", "WindowY", "WindowMaximized", "KeepWindowPosition",
         // 标题栏窗口按钮样式：true=仿 macOS 三点式（默认），false=减号 + 叉号
         "MacStyleWindowButtons",
         "ScrollSpeed",
+        // 「Java 与内存」页 JVM 参数输入框的拖拽高度（px，0 = 跟随默认行数）。
+        // 未登记的话拖动把手改了高度也写不进 starlight-client.ini，重启即丢。
+        "JvmArgsEditorHeight",
         // 个性化配置：侧边栏显隐 / 高对比度 / 背景图片 / 文件扫描 / 联机与反馈输入
         "ShowSidebar", "HighContrast", "BackgroundImage", "FileScan",
+        // 设置 → 主题与背景 → 自定义背景色（#RRGGBB，空串=未启用）。
+        // 与 BackgroundImage 一样属于个性化配置；未登记的话选完颜色点保存写不进
+        // starlight-client.ini，重启后自定义色静默丢失，只剩默认渐变。
+        "CustomThemeColor",
         "FrpPort", "FeedbackEmail", "SlanPassword",
         "HomeQuickLaunchSave", "HomeQuickManageMod",
         // 色盲辅助（外部矫正工具 ColorBlindOverlay.exe 的配置）
@@ -241,7 +253,7 @@ public class ConfigManager {
 
     public static Map<String, String> readClientConfig() {
         Map<String, String> result = new HashMap<>();
-        Path p = Paths.get(CLIENT_CONFIG_FILE);
+        Path p = AppDirs.starlightClientIni();
         if (!Files.exists(p)) return result;
         try {
             for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
@@ -262,9 +274,9 @@ public class ConfigManager {
             if (config.containsKey(key)) merged.put(key, config.get(key));
         }
         try {
-            Path dir = Paths.get(CONFIG_DIR);
+            Path dir = AppDirs.root();
             if (!Files.exists(dir)) Files.createDirectories(dir);
-            Path p = Paths.get(CLIENT_CONFIG_FILE);
+            Path p = AppDirs.starlightClientIni();
             List<String> lines = new ArrayList<>();
             lines.add("[Client]");
             for (String key : CLIENT_KEYS) {
@@ -280,9 +292,7 @@ public class ConfigManager {
         }
     }
 
-    // ================================================================
-    //  交互式配置
-    // ================================================================
+    // 交互式配置 //
 
     /**
      * 交互式配置输入
@@ -302,8 +312,7 @@ public class ConfigManager {
                 }
             } catch (Exception ignored) {
                 // 降级：从旧 login.json 读取
-                Path loginJson = Paths.get(
-                    System.getProperty("user.home"), ".starlight-launcher", "login.json");
+                Path loginJson = AppDirs.loginJson();
                 if (Files.exists(loginJson)) {
                     try {
                         String json = Files.readString(loginJson, StandardCharsets.UTF_8);
@@ -358,9 +367,7 @@ public class ConfigManager {
         return defaults;
     }
 
-    // ================================================================
-    //  工具方法
-    // ================================================================
+    // 工具方法 //
 
     /**
      * 从简单 JSON 中提取字符串值

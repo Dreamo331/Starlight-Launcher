@@ -29,7 +29,7 @@ public final class SystemInfoMonitor {
      *  下可能缺失，叠加 java.vm.name=="Substrate VM" 双保险 */
     private static final boolean IS_NATIVE = NativeImageCompat.isNativeImage();
 
-    // ===== Native Image：应用类 native 方法 JNI 注册 =====
+    // Native Image：应用类 native 方法 JNI 注册 //
     // Native Image 下应用类 native 方法的 JNI 查找只遍历 knownLibraries，符号须位于
     // 某已注册模块的导出表。磁盘桩已 __declspec(dllexport) 进 exe 导出表，这里
     // System.load 加载 exe 自身（Windows 允许 LoadLibrary PE），使查找可命中。
@@ -65,7 +65,7 @@ public final class SystemInfoMonitor {
     // 可能耗时数秒甚至卡住，因此只能在后台采样线程中执行，禁止在调用方线程同步执行。
     private static SystemInfo systemInfo;
 
-    // ===== Native Image 磁盘速率桩（native/management_stub.c 的 PDH 实现） =====
+    // Native Image 磁盘速率桩（native/management_stub.c 的 PDH 实现） //
     // Native Image 下 OSHI/JNA 不可用（运行期反射生成代理被关闭），Java 侧回退到这两个
     // JNI 桩读取 PDH 性能计数器（物理磁盘总读写速率）。JVM 模式下这两个方法无实现，
     // 仅在 OSHI 失败时才会被调用（抛 UnsatisfiedLinkError，被 Throwable 捕获）。

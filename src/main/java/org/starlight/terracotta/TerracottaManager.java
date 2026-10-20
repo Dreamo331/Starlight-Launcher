@@ -1,10 +1,11 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package org.starlight.terracotta;
 
+import com.example.starlight.download.task.AbstractTerracottaProvider;
+import com.example.starlight.download.task.TerracottaDownloader;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.ReadOnlyDoubleWrapper;
-import org.starlight.terracotta.provider.AbstractTerracottaProvider;
 
 import java.io.IOException;
 import java.net.URI;
@@ -187,7 +188,7 @@ public final class TerracottaManager {
         }
     }
 
-    // ---- internal helpers ----
+    // internal helpers //
 
     public static boolean tryTransition(TerracottaState prev, TerracottaState next) {
         return TerracottaStatePoller.compareAndSet(prev, next);

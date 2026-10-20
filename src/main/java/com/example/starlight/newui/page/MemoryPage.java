@@ -57,12 +57,12 @@ public final class MemoryPage {
         this.host = host;
     }
 
-    // ===== 内存管理页面 =====
+    // 内存管理页面 //
 
     public Node build() {
         VBox root = PageKit.settingsPage(host, "内存管理", "home");
 
-        // ===== 卡片1：JVM 堆内存（实时刷新） =====
+        // 卡片1：JVM 堆内存（实时刷新） //
         VBox heapCard = new VBox(10);
         heapCard.getStyleClass().add("settings-card");
         Label heapTitle = AppIcons.label("memory", "JVM 堆内存");
@@ -99,7 +99,7 @@ public final class MemoryPage {
         heapCard.getChildren().addAll(heapTitle, heapUsageRow, heapStats, heapHint);
         root.getChildren().add(heapCard);
 
-        // ===== 卡片2：系统物理内存 =====
+        // 卡片2：系统物理内存 //
         VBox sysCard = new VBox(10);
         sysCard.getStyleClass().add("settings-card");
         Label sysTitle = new Label("系统物理内存");
@@ -124,7 +124,7 @@ public final class MemoryPage {
         sysCard.getChildren().addAll(sysTitle, sysUsageRow, sysHint);
         root.getChildren().add(sysCard);
 
-        // ===== 卡片3：非堆内存 =====
+        // 卡片3：非堆内存 //
         VBox nonHeapCard = new VBox(10);
         nonHeapCard.getStyleClass().add("settings-card");
         Label nonHeapTitle = AppIcons.label("package", "非堆内存");
@@ -142,7 +142,7 @@ public final class MemoryPage {
         nonHeapCard.getChildren().addAll(nonHeapTitle, nonHeapStats, nonHeapHint);
         root.getChildren().add(nonHeapCard);
 
-        // ===== 卡片4：GC 与线程 =====
+        // 卡片4：GC 与线程 //
         VBox gcCard = new VBox(10);
         gcCard.getStyleClass().add("settings-card");
         Label gcTitle = AppIcons.label("refresh", "GC 与线程");
@@ -160,7 +160,7 @@ public final class MemoryPage {
         gcCard.getChildren().addAll(gcTitle, gcStats);
         root.getChildren().add(gcCard);
 
-        // ===== 操作按钮 =====
+        // 操作按钮 //
         HBox btnRow = new HBox(10);
         btnRow.setAlignment(Pos.CENTER);
         Button jvmBtn = AppIcons.button("cpu", "JVM设置");
@@ -185,7 +185,7 @@ public final class MemoryPage {
         lastUpdateLbl.setMaxWidth(Double.MAX_VALUE);
         root.getChildren().add(lastUpdateLbl);
 
-        // ===== 定时刷新：进入页面时启动，离开页面时停止（避免后台空转） =====
+        // 定时刷新：进入页面时启动，离开页面时停止（避免后台空转） //
         final Runnable refresh = () -> {
             try {
                 // JVM 堆内存
@@ -305,7 +305,7 @@ public final class MemoryPage {
         desc.setMaxWidth(Double.MAX_VALUE);
         card.getChildren().addAll(title, desc);
 
-        // ---- 内存使用率 ----
+        // 内存使用率 //
         Label usageCaption = new Label("内存使用率");
         usageCaption.setStyle("-fx-font-size: 13px; -fx-text-fill: -sl-text;");
 
@@ -347,7 +347,7 @@ public final class MemoryPage {
 
         card.getChildren().addAll(usageCaption, barRow, detailLabel);
 
-        // ---- 启动前自动优化（开关 + 明确标注，点标注等同于点开关）----
+        // 启动前自动优化（开关 + 明确标注，点标注等同于点开关） //
         CheckBox autoToggle = PageKit.toggle(PageKit.boolConfig(host, "OptimizeMemoryBeforeLaunch", false));
         Label autoLabel = new Label("启动游戏前优化一次");
         autoLabel.getStyleClass().add("toggle-switch-label");

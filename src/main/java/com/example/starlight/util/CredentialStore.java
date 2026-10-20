@@ -1,5 +1,6 @@
 package com.example.starlight.util;
 
+import com.example.starlight.config.AppDirs;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,8 +30,8 @@ public final class CredentialStore {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialStore.class);
 
-    private static final String CONFIG_DIR = "Starlight-Launcher";
-    private static final String CREDENTIAL_FILE = CONFIG_DIR + "/.account.dat";
+    /** 凭证文件（路径统一由 AppDirs 解析：默认 ~/.starlight，--portable 回落工作目录） */
+    private static final String CREDENTIAL_FILE = AppDirs.credentialFile().toString();
 
     // 简单 XOR 密钥（非强加密，仅防明文泄漏）
     private static final byte[] XOR_KEY = {(byte) 0x5A, (byte) 0x3C, (byte) 0x1F, (byte) 0x7B, (byte) 0x2D, (byte) 0x4E, (byte) 0x6A, (byte) 0x8C};
@@ -41,7 +42,7 @@ public final class CredentialStore {
     public static void saveCredentials(String accessToken, String refreshToken,
                                        String uuid, String userName) {
         try {
-            Path configDir = Paths.get(CONFIG_DIR);
+            Path configDir = AppDirs.root();
             if (!Files.exists(configDir)) {
                 Files.createDirectories(configDir);
             }
@@ -63,8 +64,7 @@ public final class CredentialStore {
             byte[] obfuscated = obfuscate(plainBytes);
             String encoded = Base64.getEncoder().encodeToString(obfuscated);
 
-            Path credPath = configDir.resolve(".account.dat");
-            Files.writeString(credPath, encoded, StandardCharsets.UTF_8,
+            Path credPath = configDir.resolve(".account.dat");            Files.writeString(credPath, encoded, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             log.info("Account credentials saved to separate storage file");
         } catch (IOException e) {
@@ -81,10 +81,7 @@ public final class CredentialStore {
     public static Map<String, String> loadCredentialMap() {
         Map<String, String> result = new HashMap<>();
         try {
-            Path credPath = Paths.get(CREDENTIAL_FILE);
-            if (!Files.exists(credPath)) {
-                credPath = Paths.get(CONFIG_DIR, ".account.dat");
-            }
+            Path credPath = AppDirs.credentialFile();
             if (!Files.exists(credPath)) return result;
 
             String encoded = Files.readString(credPath, StandardCharsets.UTF_8).trim();

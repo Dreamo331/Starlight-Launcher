@@ -109,7 +109,7 @@ public final class SilentLoginManager {
         }
     }
 
-    // ======================== 令牌过期判断（与 UIGeneralControlClass 原实现一致） ========================
+    // 令牌过期判断（与 UIGeneralControlClass 原实现一致） //
 
     private static boolean isTokenExpired(String accessToken, long tokenExpiresAt) {
         if (accessToken == null || accessToken.isEmpty()) return true;

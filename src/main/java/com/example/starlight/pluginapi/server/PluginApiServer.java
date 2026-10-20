@@ -128,12 +128,12 @@ public final class PluginApiServer {
             throw new IllegalStateException("HTTP 服务已启动，请勿重复调用 start()");
         }
 
-        // ---- 第 0 步：注册内置功能类（SystemPing / Region）----
+        // 第 0 步：注册内置功能类（SystemPing / Region） //
         // API.java 保持纯净（不含业务逻辑），具体功能类的注册统一放在服务启动处。
         // 官方与社区插件通过 HTTP 访问，与这些内置功能类地位平等。
         registerBuiltinProviders();
 
-        // ---- 第 1 步：绑定 0 端口，由操作系统自动分配空闲端口 ----
+        // 第 1 步：绑定 0 端口，由操作系统自动分配空闲端口 //
         // 127.0.0.1 = 仅本机可访问（见类注释安全说明）；改 new InetSocketAddress(0) 即绑定所有网卡。
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext(HANDSHAKE_PATH, this::handleHandshake);
@@ -144,7 +144,7 @@ public final class PluginApiServer {
         server.setExecutor(executor);
         server.start();
 
-        // ---- 第 2 步：服务启动成功后，立即获取实际端口并写入端口文件 ----
+        // 第 2 步：服务启动成功后，立即获取实际端口并写入端口文件 //
         port = server.getAddress().getPort();
         writePortFile(port);
 
@@ -161,29 +161,29 @@ public final class PluginApiServer {
      * 新增功能时在此追加一行注册即可；官方与社区插件通过 HTTP 访问，与这些内置功能类地位平等。
      */
     private void registerBuiltinProviders() {
-        // ---- 系统 ----
+        // 系统 //
         api.registerProvider(new SystemPingApiProvider());          // system/ping
         api.registerProvider(new SystemHardwareApiProvider());      // system/hardware
-        // ---- 世界/游戏数据 ----
+        // 世界/游戏数据 //
         api.registerProvider(new RegionApiProvider());              // world/region/chunk
         api.registerProvider(new SavesApiProvider());               // world/saves/list
         api.registerProvider(new GameOptionsApiProvider());         // game/options
         api.registerProvider(new GameLauncherProfilesApiProvider()); // game/launcher_profiles
-        // ---- 模组 ----
+        // 模组 //
         api.registerProvider(new ModsListApiProvider());            // mods/list
         api.registerProvider(new ModsResourcePacksApiProvider());   // mods/resourcepacks
         api.registerProvider(new ModsShaderPacksApiProvider());     // mods/shaders
         api.registerProvider(new ModsConfigApiProvider());          // mods/config
-        // ---- 崩溃/Java/版本 ----
+        // 崩溃/Java/版本 //
         api.registerProvider(new CrashLatestApiProvider());         // crash/latest
         api.registerProvider(new JavaListApiProvider());            // java/list
         api.registerProvider(new VersionManifestApiProvider());     // version/manifest
         api.registerProvider(new VersionInstalledApiProvider());    // version/installed
-        // ---- 账号（脱敏）----
+        // 账号（脱敏） //
         api.registerProvider(new AccountListApiProvider());         // account/list
         api.registerProvider(new AccountCurrentApiProvider());      // account/current
         api.registerProvider(new AccountLoginOfflineApiProvider()); // account/login/offline
-        // ---- 游戏/模组动作 ----
+        // 游戏/模组动作 //
         api.registerProvider(new GameLaunchApiProvider());          // game/launch
         api.registerProvider(new GameStopApiProvider());            // game/stop
         api.registerProvider(new GameOptionsUpdateApiProvider());   // game/options/update
@@ -191,7 +191,7 @@ public final class PluginApiServer {
         api.registerProvider(new VersionInstallApiProvider());      // version/install
         api.registerProvider(new VersionLoaderInstallApiProvider()); // version/loader/install
         api.registerProvider(new JavaInstallApiProvider());         // java/install
-        // ---- 网络 ----
+        // 网络 //
         api.registerProvider(new FrpStartApiProvider());            // net/frp/start
         api.registerProvider(new FrpStopApiProvider());             // net/frp/stop
         api.registerProvider(new SlanHostApiProvider());            // net/slan/host
@@ -227,9 +227,7 @@ public final class PluginApiServer {
         }
     }
 
-    // ------------------------------------------------------------------
-    // 端口文件
-    // ------------------------------------------------------------------
+    // 端口文件 //
 
     /**
      * 将实际端口号覆盖写入 {@code .minecraft/starlight_api.port}（纯文本，仅含端口号）。
@@ -251,9 +249,7 @@ public final class PluginApiServer {
         }
     }
 
-    // ------------------------------------------------------------------
-    // 端点 1：POST /api/v1/handshake —— 握手
-    // ------------------------------------------------------------------
+    // 端点 1：POST /api/v1/handshake —— 握手 //
 
     /**
      * 握手处理流程：
@@ -277,13 +273,13 @@ public final class PluginApiServer {
             return;
         }
 
-        // ---- 1. 必填字段校验 ----
+        // 1. 必填字段校验 //
         if (isBlank(req.pluginId) || isBlank(req.pluginName) || isBlank(req.pluginVersion)) {
             sendJson(exchange, 400, errorJson(400, "plugin_id / plugin_name / plugin_version 不能为空"));
             return;
         }
 
-        // ---- 2. 校验 launcher_api_version（可选字段，缺省跳过）----
+        // 2. 校验 launcher_api_version（可选字段，缺省跳过） //
         if (!isBlank(req.launcherApiVersion)) {
             try {
                 if (!SemVer.parse(LAUNCHER_API_VERSION).isCompatibleWith(SemVer.parse(req.launcherApiVersion))) {
@@ -299,7 +295,7 @@ public final class PluginApiServer {
             }
         }
 
-        // ---- 3. 校验 required_apis：已注册 + 版本兼容 ----
+        // 3. 校验 required_apis：已注册 + 版本兼容 //
         Map<String, String> available = api.availableApis();
         if (req.requiredApis != null && !req.requiredApis.isEmpty()) {
             for (Map.Entry<String, String> entry : req.requiredApis.entrySet()) {
@@ -324,7 +320,7 @@ public final class PluginApiServer {
             }
         }
 
-        // ---- 4. 校验通过：生成 session_token，返回可用 API 端点列表 ----
+        // 4. 校验通过：生成 session_token，返回可用 API 端点列表 //
         String token = sessions.createSession(req.pluginId, req.pluginName, req.pluginVersion);
         LOGGER.info("握手成功: plugin_id=" + req.pluginId + " plugin_version=" + req.pluginVersion
                 + " required_apis=" + req.requiredApis);
@@ -337,9 +333,7 @@ public final class PluginApiServer {
         sendJson(exchange, 200, resp);
     }
 
-    // ------------------------------------------------------------------
-    // 端点 2：/api/v1/data/{apiId} —— 数据请求（需鉴权）
-    // ------------------------------------------------------------------
+    // 端点 2：/api/v1/data/{apiId} —— 数据请求（需鉴权） //
 
     /**
      * 数据请求处理流程：
@@ -362,7 +356,7 @@ public final class PluginApiServer {
             return;
         }
 
-        // ---- 鉴权：后续所有数据请求必须携带 session_token ----
+        // 鉴权：后续所有数据请求必须携带 session_token //
         String token = exchange.getRequestHeaders().getFirst(AUTH_HEADER);
         if (token == null) {
             token = parseQuery(exchange.getRequestURI().getRawQuery()).get("session_token");
@@ -372,7 +366,7 @@ public final class PluginApiServer {
             return;
         }
 
-        // ---- 组装请求并调度 ----
+        // 组装请求并调度 //
         Map<String, String> params = parseQuery(exchange.getRequestURI().getRawQuery());
         byte[] requestBody = exchange.getRequestBody().readAllBytes();
         ApiRequest request = new ApiRequest(apiId, params, requestBody);
@@ -393,9 +387,7 @@ public final class PluginApiServer {
         }
     }
 
-    // ------------------------------------------------------------------
-    // 工具方法
-    // ------------------------------------------------------------------
+    // 工具方法 //
 
     /** 解析 URL query 字符串为参数 Map（重复键后者覆盖；UTF-8 解码）。 */
     private static Map<String, String> parseQuery(String rawQuery) {

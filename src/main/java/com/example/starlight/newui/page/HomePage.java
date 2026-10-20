@@ -65,6 +65,16 @@ public final class HomePage {
     }
 
     public Node build() {
+        // 每次访问首页都重新检测节日（跨天时能自动切换）；开关关闭时保持默认
+        com.example.starlight.newui.festival.Festival activeFestival = null;
+        try {
+            if (com.example.starlight.newui.festival.FestivalCalendar.isEnabled(host.config())) {
+                activeFestival = com.example.starlight.newui.festival.FestivalCalendar.current();
+            }
+        } catch (Exception ignored) {
+            // 配置读取异常时保持默认，不影响首页渲染
+        }
+
         HBox layout = new HBox(20);
         layout.getStyleClass().add("home-layout");
         layout.setPadding(new Insets(0, 4, 4, 0));
@@ -94,8 +104,12 @@ public final class HomePage {
         // 名字列可以被压窄（超长用户名允许省略），但整体不许把右侧按钮挤掉
         nameBox.setMinWidth(0);
         HBox.setHgrow(nameBox, Priority.ALWAYS);
-        Label welcome = new Label("欢迎回来");
+        Label welcome = new Label(activeFestival != null ? activeFestival.greeting : "欢迎回来");
         welcome.getStyleClass().add("home-welcome");
+        if (activeFestival != null) {
+            welcome.getStyleClass().add("festival-welcome");
+            welcome.setStyle("-fx-text-fill: " + activeFestival.greetingColor + ";");
+        }
         // 用户名单独一行，占满剩余宽度：账号类型徽标移到名字下方，
         // 不再和用户名抢横向空间（之前名字被挤成「Dreamo_...」）
         Label username = new Label(getCurrentUsername());
@@ -187,10 +201,19 @@ public final class HomePage {
         // 启动按钮
         VBox launchCard = new VBox();
         launchCard.getStyleClass().add("home-card-left-item");
-        Button launchBtn = AppIcons.button("play", "启动游戏");
+        Button launchBtn = activeFestival != null
+                ? AppIcons.button(activeFestival.icon, activeFestival.launchLabel())
+                : AppIcons.button("play", "启动游戏");
         launchBtn.getStyleClass().add("home-launch-btn");
+        if (activeFestival != null) launchBtn.getStyleClass().add("festival-active");
         launchBtn.setMaxWidth(Double.MAX_VALUE);
         launchBtn.setOnAction(e -> host.launchGame());
+        if (activeFestival != null) {
+            // 节日按钮配色：从节日定义取渐变 + 文字色（内联，避免为每个节日写 CSS）
+            launchBtn.setStyle("-fx-background-color: linear-gradient(to right, "
+                    + activeFestival.gradientA + ", " + activeFestival.gradientB + ");"
+                    + " -fx-text-fill: " + activeFestival.buttonText + ";");
+        }
         launchCard.getChildren().add(launchBtn);
         left.getChildren().add(userCard);
         left.getChildren().addAll(recentCard, launchCard);

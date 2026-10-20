@@ -315,5 +315,4 @@ public final class DownloadTaskCard {
         return seconds >= 60 ? (seconds / 60) + " 分 " + (seconds % 60) + " 秒" : seconds + " 秒";
     }
 }
-// ==== BODY ====
-
+// BODY //

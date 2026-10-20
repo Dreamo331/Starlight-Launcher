@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0.0",
+  "name": "Minecraft Java Runtime Download Index",
+  "recommended_strategy": "key_lts_versions_only",
+  "last_updated": "2026-09-29",
+  "sources": {
+    "adoptium_api": {
+      "name": "Adoptium Eclipse Temurin API",
+      "binary_latest_url_template": "https://api.adoptium.net/v3/binary/latest/{java_version}/ga/{os}/{arch}/jdk/hotspot/normal/eclipse",
+      "metadata_url_template": "https://api.adoptium.net/v3/assets/feature_releases/{java_version}/ga"
+    },
+    "tsinghua_mirror": {
+      "name": "清华大学 TUNA 镜像",
+      "directory_url_template": "https://mirrors.tuna.tsinghua.edu.cn/Adoptium/{java_version}/jdk/{arch}/{os}/"
+    }
+  },
+  "versions": [
+    {
+      "java_version": 8,
+      "minecraft_support": "1.12.2 及以下",
+      "os": ["windows", "linux", "mac"],
+      "arch": ["x64", "x86"]
+    },
+    {
+      "java_version": 11,
+      "minecraft_support": "1.13 - 1.16.5",
+      "os": ["windows", "linux", "mac"],
+      "arch": ["x64", "aarch64"]
+    },
+    {
+      "java_version": 17,
+      "minecraft_support": "1.17 - 1.20.4",
+      "os": ["windows", "linux", "mac"],
+      "arch": ["x64", "aarch64"]
+    },
+    {
+      "java_version": 21,
+      "minecraft_support": "1.20.5 及以上",
+      "os": ["windows", "linux", "mac"],
+      "arch": ["x64", "aarch64"]
+    },
+    {
+      "java_version": 25,
+      "minecraft_support": "未来版本预留",
+      "os": ["windows", "linux", "mac"],
+      "arch": ["x64", "aarch64"]
+    }
+  ]
+}
