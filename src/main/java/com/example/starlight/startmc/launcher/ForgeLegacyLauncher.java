@@ -8,6 +8,8 @@
 //   - 使用 minecraftArguments 旧格式而非 arguments.game
 package com.example.starlight.startmc.launcher;
 
+
+import com.example.starlight.util.I18N;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -41,7 +43,7 @@ public class ForgeLegacyLauncher extends BaseLauncher {
 
     @Override
     public int launch() throws IOException, InterruptedException {
-        writeLog("[模式] Forge 1.16.5- (Legacy)", "INFO");
+        writeLog(I18N.get("launcher.t0007"), "INFO");
 
         // 确保占位符键已初始化
         if (placeholderKeys == null) buildPlaceholderKeys();
@@ -64,7 +66,7 @@ public class ForgeLegacyLauncher extends BaseLauncher {
         // 类路径 //
         List<String> libs = getLibraries(true);
         String cp = formatClassPath(libs);
-        writeLog("类路径条目数: " + libs.size(), "INFO");
+        writeLog(I18N.get("launcher.p0057", libs.size()), "INFO");
 
         // Mods 目录 //
         Path modsDir = resolveModsDir();
@@ -111,8 +113,8 @@ public class ForgeLegacyLauncher extends BaseLauncher {
         }
 
         writeLog("启动参数构建完成，共 " + argList.size() + " 个参数", "INFO");
-        writeLog("Mods 目录: " + modsDir, "INFO");
-        writeLog("日志文件: " + logFile, "INFO");
+        writeLog(I18N.get("launcher.p0058", modsDir), "INFO");
+        writeLog(I18N.get("launcher.p0059", logFile), "INFO");
 
         // 启动进程 //
         int exitCode = startProcessWithMonitoring(launchInfo.getJavaPath(), argList);

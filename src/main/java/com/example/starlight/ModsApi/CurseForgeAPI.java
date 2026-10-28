@@ -1,5 +1,7 @@
 package com.example.starlight.ModsApi;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.Endpoints;
 import com.example.starlight.newui.AppConfig;
 import com.google.gson.Gson;
@@ -202,7 +204,7 @@ public final class CurseForgeAPI {
         JsonObject root = getJson("/v1/mods/" + encode(id));
         JsonElement data = root.get("data");
         if (data == null || !data.isJsonObject()) {
-            throw new IOException("CurseForge 未返回项目数据: " + modId);
+            throw new IOException(I18N.get("modsapi.p0079", modId));
         }
         return data.getAsJsonObject();
     }
@@ -236,7 +238,7 @@ public final class CurseForgeAPI {
                 + "/files/" + encode(fileId));
         JsonElement data = root.get("data");
         if (data == null || !data.isJsonObject()) {
-            throw new IOException("CurseForge 未返回文件数据: " + modId + "/" + fileId);
+            throw new IOException(I18N.get("modsapi.p0080", modId + "/" + fileId));
         }
         return data.getAsJsonObject();
     }
@@ -317,7 +319,7 @@ public final class CurseForgeAPI {
      */
     public static String testConnection() {
         if (!hasApiKey()) {
-            return "未配置 API Key";
+            return I18N.get("modsapi.t0001");
         }
         String path = "/v1/mods/search?gameId=" + GAME_ID_MINECRAFT
                 + "&classId=" + CLASS_MODS + "&pageSize=1";
@@ -326,10 +328,9 @@ public final class CurseForgeAPI {
             JsonObject root = JsonParser.parseString(body).getAsJsonObject();
             JsonElement data = root.get("data");
             int count = (data != null && data.isJsonArray()) ? data.getAsJsonArray().size() : 0;
-            return "连接成功 · 凭证: " + authModeName() + " · 通道: " + lastChannel
-                    + " · 返回 " + count + " 条项目";
+            return I18N.get("cfapi.r0001", authModeName(), lastChannel, count);
         } catch (Exception e) {
-            return "连接失败: " + describe(e);
+            return I18N.get("modsapi.p0081", describe(e));
         }
     }
 
@@ -382,7 +383,7 @@ public final class CurseForgeAPI {
                         }
                     } catch (Exception e) {
                         if (errors.length() > 0) errors.append("; ");
-                        errors.append(official ? "官方" : "镜像").append(": ").append(describe(e));
+                        errors.append(official ? I18N.get("modsapi.t0073") : I18N.get("modsapi.t0074")).append(": ").append(describe(e));
                     }
                 }
             }
@@ -392,7 +393,7 @@ public final class CurseForgeAPI {
                 else MIRROR_BREAKER.recordFailure();
             }
         }
-        throw new IOException("CurseForge 请求失败（" + errors + "）");
+        throw new IOException(I18N.get("modsapi.p0082", errors + "）"));
     }
 
     /**
@@ -423,7 +424,7 @@ public final class CurseForgeAPI {
 
         int code = response.statusCode();
         if (code >= 200 && code < 300) {
-            lastChannel = official ? "官方" : "镜像";
+            lastChannel = official ? I18N.get("modsapi.t0075") : I18N.get("modsapi.t0076");
             if (AppConfig.DEBUG_MODE) {
                 System.err.println("[CurseForge] " + code + " " + url);
             }
@@ -456,7 +457,7 @@ public final class CurseForgeAPI {
     /** CurseForge 既接受数字 ID 也接受 slug；此处仅做去空格处理 */
     private static String normalizeModId(String modId) throws IOException {
         if (modId == null || modId.isBlank()) {
-            throw new IOException("项目 ID 为空");
+            throw new IOException(I18N.get("modsapi.t0002"));
         }
         return modId.trim();
     }
@@ -472,10 +473,10 @@ public final class CurseForgeAPI {
     }
 
     private static String describe(Exception e) {
-        if (e instanceof java.net.http.HttpTimeoutException) return "请求超时";
-        if (e instanceof java.net.UnknownHostException) return "域名解析失败";
-        if (e instanceof java.net.ConnectException) return "无法连接服务器";
-        if (e instanceof javax.net.ssl.SSLException) return "TLS 握手失败";
+        if (e instanceof java.net.http.HttpTimeoutException) return I18N.get("modsapi.t0003");
+        if (e instanceof java.net.UnknownHostException) return I18N.get("modsapi.t0004");
+        if (e instanceof java.net.ConnectException) return I18N.get("modsapi.t0005");
+        if (e instanceof javax.net.ssl.SSLException) return I18N.get("modsapi.t0006");
         String msg = e.getMessage();
         return (msg == null || msg.isBlank()) ? e.getClass().getSimpleName() : msg;
     }

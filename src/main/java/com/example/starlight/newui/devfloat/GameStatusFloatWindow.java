@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.newui.devfloat;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.service.GameInstanceRegistry;
 
 import javafx.geometry.Pos;
@@ -23,7 +25,7 @@ public final class GameStatusFloatWindow extends DevFloatWindow {
     private VBox rows;
 
     private GameStatusFloatWindow() {
-        super("游戏状态", 300, 150);
+        super(I18N.get("devfloat.t0004"), 300, 150);
     }
 
     @Override
@@ -33,7 +35,7 @@ public final class GameStatusFloatWindow extends DevFloatWindow {
         rows = new VBox(4);
         title.setStyle("-fx-text-fill: #d1d5db; -fx-font-size: 13px;");
         rows.setAlignment(Pos.CENTER_LEFT);
-        root.getChildren().addAll(title, rows, dimLabel("数据来自本启动器拉起的游戏实例"));
+        root.getChildren().addAll(title, rows, dimLabel(I18N.get("devfloat.t0005")));
     }
 
     @Override
@@ -41,11 +43,11 @@ public final class GameStatusFloatWindow extends DevFloatWindow {
         List<GameInstanceRegistry.Instance> alive = GameInstanceRegistry.aliveInstances();
         rows.getChildren().clear();
         if (alive.isEmpty()) {
-            title.setText("游戏未运行");
-            rows.getChildren().add(dimLabel("启动游戏后这里会常驻显示实例状态"));
+            title.setText(I18N.get("devfloat.t0006"));
+            rows.getChildren().add(dimLabel(I18N.get("devfloat.t0007")));
             return;
         }
-        title.setText("游戏运行中（" + alive.size() + "）");
+        title.setText(I18N.get("devfloat.p0022", alive.size() + "）"));
         for (GameInstanceRegistry.Instance ins : alive) {
             Label row = new Label(ins.displayName() + " · " + FormatDuration.uptime(ins.uptimeMillis())
                     + " · PID " + ins.pid);

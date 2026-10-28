@@ -1,5 +1,7 @@
 package com.example.starlight.pluginapi.provider;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.pluginapi.ApiProvider;
 import com.example.starlight.pluginapi.ApiRequest;
 import com.example.starlight.download.task.LoaderInstallEngine;
@@ -55,7 +57,7 @@ public final class VersionLoaderInstallApiProvider implements ApiProvider {
 
         String message = lastMessage[0];
         if (message == null) {
-            message = success ? "安装完成" : "安装失败";
+            message = success ? I18N.get("provider.t0003") : I18N.get("provider.t0004");
         }
         return ProviderSupport.json(ProviderSupport.map(
                 "success", success,

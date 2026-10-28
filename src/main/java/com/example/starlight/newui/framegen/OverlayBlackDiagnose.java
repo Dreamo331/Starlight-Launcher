@@ -1,5 +1,7 @@
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 /**
  * 判定「覆盖层全黑」到底断在哪一环。
  *
@@ -25,7 +27,7 @@ public final class OverlayBlackDiagnose {
 
         GameProcessLocator.Target t = args.length > 0
                 ? new GameProcessLocator.Target(Integer.parseInt(args[0]),
-                        "命令行 PID", GameProcessLocator.Source.SCAN)
+                        I18N.get("framegen.t0075"), GameProcessLocator.Source.SCAN)
                 : GameProcessLocator.locate();
         System.out.println("[1] 目标: pid=" + t.pid() + " " + t.description());
         if (!t.isValid()) {

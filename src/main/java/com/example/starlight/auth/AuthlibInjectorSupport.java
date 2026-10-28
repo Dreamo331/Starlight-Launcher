@@ -1,5 +1,7 @@
 package com.example.starlight.auth;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AppDirs;
 import com.example.starlight.newui.AppConfig;
 import com.google.gson.JsonArray;
@@ -116,7 +118,7 @@ public class AuthlibInjectorSupport {
             downloadUrl = root.get("downloadUrl").getAsString();
         }
         if (downloadUrl == null || downloadUrl.isEmpty()) {
-            throw new IOException("latest.json 缺少 download_url/downloadUrl 字段");
+            throw new IOException(I18N.get("auth.t0006"));
         }
         String sha256 = null;
         if (root.has("checksums") && root.getAsJsonObject("checksums").has("sha256")) {
@@ -139,7 +141,7 @@ public class AuthlibInjectorSupport {
             resp = CLIENT.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("请求 GitHub API 被中断", e);
+            throw new IOException(I18N.get("auth.t0007"), e);
         }
         if (resp.statusCode() >= 400) {
             throw new IOException("HTTP " + resp.statusCode() + " (GET GitHub API)");
@@ -147,7 +149,7 @@ public class AuthlibInjectorSupport {
         JsonObject root = JsonParser.parseString(resp.body()).getAsJsonObject();
         JsonArray assets = root.has("assets") ? root.getAsJsonArray("assets") : null;
         if (assets == null || assets.isEmpty()) {
-            throw new IOException("GitHub latest release 无资产");
+            throw new IOException(I18N.get("auth.t0008"));
         }
         String downloadUrl = null;
         for (JsonElement el : assets) {
@@ -159,7 +161,7 @@ public class AuthlibInjectorSupport {
             }
         }
         if (downloadUrl == null) {
-            throw new IOException("GitHub latest release 缺少 jar 资产");
+            throw new IOException(I18N.get("auth.t0009"));
         }
         downloadTo(downloadUrl, target, null);
     }
@@ -176,13 +178,13 @@ public class AuthlibInjectorSupport {
             resp = CLIENT.send(req, HttpResponse.BodyHandlers.ofInputStream());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("下载 authlib-injector 被中断", e);
+            throw new IOException(I18N.get("auth.t0010"), e);
         }
         if (resp.statusCode() >= 400) {
             try (InputStream ignored = resp.body()) {
                 // drain & close
             }
-            throw new IOException("下载 authlib-injector 失败: HTTP " + resp.statusCode());
+            throw new IOException(I18N.get("auth.p0015", resp.statusCode()));
         }
         try (InputStream is = resp.body()) {
             Files.copy(is, target, StandardCopyOption.REPLACE_EXISTING);
@@ -191,7 +193,7 @@ public class AuthlibInjectorSupport {
             String actual = sha256(target);
             if (!expectedSha256.equalsIgnoreCase(actual)) {
                 Files.deleteIfExists(target);
-                throw new IOException("authlib-injector SHA-256 校验失败 (期望 " + expectedSha256 + "，实际 " + actual + ")");
+                throw new IOException(I18N.get("authl.r0001", expectedSha256, actual));
             }
         }
     }
@@ -208,7 +210,7 @@ public class AuthlibInjectorSupport {
             resp = CLIENT.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("请求被中断: " + url, e);
+            throw new IOException(I18N.get("auth.p0016", url), e);
         }
         if (resp.statusCode() >= 400) {
             throw new IOException("HTTP " + resp.statusCode() + " (GET " + url + ")");
@@ -230,7 +232,7 @@ public class AuthlibInjectorSupport {
             }
             return sb.toString();
         } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IOException("SHA-256 算法不可用", e);
+            throw new IOException(I18N.get("auth.t0011"), e);
         }
     }
 }

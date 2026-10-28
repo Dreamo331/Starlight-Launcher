@@ -1,5 +1,7 @@
 package com.example.starlight.colorblind;
 
+
+import com.example.starlight.util.I18N;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -66,7 +68,7 @@ public final class ColorBlindMatrices {
         result.addProperty("ok", types.size() > 0);
         result.add("types", types);
         if (types.size() == 0) {
-            result.addProperty("message", "未能从 ColorBlindOverlay.exe 读取模拟矩阵");
+            result.addProperty("message", I18N.get("colorblind.t0036"));
         }
         return result;
     }

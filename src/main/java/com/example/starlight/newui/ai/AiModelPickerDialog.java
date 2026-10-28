@@ -1,5 +1,7 @@
 package com.example.starlight.newui.ai;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AiConfig;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.newui.LauncherContext;
@@ -107,13 +109,13 @@ public final class AiModelPickerDialog {
         VBox body = new VBox(8);
         body.setAlignment(Pos.TOP_CENTER);
         body.getChildren().add(dialogIcon());
-        body.getChildren().add(centered("选择模型", "modal-card-title"));
-        body.getChildren().add(centered("用于分析崩溃日志的模型，可联网获取，也可直接用内置模型\n" + addressHint(),
+        body.getChildren().add(centered(I18N.get("ai.t0003"), "modal-card-title"));
+        body.getChildren().add(centered(I18N.get("ai.p0027", addressHint()),
                 "modal-hint"));
         body.getChildren().add(searchRow());
 
         listBox = new VBox(6);
-        emptyNote = centered("没有匹配的模型", "install-target-empty");
+        emptyNote = centered(I18N.get("ai.t0004"), "install-target-empty");
         emptyNote.setVisible(false);
         emptyNote.setManaged(false);
         listBox.getChildren().add(emptyNote);
@@ -147,7 +149,7 @@ public final class AiModelPickerDialog {
         // 先用内置模型铺列表（立刻可点），再后台拉一次在线列表
         renderModels(AiProviders.presetModels(baseUrl), true);
         if (baseUrl.isEmpty()) {
-            setStatus("未填写 API 地址，当前是内置模型；也可关掉弹窗直接手打模型名", false);
+            setStatus(I18N.get("ai.t0005"), false);
         } else {
             fetchAsync();
         }
@@ -176,8 +178,8 @@ public final class AiModelPickerDialog {
 
     private String addressHint() {
         AiProviders.Provider p = AiProviders.matchByBaseUrl(baseUrl);
-        if (baseUrl.isEmpty()) return "当前未填写 API 地址";
-        return "当前地址：" + baseUrl + (p == null ? "" : "（" + p.name() + "）");
+        if (baseUrl.isEmpty()) return I18N.get("ai.t0006");
+        return I18N.get("ai.p0028", baseUrl + (p == null ? "" : "（" + p.name() + "）"));
     }
 
     private static Label centered(String text, String styleClass) {
@@ -192,7 +194,7 @@ public final class AiModelPickerDialog {
     /** 搜索框：放大镜 + 透明输入框 + 清除按钮（与下载路径弹窗同一套样式） */
     private Node searchRow() {
         searchField = new TextField();
-        searchField.setPromptText("搜索模型");
+        searchField.setPromptText(I18N.get("ai.t0007"));
         searchField.getStyleClass().add("install-target-search-field");
         HBox.setHgrow(searchField, Priority.ALWAYS);
         searchField.textProperty().addListener((o, a, b) -> filter(b));
@@ -220,7 +222,7 @@ public final class AiModelPickerDialog {
 
     /** 通栏虚线按钮：联网获取模型列表 */
     private Button fetchButton() {
-        fetchBtn = new Button("从服务商获取模型列表");
+        fetchBtn = new Button(I18N.get("ai.t0008"));
         fetchBtn.getStyleClass().add("install-target-browse");
         AppIcons.apply(fetchBtn, "refresh", 14, null);
         fetchBtn.setMaxWidth(Double.MAX_VALUE);
@@ -229,13 +231,13 @@ public final class AiModelPickerDialog {
     }
 
     private HBox actions() {
-        Button cancelBtn = new Button("取消");
+        Button cancelBtn = new Button(I18N.get("ai.t0009"));
         cancelBtn.getStyleClass().add("modal-btn-cancel");
         cancelBtn.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(cancelBtn, Priority.ALWAYS);
         cancelBtn.setOnAction(e -> host.ui().closeModal());
 
-        confirmBtn = new Button("使用此模型");
+        confirmBtn = new Button(I18N.get("ai.t0010"));
         confirmBtn.getStyleClass().add("modal-btn-ok");
         confirmBtn.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(confirmBtn, Priority.ALWAYS);
@@ -295,7 +297,7 @@ public final class AiModelPickerDialog {
         Label nameLabel = new Label(model);
         nameLabel.getStyleClass().add("install-target-name");
         nameLabel.setTextOverrun(OverrunStyle.ELLIPSIS);
-        Label subLabel = new Label(preset ? subTitleFor(model) : "在线获取");
+        Label subLabel = new Label(preset ? subTitleFor(model) : I18N.get("ai.t0011"));
         subLabel.getStyleClass().add("install-target-sub");
         subLabel.setTextOverrun(OverrunStyle.ELLIPSIS);
         VBox info = new VBox(2, nameLabel, subLabel);
@@ -304,7 +306,7 @@ public final class AiModelPickerDialog {
 
         HBox head = new HBox(10, radio, iconBox, info);
         head.setAlignment(Pos.CENTER_LEFT);
-        if (preset) head.getChildren().add(badge("内置", "shared"));
+        if (preset) head.getChildren().add(badge(I18N.get("ai.t0012"), "shared"));
 
         VBox rowNode = new VBox(head);
         rowNode.getStyleClass().add("install-target-row");
@@ -330,7 +332,7 @@ public final class AiModelPickerDialog {
                 if (m.equalsIgnoreCase(model)) return p.name();
             }
         }
-        return "内置模型";
+        return I18N.get("ai.t0013");
     }
 
     private static Label badge(String text, String kind) {
@@ -384,7 +386,7 @@ public final class AiModelPickerDialog {
     private void confirm() {
         Row sel = selectedRow();
         if (sel == null) {
-            setStatus("先在上面的列表里点一个模型", false);
+            setStatus(I18N.get("ai.t0014"), false);
             return;
         }
         host.ui().closeModal();
@@ -396,12 +398,12 @@ public final class AiModelPickerDialog {
     private void fetchAsync() {
         if (fetching) return;
         if (baseUrl.isEmpty()) {
-            setStatus("未填写 API 地址，当前是内置模型；也可关掉弹窗直接手打模型名", false);
+            setStatus(I18N.get("ai.t0015"), false);
             return;
         }
         fetching = true;
         if (fetchBtn != null) fetchBtn.setDisable(true);
-        setStatus("正在获取模型列表…", false);
+        setStatus(I18N.get("ai.t0016"), false);
 
         String base = AiConfig.normalizeBaseUrl(baseUrl);
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
@@ -411,20 +413,20 @@ public final class AiModelPickerDialog {
                     fetching = false;
                     if (fetchBtn != null) fetchBtn.setDisable(false);
                     renderModels(models, false);
-                    setStatus("已获取 " + models.size() + " 个模型", true);
+                    setStatus(I18N.get("aimp.r0001", models.size()), true);
                 });
             } catch (Exception ex) {
                 Platform.runLater(() -> {
                     fetching = false;
                     if (fetchBtn != null) fetchBtn.setDisable(false);
-                    setStatus("获取失败：" + messageOf(ex) + "（列表里是内置模型，也可手动输入）", false);
+                    setStatus(I18N.get("aimp.r0002", messageOf(ex)), false);
                 });
             }
         });
     }
 
     private static String messageOf(Throwable t) {
-        if (t == null) return "未知错误";
+        if (t == null) return I18N.get("ai.t0017");
         String msg = t.getMessage();
         if (msg == null || msg.isBlank()) msg = t.getClass().getSimpleName();
         return msg.replaceAll("\\s+", " ").trim();
@@ -436,6 +438,7 @@ public final class AiModelPickerDialog {
         // 失败用暖色、成功/普通用灰，不改样式类（避免污染 .modal-hint 的主题色）
         statusLabel.setStyle(ok
                 ? "-fx-text-fill: #16a34a;"
+                // i18n-lock: 不要翻译此行中文——识别内部状态文案前缀（改为稳定标识更佳，见下），翻译即功能失效
                 : (text != null && text.startsWith("获取失败") ? "-fx-text-fill: #d97706;" : ""));
     }
 }

@@ -1,6 +1,7 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.service;
 
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.model.*;
 import com.example.starlight.listsaves.listsaves;
 
@@ -49,7 +50,8 @@ public class SaveService {
     public static List<SaveInfo> listSaves() {
         Map<String, String> cfg = com.example.starlight.config.StarlightConfig.readConfig();
         String gameDir = cfg.getOrDefault("GameDir", ".minecraft");
-        String version = cfg.getOrDefault("Version", "");
+        // 版本选择真源：当前游戏目录内的 starlight.json
+        String version = SelectedVersion.of(gameDir);
         return version.isEmpty() ? Collections.emptyList() : listSaves(gameDir, version);
     }
 

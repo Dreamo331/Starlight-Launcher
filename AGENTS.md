@@ -59,27 +59,28 @@ starlight-launcher/
 │   ├── download/          下载调度（engine / source / task / mod 四层）
 │   ├── ModsApi/           Modrinth / CurseForge / mcmod 中文词典
 │   ├── auth/ loginmicrosoft/   微软登录、外置登录、authlib-injector、离线皮肤
-│   ├── slan/ frp/         SLan 联机模块、FRP 中继
+│   ├── slan/ frp/         SLan 联机模块、SakuraFrp 联机
 │   ├── crash/ log/        崩溃诊断、日志上传（Logshare）
 │   ├── plugin/ pluginapi/ 插件系统与本机 HTTP API（仅绑定 127.0.0.1）
-│   ├── config/            AppDirs（数据目录唯一真源）、Endpoints、迁移
+│   ├── config/            AppDirs（数据目录唯一真源）、SelectedVersion（版本选择唯一真源）、Endpoints、迁移
 │   ├── community/         第三方社区站点 API 客户端
 │   └── util/              更新检查、网络、图片、WebP 解码等
 │
 ├── src/main/resources/    图片、i18n、css、字体、游戏资源模板、logback.xml
-├── lib/                   cape-url-patch-agent.jar（被 LocalCapeProxy 引用，勿删）
+├── lib/                   cape-url-patch-agent.jar（agent 唯一真源；被 LocalCapeProxy 引用，勿删）
 ├── native/                management_stub.c（被 pom 的 JNI 注册引用，勿删）
 │
 ├── references/            只读参考：PCL / HMCL / XMCL 上游源码（不入库，可重建）
 └── .minecraft/            本机测试游戏目录（不入库）
 ```
 
-**六个"唯一真源"（改之前先确认你改的是不是它）：**
+**七个"唯一真源"（改之前先确认你改的是不是它）：**
 
 | 事项 | 唯一真源 |
 |---|---|
 | 版本号 | `newui/AppConfig.java` → `APP_VERSION`（改完同步 `pom.xml`、`latest_version.json`、tag） |
 | 用户数据路径 | `config/AppDirs.java`（禁止再写 `Starlight-Launcher/...` 字面量） |
+| **版本选择（启动哪个版本）** | **各游戏目录内的 `starlight.json`，统一走 `config/SelectedVersion.java`；`starlight.ini` 已不再保存 `Version`** |
 | 第三方地址 | `config/Endpoints.java` + `src/main/resources/assets/endpoints.json` |
 | 站点真实密钥 | `src/main/resources/assets/endpoints.local.json`（**已 gitignore，绝不提交**） |
 | 法律条款 | `docs/` 下那份 `.md` 本身，其他地方只做引用不复述 |

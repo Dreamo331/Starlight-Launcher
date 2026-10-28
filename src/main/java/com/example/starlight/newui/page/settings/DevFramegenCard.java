@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.framegen.FramegenEngine;
 import com.example.starlight.newui.framegen.FramegenNative;
@@ -45,7 +47,7 @@ final class DevFramegenCard {
 
     private final RenderFpsChart chart = new RenderFpsChart(820, 200);
 
-    private final Label statusLabel = new Label("未启动");
+    private final Label statusLabel = new Label(I18N.get("fgen.t0001"));
     private final Label renderFpsLabel = new Label("—");
     private final Label captureFpsLabel = new Label("—");
     private final Label interpMsLabel = new Label("—");
@@ -53,13 +55,16 @@ final class DevFramegenCard {
     private final Label displayLabel = new Label("—");
     private final Label detailLabel = new Label("");
 
-    private final Button startButton = new Button("开始采样");
-    private final Button stopButton = new Button("停止");
+    private final Button startButton = new Button(I18N.get("fgen.t0002"));
+    private final Button stopButton = new Button(I18N.get("fgen.t0003"));
 
     private Timeline sampler;
 
     /** 本次采样绑定的游戏 PID（用于检测游戏是否已退出） */
     private int activePid = -1;
+
+    /** 最近一次启动是否失败（替代「先读状态标签文案再比较」的判断方式） */
+    private boolean startFailed;
 
     DevFramegenCard(LauncherContext host, IntSupplier gamePidSupplier) {
         this.host = host;
@@ -73,19 +78,19 @@ final class DevFramegenCard {
         HBox metrics = new HBox(26);
         metrics.setAlignment(Pos.CENTER_LEFT);
         metrics.getChildren().addAll(
-                metric("渲染帧率", renderFpsLabel),
-                metric("捕获帧率", captureFpsLabel),
-                metric("插值耗时", interpMsLabel),
-                metric("插值帧占比", ratioLabel),
-                metric("显示上限", displayLabel),
-                metric("状态", statusLabel));
+                metric(I18N.get("fgen.t0004"), renderFpsLabel),
+                metric(I18N.get("fgen.t0005"), captureFpsLabel),
+                metric(I18N.get("fgen.t0006"), interpMsLabel),
+                metric(I18N.get("fgen.t0007"), ratioLabel),
+                metric(I18N.get("fgen.t0008"), displayLabel),
+                metric(I18N.get("fgen.t0009"), statusLabel));
 
         HBox legend = new HBox(18);
         legend.setAlignment(Pos.CENTER_LEFT);
         legend.getChildren().addAll(
-                legendDot("#3ddc84", "渲染帧率（真实帧 + 插值帧）"),
-                legendDot("#4a9eff", "捕获帧率"),
-                legendDot("#ffb020", "显示器刷新率上限"));
+                legendDot("#3ddc84", I18N.get("fgen.t0010")),
+                legendDot("#4a9eff", I18N.get("fgen.t0011")),
+                legendDot("#ffb020", I18N.get("fgen.t0012")));
 
         HBox buttons = new HBox(10, startButton, stopButton);
         buttons.setAlignment(Pos.CENTER_LEFT);
@@ -96,10 +101,8 @@ final class DevFramegenCard {
         box.getChildren().addAll(metrics, chart, legend, buttons, detailLabel);
 
         return PageKit.settingsCardStacked(
-                "游戏窗口帧率",
-                "渲染帧数（不是显示器显示帧数）。绿色曲线是我们实际生成并提交呈现的帧数，"
-                        + "包含真实帧与插值帧；橙色虚线是显示器刷新率上限——"
-                        + "绿色高于虚线说明多渲染的帧屏幕吃不下，属于纯浪费。",
+                I18N.get("fgen.t0013"),
+                I18N.get("fgen.t0038"),
                 box);
     }
 
@@ -141,10 +144,8 @@ final class DevFramegenCard {
     private void refreshAvailability() {
         if (!FramegenNative.ensureLoaded()) {
             startButton.setDisable(true);
-            statusLabel.setText("DLL 不可用");
-            detailLabel.setText("framegen.dll 加载失败：" + FramegenNative.describeInstallation()
-                    + "\n请把 build\\framegen.dll 复制到 "
-                    + FramegenNative.dllPath().getParent());
+            statusLabel.setText(I18N.get("fgen.t0014"));
+            detailLabel.setText(I18N.get("fgen.p0039", FramegenNative.describeInstallation(), FramegenNative.dllPath().getParent()));
             return;
         }
 
@@ -153,23 +154,22 @@ final class DevFramegenCard {
         final GameProcessLocator.Target t = GameProcessLocator.locate();
         if (t.isValid()) {
             detailLabel.setText("DLL " + FramegenNative.version()
-                    + " · 目标：" + t.description()
-                    + " · 来源：" + sourceName(t.source()));
+                    + I18N.get("fgen.r0001", t.description())
+                    + I18N.get("fgen.r0002", sourceName(t.source())));
         } else {
             detailLabel.setText("DLL " + FramegenNative.version()
-                    + " 就绪，但没找到 Minecraft 进程（" + t.description() + "）"
-                    + "\n请先启动游戏（窗口化），再点「开始采样」。");
+                    + I18N.get("fgen.r0003", t.description()));
         }
     }
 
     private static String sourceName(GameProcessLocator.Source s) {
         switch (s) {
             case REGISTRY:
-                return "启动器实例注册表";
+                return I18N.get("fgen.t0015");
             case SCAN:
-                return "进程扫描";
+                return I18N.get("fgen.t0016");
             default:
-                return "无";
+                return I18N.get("fgen.t0017");
         }
     }
 
@@ -182,7 +182,7 @@ final class DevFramegenCard {
             return;
         }
         if (!FramegenNative.ensureLoaded()) {
-            toast("framegen.dll 不可用");
+            toast(I18N.get("fgen.t0018"));
             return;
         }
 
@@ -193,7 +193,7 @@ final class DevFramegenCard {
             if (t.isValid()) {
                 pid = t.pid();
             } else {
-                toast("没找到 Minecraft 进程：" + t.description());
+                toast(I18N.get("fgen.k0001", t.description()));
                 refreshAvailability();
                 return;
             }
@@ -204,9 +204,10 @@ final class DevFramegenCard {
             final int rc = FramegenEngine.start(pid, 1, 120, FramegenEngine.Rect.ZERO);
             if (rc != 0) {
                 final String err = FramegenEngine.lastError();
-                toast("启动帧插值失败（rc=" + rc + "）："
-                        + (err.isEmpty() ? "见 framegen-dll.log" : err));
-                statusLabel.setText("启动失败");
+                toast(I18N.get("fgen.k0020", rc + "）："
+                        + (err.isEmpty() ? I18N.get("fgen.t0019") : err)));
+                statusLabel.setText(I18N.get("fgen.t0020"));
+                startFailed = true;
                 detailLabel.setText(explainStartFailure(rc, err));
                 return;
             }
@@ -221,31 +222,31 @@ final class DevFramegenCard {
 
         startButton.setDisable(true);
         stopButton.setDisable(false);
-        statusLabel.setText("采样中");
+        statusLabel.setText(I18N.get("fgen.t0021"));
     }
 
     /** 把原生返回码翻译成人话 */
     private static String explainStartFailure(int rc, String err) {
-        final StringBuilder sb = new StringBuilder("启动失败 rc=").append(rc).append("：");
+        final StringBuilder sb = new StringBuilder(I18N.get("fgen.t0022")).append(rc).append("：");
         switch (rc) {
             case -1:
-                sb.append("原生侧初始化失败。常见原因：\n")
-                        .append("· 目标不是窗口化的 Minecraft（独占全屏无法捕获）\n")
-                        .append("· 启动器与游戏权限层级不一致（同为管理员或同为普通用户）\n")
-                        .append("· 系统低于 Windows 10 1903（不支持 Graphics Capture）");
+                sb.append(I18N.get("fgen.t0023"))
+                        .append(I18N.get("fgen.t0024"))
+                        .append(I18N.get("fgen.t0025"))
+                        .append(I18N.get("fgen.t0026"));
                 break;
             case -2:
-                sb.append("初始化超时（15 秒）。捕获源可能卡住了，重试一次通常就好。");
+                sb.append(I18N.get("fgen.t0027"));
                 break;
             case -100:
-                sb.append("framegen.dll 未加载。检查文件是否在 ")
+                sb.append(I18N.get("fgen.t0028"))
                         .append(FramegenNative.dllPath());
                 break;
             case -102:
-                sb.append("PID 无效。");
+                sb.append(I18N.get("fgen.t0029"));
                 break;
             default:
-                sb.append(err.isEmpty() ? "未知原因，见 framegen-dll.log" : err);
+                sb.append(err.isEmpty() ? I18N.get("fgen.t0030") : err);
                 break;
         }
         return sb.toString();
@@ -267,9 +268,12 @@ final class DevFramegenCard {
         activePid = -1;
         startButton.setDisable(false);
         stopButton.setDisable(true);
-        if (!"启动失败".equals(statusLabel.getText())) {
-            statusLabel.setText("已停止");
+        // 旧实现用 "启动失败".equals(statusLabel.getText()) 判断，语言一换就恒为 false，
+        // 失败态会被覆盖成「已停止」。改用显式状态位，文案只负责显示。
+        if (!startFailed) {
+            statusLabel.setText(I18N.get("fgen.t0031"));
         }
+        startFailed = false;
     }
 
     /** 每次采样：拉一次原生快照，喂给图表与指标 */
@@ -291,7 +295,7 @@ final class DevFramegenCard {
 
         // 目标窗口关掉了
         if (st.closed) {
-            statusLabel.setText("目标窗口已关闭");
+            statusLabel.setText(I18N.get("fgen.t0032"));
             stopSampling(true);
             refreshAvailability();
             return;
@@ -299,7 +303,7 @@ final class DevFramegenCard {
 
         // 游戏进程退出了（原生侧可能还没报 closed，这里主动兜底）
         if (activePid > 0 && !GameProcessLocator.isAlive(activePid)) {
-            statusLabel.setText("游戏已退出");
+            statusLabel.setText(I18N.get("fgen.t0033"));
             stopSampling(true);
             refreshAvailability();
             return;
@@ -307,20 +311,20 @@ final class DevFramegenCard {
 
         // 原生侧会话没了（异常退出）
         if (!st.presenting && !st.running && !FramegenEngine.isRunning()) {
-            statusLabel.setText("已结束");
+            statusLabel.setText(I18N.get("fgen.t0034"));
             stopSampling(false);
             refreshAvailability();
             return;
         }
 
         if (!st.running && st.presenting) {
-            statusLabel.setText("直通中");
+            statusLabel.setText(I18N.get("fgen.t0035"));
         } else if (st.running) {
-            statusLabel.setText("插值中");
+            statusLabel.setText(I18N.get("fgen.t0036"));
         }
 
         detailLabel.setText(String.format(
-                "%s · %dx%d · 已渲染 %,d 帧（真实 %,d / 插值 %,d）· 捕获 %,d · 丢弃 %d · 重建 %d",
+                I18N.get("fgen.t0037"),
                 st.qualityName(), st.width, st.height,
                 st.renderedFrames, st.realFrames, st.interpFrames,
                 st.capturedFrames, st.droppedFrames, st.rebuildCount));

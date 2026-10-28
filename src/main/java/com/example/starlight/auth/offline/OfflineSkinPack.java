@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.auth.offline;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.lang.GameLanguage;
 import com.example.starlight.util.VanillaVersion;
 import com.google.gson.Gson;
@@ -90,7 +92,7 @@ public final class OfflineSkinPack {
         }
 
         if (vanilla == null || vanilla.major() < 6) {
-            LOG.warn("Minecraft 版本过老，尚不支持自定义离线皮肤（{}）", vanilla);
+            LOG.warn(I18N.get("offline.t0036"), vanilla);
             cleanup(gameDir, version, versionIsolation);
             return false;
         }
@@ -99,19 +101,19 @@ public final class OfflineSkinPack {
             boolean slim = skin.isBuiltin() ? skin.isSlimBuiltin() : skin.isSlim();
             byte[] png = loadTextureBytes(skin, username);
             if (png == null) {
-                LOG.warn("皮肤贴图加载失败，清理离线皮肤资源包");
+                LOG.warn(I18N.get("offline.t0037"));
                 cleanup(gameDir, version, versionIsolation);
                 return false;
             }
 
             // 1.6/1.7 不支持双层皮肤：64×64 裁剪为 64×32（与 PCL2 一致）
             if ((vanilla.major() == 6 || vanilla.major() == 7) && isDoubleLayer(png)) {
-                LOG.info("该 Minecraft 版本不支持双层皮肤，已进行裁剪");
+                LOG.info(I18N.get("offline.t0038"));
                 png = clipToLegacy(png);
             }
 
             int packFormat = packFormat(vanilla);
-            LOG.info("正在构建自定义皮肤资源包：{}，格式 {}", ZIP_NAME, packFormat);
+            LOG.info(I18N.get("offline.t0039"), ZIP_NAME, packFormat);
 
             Files.createDirectories(zipFile.getParent());
             writeZip(zipFile, png, slim, vanilla, packFormat);
@@ -121,13 +123,13 @@ public final class OfflineSkinPack {
                 Path legacy = zipFile.getParent().resolve(name);
                 if (Files.exists(legacy)) {
                     Files.delete(legacy);
-                    LOG.info("已删除遗留离线皮肤资源包：{}", legacy);
+                    LOG.info(I18N.get("offline.t0040"), legacy);
                 }
             }
             enableInOptions(gameDir, version, versionIsolation, vanilla);
             return true;
         } catch (Exception e) {
-            LOG.error("离线皮肤资源包构建失败：{}", e.getMessage());
+            LOG.error(I18N.get("offline.t0041"), e.getMessage());
             cleanup(gameDir, version, versionIsolation);
             return false;
         }
@@ -144,12 +146,12 @@ public final class OfflineSkinPack {
                 Path zipFile = effectiveGameDir.resolve("resourcepacks").resolve(name);
                 if (Files.exists(zipFile)) {
                     Files.delete(zipFile);
-                    LOG.info("已删除离线皮肤资源包：{}", zipFile);
+                    LOG.info(I18N.get("offline.t0042"), zipFile);
                 }
             }
             disableInOptions(gameDir, version, versionIsolation);
         } catch (IOException e) {
-            LOG.warn("离线皮肤资源包清理失败：{}", e.getMessage());
+            LOG.warn(I18N.get("offline.t0043"), e.getMessage());
         }
     }
 
@@ -209,7 +211,7 @@ public final class OfflineSkinPack {
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(zipFile))) {
             // pack.mcmeta：按版本 pack_format，声明本包用途
             byte[] meta = ("{\"pack\":{\"pack_format\":" + packFormat
-                    + ",\"description\":\"Starlight 自定义离线皮肤资源包\"}}")
+                    + ",\"description\":\"" + I18N.get("osp.r0001") + "\"}}")
                     .getBytes(StandardCharsets.UTF_8);
             putEntry(zip, "pack.mcmeta", meta);
 
@@ -283,9 +285,9 @@ public final class OfflineSkinPack {
             options.put(OPTIONS_PAUSE_ON_LOST_FOCUS, "false");
             GameLanguage.writeOptions(
                     GameLanguage.resolveOptionsPath(gameDir, version, versionIsolation), options);
-            LOG.info("离线皮肤资源包已写入 options.txt：{}", GSON.toJson(entries));
+            LOG.info(I18N.get("offline.t0044"), GSON.toJson(entries));
         } catch (IOException e) {
-            LOG.warn("写入 options.txt resourcePacks 失败：{}", e.getMessage());
+            LOG.warn(I18N.get("offline.t0045"), e.getMessage());
         }
     }
 
@@ -300,9 +302,9 @@ public final class OfflineSkinPack {
             if (entries.size() == before) return;
             options.put(OPTIONS_KEY, GSON.toJson(entries));
             GameLanguage.writeOptions(optionsPath, options);
-            LOG.info("已从 options.txt 移除离线皮肤资源包");
+            LOG.info(I18N.get("offline.t0046"));
         } catch (IOException e) {
-            LOG.warn("移除 options.txt resourcePacks 条目失败：{}", e.getMessage());
+            LOG.warn(I18N.get("offline.t0047"), e.getMessage());
         }
     }
 

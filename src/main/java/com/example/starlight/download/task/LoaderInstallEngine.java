@@ -1,5 +1,7 @@
 package com.example.starlight.download.task;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.download.DownloadProviderHolder;
 import com.example.starlight.download.source.DownloadProvider;
 import com.example.starlight.newui.AppConfig;
@@ -14,12 +16,19 @@ import java.nio.file.*;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.ZipFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class LoaderInstallEngine {
 
     private static final Logger LOG = LoggerFactory.getLogger(LoaderInstallEngine.class);
+
+    /** 取消文案统一取下载引擎常量：上层按 message 判断「是取消还是失败」 */
+    private static final String CANCELLED_MESSAGE =
+            com.example.starlight.download.engine.HttpDownloadEngine.CANCELLED_MESSAGE;
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NORMAL)
@@ -67,12 +76,32 @@ public class LoaderInstallEngine {
                                          String loaderVersion, String gameDir,
                                          String javaPath, ProgressCallback progress,
                                          String folderName) {
+        return installLoader(mcVersion, loaderType, loaderVersion, gameDir, javaPath,
+                progress, folderName, null);
+    }
+
+    /**
+     * 安装加载器（支持取消）。
+     *
+     * <p>{@code cancel} 置位后：库文件下载每读 64KB 立即中断、安装器子进程被强杀，
+     * 方法抛出取消异常（不会等到当前文件/当前安装器跑完），由调用方清理未完成的版本目录。
+     *
+     * @param folderName 自定义版本文件夹名（null/空使用标准目录；Forge/NeoForge 安装完成后
+     *                   会将安装结果重命名为自定义目录并合并原版内容，保持版本自包含）
+     * @param cancel     取消标志（可为 null 表示不可取消）
+     * @throws IllegalStateException 用户取消，message 为 {@link HttpDownloadEngine#CANCELLED_MESSAGE}
+     */
+    public static boolean installLoader(String mcVersion, String loaderType,
+                                         String loaderVersion, String gameDir,
+                                         String javaPath, ProgressCallback progress,
+                                         String folderName, AtomicBoolean cancel) {
         if (mcVersion == null || mcVersion.isEmpty()) {
             error(progress, "MC version cannot be empty");
             return false;
         }
         if (gameDir == null) gameDir = ".minecraft";
         if (javaPath == null || javaPath.isEmpty()) javaPath = "java";
+        throwIfCancelled(cancel);
 
         Path gamePath = Path.of(gameDir);
         try {
@@ -96,15 +125,20 @@ public class LoaderInstallEngine {
 
         try {
             return switch (type) {
-                case "fabric" -> installFabric(mcVersion, loaderVersion, gamePath, progress, folderName);
-                case "forge" -> installForge(mcVersion, loaderVersion, gamePath, javaPath, progress, folderName);
-                case "neoforge" -> installNeoForge(mcVersion, loaderVersion, gamePath, javaPath, progress, folderName);
+                case "fabric" -> installFabric(mcVersion, loaderVersion, gamePath, progress, folderName, cancel);
+                case "forge" -> installForge(mcVersion, loaderVersion, gamePath, javaPath, progress, folderName, cancel);
+                case "neoforge" -> installNeoForge(mcVersion, loaderVersion, gamePath, javaPath, progress, folderName, cancel);
+                // FabricAPI / QSL 不是加载器，是 mod jar（对标 HMCL FabricAPIInstallTask）：
+                // 安装 = 下载 jar 放进 mods 目录（直链从 Provider 按版本号反查）
+                case "fabricapi", "qsl" -> installModProvider(mcVersion, type, loaderVersion, gamePath, progress, cancel);
                 default -> {
                     error(progress, "Unsupported loader type: " + loaderType);
                     yield false;
                 }
             };
         } catch (Exception e) {
+            // 取消不是安装失败：必须穿透给调用方，否则会变成「失败」并且不清理未完成目录
+            if (isCancellation(e)) throw (RuntimeException) e;
             LOG.error("Installation failed", e);
             error(progress, "Installation failed: " + e.getMessage());
             return false;
@@ -113,12 +147,67 @@ public class LoaderInstallEngine {
 
     private static boolean installFabric(String mcVersion, String loaderVersion,
                                           Path gameDir, ProgressCallback progress) throws Exception {
-        return installFabric(mcVersion, loaderVersion, gameDir, progress, null);
+        return installFabric(mcVersion, loaderVersion, gameDir, progress, null, null);
+    }
+
+    /**
+     * 安装 FabricAPI / QSL 这类「mod 形态的组件」：下载 jar 放进 {@code mods/} 目录。
+     *
+     * <p>此前下载中心把这类行当加载器传进来，{@code installLoader} 直接报
+     * {@code Unsupported loader type: fabricapi}（2026-10-23 21:14 日志实录）。
+     * 对标 HMCL 的 {@code FabricAPIInstallTask}：它们不是加载器，只是下载 mod jar。
+     *
+     * <p>下载直链按版本号从对应 Provider 反查（FabricAPIProvider / QSLProvider 内部
+     * 有 5 分钟实例缓存，UI 刚查询过列表时直接命中，不再打一遍 Modrinth）。
+     */
+    private static boolean installModProvider(String mcVersion, String type, String loaderVersion,
+                                              Path gameDir, ProgressCallback progress,
+                                              AtomicBoolean cancel) throws Exception {
+        if (loaderVersion == null || loaderVersion.isBlank()) {
+            error(progress, I18N.get("lie.r0001", type));
+            return false;
+        }
+        String providerName = type.equals("fabricapi") ? "FabricAPI" : "QSL";
+        String url = null;
+        for (var p : com.example.starlight.version.VersionDownloadService.LOADER_PROVIDERS) {
+            if (!providerName.equals(p.name())) continue;
+            for (var lv : p.fetchVersions(mcVersion)) {
+                if (loaderVersion.equals(lv.getVersion()) && lv.getDownloadUrl() != null
+                        && lv.getDownloadUrl().startsWith("http")) {
+                    url = lv.getDownloadUrl();
+                    break;
+                }
+            }
+            if (url != null) break;
+        }
+        if (url == null) {
+            error(progress, I18N.get("lie.r0002", providerName, loaderVersion));
+            return false;
+        }
+
+        report(progress, 10, "Downloading " + providerName + " " + loaderVersion + " ...");
+        Path modsDir = gameDir.resolve("mods");
+        Files.createDirectories(modsDir);
+        String fileName = url.substring(url.lastIndexOf('/') + 1);
+        if (fileName.isBlank()) fileName = type + "-" + loaderVersion + ".jar";
+        Path dest = modsDir.resolve(fileName);
+        // 同名文件已存在时先删再下：覆盖旧版本，避免 mods 里堆出两个版本导致游戏崩溃
+        Files.deleteIfExists(dest);
+
+        boolean ok = downloadFile(url, dest, (String) null, cancel);
+        if (!ok) {
+            throwIfCancelled(cancel);
+            error(progress, I18N.get("lie.r0003", providerName, url));
+            return false;
+        }
+        report(progress, 100, providerName + " " + loaderVersion + " 安装完成（已放入 mods 目录）");
+        return true;
     }
 
     private static boolean installFabric(String mcVersion, String loaderVersion,
                                           Path gameDir, ProgressCallback progress,
-                                          String folderName) throws Exception {
+                                          String folderName, AtomicBoolean cancel) throws Exception {
+        throwIfCancelled(cancel);
         if (loaderVersion == null || loaderVersion.isEmpty()) {
             report(progress, 2, "Querying latest Fabric loader version...");
             loaderVersion = fetchLatestFabricLoader(mcVersion);
@@ -156,10 +245,13 @@ public class LoaderInstallEngine {
             int total = libraries.size();
             int completed = 0;
             int errors = 0;
+            List<String> failedLibs = new ArrayList<>();
             Path libDir = gameDir.resolve("libraries");
             report(progress, 15, "Downloading library files (0/" + total + ")...");
 
             for (int i = 0; i < total; i++) {
+                // 每个库之间检查取消：不必等当前库下完才发现用户点了取消
+                throwIfCancelled(cancel);
                 JsonObject lib = libraries.get(i).getAsJsonObject();
                 String name = getJsonString(lib, "name");
                 String url = getJsonString(lib, "url");
@@ -167,18 +259,28 @@ public class LoaderInstallEngine {
                     completed++;
                     continue;
                 }
-                boolean ok = downloadMavenLibrary(name, url, libDir, null);
+                boolean ok = downloadMavenLibrary(name, url, libDir, null, cancel);
                 if (ok) completed++;
-                else errors++;
+                else {
+                    errors++;
+                    failedLibs.add(name);
+                }
                 int pct = 15 + (completed * 60 / Math.max(total, 1));
                 report(progress, Math.min(pct, 75),
                         "下载库文件: " + completed + "/" + total + (errors > 0 ? " (" + errors + " 错误)" : ""));
             }
             if (errors > 0) {
-                LOG.warn("Fabric library download finished with {} failures", errors);
+                // 库下载失败 = 版本残缺 = 启动必崩，绝不能当「安装成功」报出去
+                // （2026-10-22 21:49 日志：sponge-mixin 3 次重试全败，仍报了 100% 完成）
+                LOG.warn("Fabric library download finished with {} failures: {}", errors, failedLibs);
+                error(progress, "库文件下载失败 " + errors + "/" + total + "：\n"
+                        + String.join("\n", failedLibs)
+                        + "\n请检查网络或切换下载源后重试。");
+                return false;
             }
         }
 
+        throwIfCancelled(cancel);
         report(progress, 80, "Writing version config...");
         if (customDir) {
             // 自定义版本目录：将原版 json 内容合并进 profile（自包含），
@@ -236,7 +338,8 @@ public class LoaderInstallEngine {
     private static boolean installForge(String mcVersion, String loaderVersion,
                                          Path gameDir, String javaPath,
                                          ProgressCallback progress,
-                                         String folderName) throws Exception {
+                                         String folderName, AtomicBoolean cancel) throws Exception {
+        throwIfCancelled(cancel);
         String dirName = (folderName == null || folderName.isBlank()) ? mcVersion : folderName.trim();
         boolean useCustomDir = dirName != null && !dirName.isBlank() && !dirName.equals(mcVersion);
         if (loaderVersion == null || loaderVersion.isEmpty()) {
@@ -258,11 +361,12 @@ public class LoaderInstallEngine {
         Files.createDirectories(tempDir);
         Path installerJar = tempDir.resolve("forge-installer-" + loaderVersion + ".jar");
 
-        if (!downloadFile(installerUrl, installerJar, (String) null)) {
+        if (!downloadFile(installerUrl, installerJar, (String) null, cancel)) {
+            throwIfCancelled(cancel);
             String mirrorUrl = BMCLAPI + "/maven/net/minecraftforge/forge/"
                     + mcVersion + "-" + loaderVersion + "/forge-"
                     + mcVersion + "-" + loaderVersion + "-installer.jar";
-            if (!downloadFile(mirrorUrl, installerJar, (String) null)) {
+            if (!downloadFile(mirrorUrl, installerJar, (String) null, cancel)) {
                 error(progress, "Forge installer download failed");
                 return false;
             }
@@ -274,15 +378,21 @@ public class LoaderInstallEngine {
             tempVanillaCopy = ensureVanillaAtStandardDir(gameDir, mcVersion, dirName);
         }
 
+        // 安装器子进程直连官方 maven、不受镜像候选链保护：先把 profile 声明的库
+        // 经镜像链预下载进本地仓库，子进程下载时命中缓存，弱网下不再超时失败
+        preloadInstallerLibraries(installerJar, gameDir, progress);
+
         report(progress, 30, "Running Forge installer...");
         String[] cmd = {javaPath, "-jar", installerJar.toAbsolutePath().toString(),
                 "--installClient", gameDir.toAbsolutePath().toString()};
 
-        boolean installed = runInstallerProcess(cmd, progress);
+        boolean installed = runInstallerProcess(cmd, progress, cancel);
         if (!installed) {
             error(progress, "Forge installer execution failed");
             cleanTempDir(tempDir);
-            removeTempVanillaCopy(gameDir, mcVersion);
+            // 只删本次为安装器临时创建的原版副本，绝不能碰用户本来就有的标准版本目录
+            if (tempVanillaCopy) removeTempVanillaCopy(gameDir, mcVersion);
+            throwIfCancelled(cancel);
             return false;
         }
 
@@ -306,13 +416,13 @@ public class LoaderInstallEngine {
             if (expectedDir == null || !Files.exists(expectedDir)) {
                 error(progress, "Forge installation finished but cannot locate version directory");
                 cleanTempDir(tempDir);
-                removeTempVanillaCopy(gameDir, mcVersion);
+                if (tempVanillaCopy) removeTempVanillaCopy(gameDir, mcVersion);
                 return false;
             }
             if (!expectedDir.getFileName().toString().equals(dirName)) {
                 if (!renameVersionDirTo(expectedDir, dirName, progress)) {
                     cleanTempDir(tempDir);
-                    removeTempVanillaCopy(gameDir, mcVersion);
+                    if (tempVanillaCopy) removeTempVanillaCopy(gameDir, mcVersion);
                     return false;
                 }
                 expectedDir = expectedDir.resolveSibling(dirName);
@@ -322,7 +432,7 @@ public class LoaderInstallEngine {
 
         LOG.info("Forge installation complete, version dir: {}", expectedDir);
         cleanTempDir(tempDir);
-        removeTempVanillaCopy(gameDir, mcVersion);
+        if (tempVanillaCopy) removeTempVanillaCopy(gameDir, mcVersion);
         report(progress, 100, "Forge " + expectedVersionId + " installation complete!");
         return true;
     }
@@ -484,7 +594,8 @@ public class LoaderInstallEngine {
     private static boolean installNeoForge(String mcVersion, String loaderVersion,
                                             Path gameDir, String javaPath,
                                             ProgressCallback progress,
-                                            String folderName) throws Exception {
+                                            String folderName, AtomicBoolean cancel) throws Exception {
+        throwIfCancelled(cancel);
         String dirName = (folderName == null || folderName.isBlank()) ? mcVersion : folderName.trim();
         boolean useCustomDir = dirName != null && !dirName.isBlank() && !dirName.equals(mcVersion);
         if (loaderVersion == null || loaderVersion.isEmpty()) {
@@ -505,7 +616,8 @@ public class LoaderInstallEngine {
         Files.createDirectories(tempDir);
         Path installerJar = tempDir.resolve("neoforge-installer-" + loaderVersion + ".jar");
 
-        if (!downloadFile(installerUrl, installerJar, (String) null)) {
+        if (!downloadFile(installerUrl, installerJar, (String) null, cancel)) {
+            throwIfCancelled(cancel);
             error(progress, "NeoForge installer download failed");
             return false;
         }
@@ -516,15 +628,20 @@ public class LoaderInstallEngine {
             tempVanillaCopy = ensureVanillaAtStandardDir(gameDir, mcVersion, dirName);
         }
 
+        // 同 installForge：安装器子进程的网络不受候选链保护，先经镜像链预下载库
+        preloadInstallerLibraries(installerJar, gameDir, progress);
+
         report(progress, 30, "Running NeoForge installer...");
         String[] cmd = {javaPath, "-jar", installerJar.toAbsolutePath().toString(),
                 "--install-client", gameDir.toAbsolutePath().toString()};
 
-        boolean installed = runInstallerProcess(cmd, progress);
+        boolean installed = runInstallerProcess(cmd, progress, cancel);
         if (!installed) {
             error(progress, "NeoForge installer execution failed");
             cleanTempDir(tempDir);
-            removeTempVanillaCopy(gameDir, mcVersion);
+            // 同上：只删本次临时创建的原版副本，不碰用户已有的标准版本目录
+            if (tempVanillaCopy) removeTempVanillaCopy(gameDir, mcVersion);
+            throwIfCancelled(cancel);
             return false;
         }
 
@@ -540,13 +657,13 @@ public class LoaderInstallEngine {
             if (expectedDir == null || !Files.exists(expectedDir)) {
                 error(progress, "NeoForge installation finished but cannot locate version directory");
                 cleanTempDir(tempDir);
-                removeTempVanillaCopy(gameDir, mcVersion);
+                if (tempVanillaCopy) removeTempVanillaCopy(gameDir, mcVersion);
                 return false;
             }
             if (!expectedDir.getFileName().toString().equals(dirName)) {
                 if (!renameVersionDirTo(expectedDir, dirName, progress)) {
                     cleanTempDir(tempDir);
-                    removeTempVanillaCopy(gameDir, mcVersion);
+                    if (tempVanillaCopy) removeTempVanillaCopy(gameDir, mcVersion);
                     return false;
                 }
                 expectedDir = expectedDir.resolveSibling(dirName);
@@ -556,7 +673,7 @@ public class LoaderInstallEngine {
 
         LOG.info("NeoForge installation complete, version dir: {}", expectedDir);
         cleanTempDir(tempDir);
-        removeTempVanillaCopy(gameDir, mcVersion);
+        if (tempVanillaCopy) removeTempVanillaCopy(gameDir, mcVersion);
         report(progress, 100, "NeoForge " + (expectedDir != null ? expectedDir.getFileName().toString() : loaderVersion) + " installation complete!");
         return true;
     }
@@ -605,48 +722,87 @@ public class LoaderInstallEngine {
         }
     }
 
-    private static boolean runInstallerProcess(String[] cmd, ProgressCallback progress) {
+    /**
+     * 运行加载器安装器子进程。
+     *
+     * <p>输出由独立线程读取（安装器的原始输出要回传给界面），主线程每 200ms 检查一次取消：
+     * 用户点「取消下载」时立即 {@link Process#destroyForcibly()}，不必等安装器自己跑完。
+     */
+    private static boolean runInstallerProcess(String[] cmd, ProgressCallback progress, AtomicBoolean cancel) {
+        Process process = null;
         try {
             LOG.info("Running installer: {}", String.join(" ", cmd));
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.redirectErrorStream(true);
-            Process process = pb.start();
+            process = pb.start();
+            final Process proc = process;
             // 保留最后若干行输出：安装器失败时真正的出错原因就写在里面，
             // 以前只记 exit code，用户只能看到一句「加载器安装失败」，无从排查
             java.util.ArrayDeque<String> tail = new java.util.ArrayDeque<>();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.isBlank()) {
-                        tail.addLast(line.trim());
-                        while (tail.size() > 20) tail.removeFirst();
+            Thread readerThread = new Thread(() -> {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(proc.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.isBlank()) continue;
+                        synchronized (tail) {
+                            tail.addLast(line.trim());
+                            while (tail.size() > 20) tail.removeFirst();
+                        }
                         if (progress != null) {
-                            report(progress, -1, line);
+                            try {
+                                report(progress, -1, line);
+                            } catch (RuntimeException ignored) {
+                                // 进度回调异常（界面已关闭等）不能拖死输出读取
+                            }
                         }
                     }
+                } catch (IOException ignored) {
+                    // 进程被强杀时读线程会拿到流关闭异常，属正常收尾
+                }
+            }, "sl-loader-installer-reader");
+            readerThread.setDaemon(true);
+            readerThread.start();
+
+            // 200ms 轮询：取消置位就强杀安装器进程，不再干等它自己结束
+            while (!process.waitFor(200, TimeUnit.MILLISECONDS)) {
+                if (isCancelled(cancel)) {
+                    process.destroyForcibly();
+                    readerThread.join(1000);
+                    return false;
                 }
             }
-            int exitCode = process.waitFor();
+            readerThread.join(2000);
+            int exitCode = process.exitValue();
             LOG.info("Installer exit code: {}", exitCode);
             if (exitCode != 0) {
-                StringBuilder sb = new StringBuilder("安装器退出码 " + exitCode);
-                for (String l : tail) sb.append("\n").append(l);
-                LOG.error("Installer failed: {}", sb);
+                String tailText;
+                synchronized (tail) {
+                    tailText = String.join("\n", tail);
+                }
+                LOG.error("Installer failed: exit={} tail={}", exitCode, tailText);
                 // 把安装器的实际输出回传给界面，而不是只报一句失败
-                error(progress, "安装器退出码 " + exitCode + "，输出末尾：\n" + String.join("\n", tail));
+                error(progress, "安装器退出码 " + exitCode + "，输出末尾：\n" + tailText);
                 return false;
             }
             return true;
+        } catch (InterruptedException e) {
+            if (process != null) process.destroyForcibly();
+            Thread.currentThread().interrupt();
+            return false;
         } catch (Exception e) {
             LOG.error("Failed to run installer", e);
-            error(progress, "无法运行安装器: " + e);
+            if (process != null) process.destroyForcibly();
+            error(progress, I18N.get("task.p0107", e));
             return false;
         }
     }
 
     private static boolean downloadMavenLibrary(String name, String baseUrl,
-                                                 Path libDir, String expectedSha1) {
+                                                 Path libDir, String expectedSha1,
+                                                 AtomicBoolean cancel) {
         try {
+            throwIfCancelled(cancel);
             String path = resolveMavenPath(name);
             Path dest = libDir.resolve(path);
             if (Files.exists(dest)) {
@@ -657,8 +813,9 @@ public class LoaderInstallEngine {
             }
             Files.createDirectories(dest.getParent());
             String url = baseUrl.endsWith("/") ? baseUrl + path : baseUrl + "/" + path;
-            return downloadFile(url, dest, expectedSha1);
+            return downloadFile(url, dest, expectedSha1, cancel);
         } catch (Exception e) {
+            if (isCancellation(e)) throw (RuntimeException) e;
             LOG.warn("Failed to download library file: {} - {}", name, e.getMessage());
             return false;
         }
@@ -685,50 +842,250 @@ public class LoaderInstallEngine {
     }
 
     private static boolean downloadFile(String url, Path dest, String expectedSha1) {
-        // 按当前下载源注入 URL（BMCLAPI/MCBBS 镜像替换），注入源失败后回退原始 URL
-        String injectedUrl = DownloadProviderHolder.get().injectURL(url);
-        if (downloadFileDirect(injectedUrl, dest, expectedSha1)) {
-            return true;
+        return downloadFile(url, dest, expectedSha1, null);
+    }
+
+    /**
+     * 按候选链下载：镜像优先、官方兜底，失败在候选间<b>轮转</b>重试。
+     *
+     * <p>旧实现是「同一条镜像 URL 连打 3 遍再切官方」——镜像瞬时抖动时等于把失败
+     * 重演 3 次（2026-10-22 21:44~21:49 日志：sponge-mixin 在 BMCLAPI 上 3 次 attempt
+     * 全败耗时 5 分钟，切官方后同样失败，而两源当天实测均可用）。现在每次失败立刻
+     * 换下一候选，总尝试次数 4 次，单次失败代价从「最坏 5 分钟」降到「最坏 1 分钟」。
+     */
+    private static boolean downloadFile(String url, Path dest, String expectedSha1,
+                                        AtomicBoolean cancel) {
+        throwIfCancelled(cancel);
+        List<String> candidates = new ArrayList<>();
+        for (URI u : DownloadProviderHolder.get().injectURLWithCandidates(url)) {
+            String s = u.toString();
+            if (!candidates.contains(s)) candidates.add(s);
         }
-        if (!injectedUrl.equals(url)) {
-            return downloadFileDirect(url, dest, expectedSha1);
+        if (!candidates.contains(url)) candidates.add(url);
+
+        int maxAttempts = Math.max(4, candidates.size() * 2);
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            throwIfCancelled(cancel);
+            String cand = candidates.get(attempt % candidates.size());
+            if (downloadFileDirect(cand, dest, expectedSha1, cancel)) {
+                return true;
+            }
+            if (attempt < maxAttempts - 1) {
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(CANCELLED_MESSAGE);
+                }
+            }
         }
+        LOG.error("Download failed after {} attempts across {} candidates: {}",
+                maxAttempts, candidates.size(), url);
         return false;
     }
 
-    /** 单 URL 下载（3 次重试 + SHA-1 校验） */
-    private static boolean downloadFileDirect(String url, Path dest, String expectedSha1) {
+    /** 单文件 body 读取总时限：库文件/mod jar 都是 MB 级，正常链路几秒完成，60s 是宽松兜底 */
+    private static final long DOWNLOAD_BODY_TIMEOUT_MS = 60_000;
+
+    /** 安装链路专用的 body 读取线程池（读循环放后台，主线程轮询取消与停滞；缓存线程防并行安装时排队） */
+    private static final java.util.concurrent.ExecutorService DOWNLOAD_IO_POOL =
+            java.util.concurrent.Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r, "sl-loader-install-io");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /**
+     * 单 URL 下载一次尝试（含 SHA-1 校验）。
+     *
+     * <p>与旧实现的差异：
+     * <ul>
+     *   <li><b>停滞兜底</b>：body 读取放后台线程，主线程轮询 60s 总时限——
+     *       {@code InputStream.read()} 在对端不发数据时会无限阻塞，旧实现的
+     *       5 分钟 {@code HttpRequest.timeout} 只管到响应头，日志里一次 attempt
+     *       干等 1 分钟以上的根因就在这；</li>
+     *   <li><b>残缺防护</b>：先写 {@code .sl-part} 临时文件，SHA-1 通过后才原子
+     *       move 成正式文件——旧实现直接写目标文件，中途失败留下残缺 jar 还会被
+     *       后续「文件已存在」判定误认为可用；</li>
+     *   <li>重试职责上移到 {@link #downloadFile} 的候选轮转，本方法不再自带 3 次循环。</li>
+     * </ul>
+     */
+    private static boolean downloadFileDirect(String url, Path dest, String expectedSha1,
+                                              AtomicBoolean cancel) {
+        throwIfCancelled(cancel);
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(30))
+                .GET()
+                .build();
+        HttpResponse<InputStream> resp;
         try {
-            for (int attempt = 0; attempt < 3; attempt++) {
-                try {
-                    HttpRequest req = HttpRequest.newBuilder()
-                            .uri(URI.create(url))
-                            .timeout(Duration.ofMinutes(5))
-                            .GET()
-                            .build();
-                    HttpResponse<InputStream> resp = HTTP.send(req,
-                            HttpResponse.BodyHandlers.ofInputStream());
-                    if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
-                        try (InputStream in = resp.body(); OutputStream out = Files.newOutputStream(dest)) {
-                            in.transferTo(out);
-                        }
-                        if (expectedSha1 != null && !verifySha1(dest, expectedSha1)) {
-                            Files.deleteIfExists(dest);
-                            continue;
-                        }
-                        return true;
-                    } else {
-                        LOG.warn("HTTP {}: {}", resp.statusCode(), url);
-                    }
-                } catch (IOException e) {
-                    LOG.warn("Download attempt {}/3 failed: {}", attempt + 1, url);
+            resp = HTTP.send(req, HttpResponse.BodyHandlers.ofInputStream());
+        } catch (Exception e) {
+            if (isCancelled(cancel)) throw new IllegalStateException(CANCELLED_MESSAGE);
+            LOG.warn("Download connect failed: {} - {}", url, e.getMessage());
+            return false;
+        }
+        if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+            LOG.warn("HTTP {}: {}", resp.statusCode(), url);
+            return false;
+        }
+
+        Path tmp = dest.resolveSibling(dest.getFileName() + ".sl-part");
+        java.util.concurrent.Future<Boolean> readTask = DOWNLOAD_IO_POOL.submit(() -> {
+            try (InputStream in = resp.body(); OutputStream out = Files.newOutputStream(tmp)) {
+                byte[] buf = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(buf)) != -1) {
+                    if (isCancelled(cancel)) throw new IllegalStateException(CANCELLED_MESSAGE);
+                    out.write(buf, 0, n);
                 }
-                Thread.sleep(1000);
+            }
+            return true;
+        });
+
+        long deadline = System.currentTimeMillis() + DOWNLOAD_BODY_TIMEOUT_MS;
+        try {
+            while (true) {
+                if (isCancelled(cancel)) {
+                    closeQuietly(resp);
+                    readTask.cancel(true);
+                    throw new IllegalStateException(CANCELLED_MESSAGE);
+                }
+                try {
+                    if (readTask.get(200, TimeUnit.MILLISECONDS)) break;
+                } catch (java.util.concurrent.TimeoutException te) {
+                    if (System.currentTimeMillis() > deadline) {
+                        // 关流让阻塞中的 read() 立刻抛异常退出，不再干等
+                        closeQuietly(resp);
+                        readTask.cancel(true);
+                        LOG.warn("Download body timed out after {}ms: {}", DOWNLOAD_BODY_TIMEOUT_MS, url);
+                        Files.deleteIfExists(tmp);
+                        return false;
+                    }
+                } catch (java.util.concurrent.ExecutionException ee) {
+                    Throwable cause = ee.getCause();
+                    if (isCancellation(cause)) throw (RuntimeException) cause;
+                    LOG.warn("Download read failed: {} - {}", url,
+                            cause == null ? "null" : cause.getMessage());
+                    Files.deleteIfExists(tmp);
+                    return false;
+                }
+            }
+            if (expectedSha1 != null && !verifySha1(tmp, expectedSha1)) {
+                Files.deleteIfExists(tmp);
+                return false;
+            }
+            Files.move(tmp, dest, StandardCopyOption.REPLACE_EXISTING);
+            return true;
+        } catch (InterruptedException ie) {
+            // 等待读循环时被中断（引擎关闭等）：清残件、恢复中断标记，按失败收尾
+            closeQuietly(resp);
+            readTask.cancel(true);
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException ignored) {
+            }
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (IOException ioe) {
+            // 残件清理/原子移动失败：下载本身可能已成功，但目标不可用，按失败处理
+            LOG.warn("Download finalize failed: {} - {}", url, ioe.getMessage());
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException ignored) {
+            }
+            return false;
+        } finally {
+            closeQuietly(resp);
+        }
+    }
+
+    private static void closeQuietly(HttpResponse<InputStream> resp) {
+        try {
+            resp.body().close();
+        } catch (IOException ignored) {
+        }
+    }
+
+    /** 预下载并行度：8 线程。库文件全是 MB 级小文件，瓶颈在 RTT 而非带宽 */
+    private static final int PRELOAD_PARALLELISM = 8;
+
+    /**
+     * 预下载安装器声明需要的库文件（从 installer jar 内的 {@code install_profile.json} 读取）。
+     *
+     * <p>Forge/NeoForge 官方安装器子进程内部直连官方 maven，不走启动器的镜像候选链——
+     * 国内直连 {@code maven.minecraftforge.net} 一抖整个安装就失败（2026-10-22 22:14 日志：
+     * roimfs/securemodules 连续 Read timed out 后报 "Forge installer execution failed"）。
+     * 把 profile 声明的库提前经镜像链下进 {@code libraries/}，安装器下载时命中本地缓存，
+     * 网络控制权回到启动器手里。读不出 profile 时静默跳过（尽力而为的加速，不是硬依赖）。
+     *
+     * <p>实现细节：
+     * <ul>
+     *   <li><b>8 线程并行</b>：库文件全是几十 KB ~ 几 MB 的小文件，瓶颈在每条的连接
+     *       建立与 RTT 而非带宽，串行几十个库要一两分钟，并行后收敛到秒级；</li>
+     *   <li>官方兜底 URL 用 {@code FORGE_MAVEN + path}（{@code /net/minecraftforge/...}，
+     *       官方 maven 没有 {@code /maven/} 前缀，带前缀实测 404）；</li>
+     *   <li>单条失败不阻断其余预下载，也不阻断安装——安装器子进程会再试官方源。</li>
+     * </ul>
+     */
+    private static void preloadInstallerLibraries(Path installerJar, Path gameDir,
+                                                  ProgressCallback progress) {
+        List<String[]> libs = new ArrayList<>();
+        try (ZipFile zf = new ZipFile(installerJar.toFile())) {
+            var entry = zf.getEntry("install_profile.json");
+            if (entry == null) return;
+            String profileJson = new String(zf.getInputStream(entry).readAllBytes(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            JsonObject profile = GSON.fromJson(profileJson, JsonObject.class);
+            JsonArray arr = profile == null ? null : profile.getAsJsonArray("libraries");
+            if (arr == null) return;
+            for (var el : arr) {
+                if (el == null || !el.isJsonObject()) continue;
+                JsonObject lib = el.getAsJsonObject();
+                String name = getJsonString(lib, "name");
+                if (name == null) continue;
+                String url = null;
+                JsonObject dl = lib.getAsJsonObject("download");
+                if (dl != null) url = getJsonString(dl, "url");
+                if (url == null || url.isBlank()) url = FORGE_MAVEN + "/" + resolveMavenPath(name);
+                libs.add(new String[]{name, url});
             }
         } catch (Exception e) {
-            LOG.error("Download failed: {}", url);
+            LOG.info("Skip installer library preload: {}", e.getMessage());
+            return;
         }
-        return false;
+        if (libs.isEmpty()) return;
+        report(progress, 20, "并行预下载安装器库文件 " + libs.size() + " 个（镜像加速）...");
+        Path libDir = gameDir.resolve("libraries");
+        java.util.concurrent.ExecutorService pool =
+                java.util.concurrent.Executors.newFixedThreadPool(PRELOAD_PARALLELISM, r -> {
+                    Thread t = new Thread(r, "sl-installer-preload");
+                    t.setDaemon(true);
+                    return t;
+                });
+        try {
+            List<java.util.concurrent.Future<Boolean>> futures = new ArrayList<>();
+            for (String[] lib : libs) {
+                futures.add(pool.submit(() ->
+                        // 预下载阶段不传 cancel：取消由安装器子进程响应，这里中断反而引入半截状态
+                        downloadMavenLibrary(lib[0], lib[1], libDir, null, null)));
+            }
+            int done = 0;
+            for (var f : futures) {
+                try {
+                    if (f.get()) done++;
+                } catch (java.util.concurrent.ExecutionException ee) {
+                    LOG.warn("Preload task failed: {}", ee.getMessage());
+                }
+            }
+            LOG.info("Installer library preload: {}/{} via mirror chain", done, libs.size());
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            LOG.info("Installer library preload interrupted");
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private static boolean downloadFile(String url, Path dest, String[] mirrors) {
@@ -834,5 +1191,22 @@ public class LoaderInstallEngine {
     private static void error(ProgressCallback cb, String msg) {
         if (cb != null) cb.onProgress(0, msg);
         LOG.error(msg);
+    }
+
+    /** 取消标志是否已置位（null 视为不可取消） */
+    private static boolean isCancelled(AtomicBoolean cancel) {
+        return cancel != null && cancel.get();
+    }
+
+    /** 取消后立刻抛出让安装链路退出；文案与下载引擎统一，供上层识别「取消」而不是「失败」 */
+    private static void throwIfCancelled(AtomicBoolean cancel) {
+        if (isCancelled(cancel)) {
+            throw new IllegalStateException(CANCELLED_MESSAGE);
+        }
+    }
+
+    /** 是否为调用方取消（见 {@link HttpDownloadEngine#CANCELLED_MESSAGE}） */
+    private static boolean isCancellation(Throwable e) {
+        return e instanceof RuntimeException && CANCELLED_MESSAGE.equals(e.getMessage());
     }
 }

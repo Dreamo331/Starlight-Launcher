@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.util;
 
+
+import com.example.starlight.util.I18N;
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -258,7 +260,7 @@ public final class PngBgRemover {
     private static void run(Options opt) throws IOException {
         BufferedImage src = ImageIO.read(opt.input);
         if (src == null) {
-            throw new IOException("无法识别该图片格式: " + opt.input);
+            throw new IOException(I18N.get("util.p0049", opt.input));
         }
 
         src = downscaleIfNeeded(src, opt.maxPixels);
@@ -266,7 +268,7 @@ public final class PngBgRemover {
         final int w = src.getWidth();
         final int h = src.getHeight();
         if (w <= 0 || h <= 0) {
-            throw new IOException("图片尺寸非法");
+            throw new IOException(I18N.get("util.t0022"));
         }
         final long n = (long) w * h;
 
@@ -299,10 +301,10 @@ public final class PngBgRemover {
 
         File parent = opt.output.getAbsoluteFile().getParentFile();
         if (parent != null && !parent.exists() && !parent.mkdirs()) {
-            throw new IOException("无法创建输出目录: " + parent);
+            throw new IOException(I18N.get("util.p0050", parent));
         }
         if (!ImageIO.write(outImg, "png", opt.output)) {
-            throw new IOException("PNG 写出失败: " + opt.output);
+            throw new IOException(I18N.get("util.p0051", opt.output));
         }
 
         System.out.printf("输出      : %s  (%d x %d)%n", opt.output.getPath(), cw, ch);
@@ -325,15 +327,15 @@ public final class PngBgRemover {
                 try {
                     c[i] = Integer.parseInt(parts[i]);
                 } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException("无法解析背景色: " + spec);
+                    throw new IllegalArgumentException(I18N.get("util.p0052", spec));
                 }
                 if (c[i] < 0 || c[i] > 255) {
-                    throw new IllegalArgumentException("颜色分量需在 0..255: " + spec);
+                    throw new IllegalArgumentException(I18N.get("util.p0053", spec));
                 }
             }
             return c;
         }
-        throw new IllegalArgumentException("无法解析背景色: " + spec + "（支持 auto / #RRGGBB / r,g,b）");
+        throw new IllegalArgumentException(I18N.get("png.r0001", spec));
     }
 
     private static final class Options {
@@ -380,10 +382,10 @@ public final class PngBgRemover {
                         break;
                     default:
                         if (a.startsWith("-") && a.length() > 1) {
-                            throw new IllegalArgumentException("未知选项: " + a);
+                            throw new IllegalArgumentException(I18N.get("util.p0054", a));
                         }
                         if (o.input != null) {
-                            throw new IllegalArgumentException("只支持一个输入文件");
+                            throw new IllegalArgumentException(I18N.get("util.t0023"));
                         }
                         o.input = new File(a);
                 }
@@ -392,19 +394,19 @@ public final class PngBgRemover {
             if (o.help) return o;
 
             if (o.input == null) {
-                throw new IllegalArgumentException("缺少输入图片路径");
+                throw new IllegalArgumentException(I18N.get("util.t0024"));
             }
             if (!o.input.isFile()) {
-                throw new IllegalArgumentException("输入文件不存在: " + o.input);
+                throw new IllegalArgumentException(I18N.get("util.p0055", o.input));
             }
             if (o.tolerance < TOL_MIN || o.tolerance > TOL_MAX) {
-                throw new IllegalArgumentException("容差需在 " + TOL_MIN + ".." + TOL_MAX + " 之间");
+                throw new IllegalArgumentException(I18N.get("png.r0002", TOL_MIN, TOL_MAX));
             }
             if (!"flood".equals(o.mode) && !"global".equals(o.mode)) {
-                throw new IllegalArgumentException("模式只能是 flood 或 global");
+                throw new IllegalArgumentException(I18N.get("util.t0025"));
             }
             if (o.maxPixels < 0) {
-                throw new IllegalArgumentException("--max-pixels 不能为负数");
+                throw new IllegalArgumentException(I18N.get("util.t0026"));
             }
             if (o.output == null) {
                 o.output = new File(stripExt(o.input.getName()) + "-transparent.png");
@@ -414,7 +416,7 @@ public final class PngBgRemover {
 
         private static String value(String[] args, int idx, String flag) {
             if (idx >= args.length) {
-                throw new IllegalArgumentException("选项 " + flag + " 缺少参数");
+                throw new IllegalArgumentException(I18N.get("png.r0003", flag));
             }
             return args[idx];
         }
@@ -423,7 +425,7 @@ public final class PngBgRemover {
             try {
                 return Integer.parseInt(s.trim());
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("选项 " + flag + " 需要一个整数，收到: " + s);
+                throw new IllegalArgumentException(I18N.get("png.r0004", flag, s));
             }
         }
 

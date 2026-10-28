@@ -25,6 +25,9 @@ import java.util.List;
 public class FabricAPIProvider implements LoaderProvider {
     private static final String MODRINTH_API = "https://api.modrinth.com/v2/project/P7dR8mSH/version";
 
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(FabricAPIProvider.class);
+
     public String name() { return "FabricAPI"; }
     public String icon() { return ""; }
     public String fallbackUrl() { return "https://modrinth.com/mod/fabric-api"; }
@@ -81,7 +84,9 @@ public class FabricAPIProvider implements LoaderProvider {
 
                 list.add(new LoaderVersion(name(), mv.versionNumber, true, downloadUrl));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LOG.warn("FabricAPI version list query failed for {}: {}", mcVersion, e.getMessage());
+        }
         return list;
     }
 

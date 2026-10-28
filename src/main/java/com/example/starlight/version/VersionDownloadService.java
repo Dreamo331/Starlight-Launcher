@@ -1,5 +1,7 @@
 package com.example.starlight.version;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.download.DownloadProviderHolder;
 import com.example.starlight.download.source.BMCLAPIDownloadProvider;
 import com.example.starlight.download.source.DownloadProvider;
@@ -38,6 +40,9 @@ import java.util.stream.Collectors;
  * - 内存缓存加载器查询结果
  */
 public class VersionDownloadService {
+
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(VersionDownloadService.class);
 
     // 常量 //
 
@@ -95,7 +100,7 @@ public class VersionDownloadService {
      * 换成独立的小线程池后，既不与预热带宽互相排队，也不会污染公共池。
      */
     private static final java.util.concurrent.ExecutorService LOADER_QUERY_POOL =
-            java.util.concurrent.Executors.newFixedThreadPool(8, r -> {
+            java.util.concurrent.Executors.newFixedThreadPool(16, r -> {
                 Thread t = new Thread(r, "sl-loader-query");
                 t.setDaemon(true);
                 return t;
@@ -147,11 +152,11 @@ public class VersionDownloadService {
     // 版本分类 //
 
     public enum VersionCategory {
-        RELEASE("release", "正式版", ""),
-        SNAPSHOT("snapshot", "预览版", ""),
-        OLD("old", "远古版", ""),
-        APRIL("april", "愚人节版", ""),
-        OTHER("other", "其他", "");
+        RELEASE("release", I18N.get("version.t0005"), ""),
+        SNAPSHOT("snapshot", I18N.get("version.t0006"), ""),
+        OLD("old", I18N.get("version.t0007"), ""),
+        APRIL("april", I18N.get("version.t0008"), ""),
+        OTHER("other", I18N.get("version.t0009"), "");
 
         private final String key;
         private final String displayName;
@@ -213,8 +218,8 @@ public class VersionDownloadService {
         public String getDownloadUrl() { return downloadUrl; }
 
         public String getDisplayText() {
-            if (available) return version != null ? version : "可用";
-            return "暂未找到";
+            if (available) return version != null ? version : I18N.get("version.t0001");
+            return I18N.get("version.t0002");
         }
     }
 
@@ -412,10 +417,14 @@ public class VersionDownloadService {
             new FabricAPIProvider(), new QuiltProvider(), new QSLProvider()
     );
 
-    // 内存缓存：key = loaderType + "_" + mcVersion, value = LoaderVersion
+    /** 内存缓存：key = loaderType + "_" + mcVersion，value = 带写入时间的条目（成功结果才入缓存） */
+    private record CacheEntry(LoaderVersion version, long cachedAt) {}
+
+    private static final long LOADER_CACHE_TTL_MS = 30 * 60_000L;
+
     // 用 ConcurrentHashMap：多个加载器查询线程会并发 get/put（预加载与配置页查询时间重叠），
     // 普通 HashMap 在此场景非线程安全（读到半构建的 entry / 丢失 put）。
-    private static final Map<String, LoaderVersion> LOADER_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, CacheEntry> LOADER_CACHE = new ConcurrentHashMap<>();
 
     /** in-flight 去重：key 同上，value = 正在进行的查询。并发调用同一 key 只发一次网络请求 */
     private static final Map<String, CompletableFuture<LoaderVersion>> LOADER_IN_FLIGHT =
@@ -429,7 +438,9 @@ public class VersionDownloadService {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 CompletableFuture<LoaderVersion>[] futures = LOADER_PROVIDERS.stream()
-                        .map(p -> CompletableFuture.supplyAsync(() -> fetchWithCache(p, mcVersion)))
+                        // 必须显式指定专用池：不带 executor 的 supplyAsync 落在 ForkJoinPool.commonPool，
+                        // 会与其他模块的并行流/公共任务互相排队，版本详情页加载器列表因此慢十几秒
+                        .map(p -> CompletableFuture.supplyAsync(() -> fetchWithCache(p, mcVersion), LOADER_QUERY_POOL))
                         .toArray(CompletableFuture[]::new);
 
                 CompletableFuture.allOf(futures).get(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -487,6 +498,7 @@ public class VersionDownloadService {
                     try {
                         return p.fetchVersions(mcVersion);
                     } catch (Exception e) {
+                        LOG.warn("Loader list query failed: {} - {}", p.name(), e.getMessage());
                         return List.of();
                     }
                 }, LOADER_QUERY_POOL));
@@ -609,8 +621,10 @@ public class VersionDownloadService {
     /** 通过 LoaderProvider 查询并缓存（带 in-flight 去重） */
     private static LoaderVersion fetchWithCache(LoaderProvider provider, String mcVersion) {
         String cacheKey = provider.name().toLowerCase(Locale.ROOT) + "_" + mcVersion;
-        LoaderVersion cached = LOADER_CACHE.get(cacheKey);
-        if (cached != null) return cached;
+        CacheEntry entry = LOADER_CACHE.get(cacheKey);
+        if (entry != null && System.currentTimeMillis() - entry.cachedAt() < LOADER_CACHE_TTL_MS) {
+            return entry.version();
+        }
 
         // 并发去重：同一 key 的并发调用共享同一次网络拉取，避免预加载与配置页查询时间重叠时
         // 对同一个 URL 打两遍（日志里曾出现 fabric-meta/neoforge 同 URL 4 秒内发两次）
@@ -634,7 +648,12 @@ public class VersionDownloadService {
         }
         try {
             LoaderVersion result = provider.fetchVersion(mcVersion);
-            LOADER_CACHE.put(cacheKey, result);
+            // 只缓存成功结果：失败（available=false）不进缓存，下次查询立刻重试。
+            // 旧实现把失败结果也 put 进来且永不过期，一次网络抖动 = 本次运行期间
+            // 该加载器永远显示「无」，重启才恢复
+            if (result != null && result.isAvailable() && result.getVersion() != null) {
+                LOADER_CACHE.put(cacheKey, new CacheEntry(result, System.currentTimeMillis()));
+            }
             task.complete(result);
             return result;
         } catch (Exception e) {
@@ -685,8 +704,11 @@ public class VersionDownloadService {
     // 内部工具方法 //
 
     private static LoaderVersion getCachedOrFallback(String type, String mcVersion) {
-        LoaderVersion cached = LOADER_CACHE.get(type + "_" + mcVersion);
-        return cached != null ? cached : new LoaderVersion(
+        CacheEntry entry = LOADER_CACHE.get(type + "_" + mcVersion);
+        if (entry != null && System.currentTimeMillis() - entry.cachedAt() < LOADER_CACHE_TTL_MS) {
+            return entry.version();
+        }
+        return new LoaderVersion(
                 type.substring(0, 1).toUpperCase(Locale.ROOT) + type.substring(1),
                 null, false, null);
     }
@@ -714,12 +736,12 @@ public class VersionDownloadService {
     }
 
     public static String formatDate(String dateISO) {
-        if (dateISO == null || dateISO.isEmpty()) return "未知";
+        if (dateISO == null || dateISO.isEmpty()) return I18N.get("version.t0003");
         try {
             Instant inst = Instant.parse(dateISO);
             java.time.ZonedDateTime zdt = inst.atZone(java.time.ZoneOffset.UTC);
             return zdt.getYear() + "." + zdt.getMonthValue() + "." + zdt.getDayOfMonth();
-        } catch (Exception ignored) { return "未知"; }
+        } catch (Exception ignored) { return I18N.get("version.t0004"); }
     }
 
     // HTTP 和 JSON 工具 //

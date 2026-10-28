@@ -1,5 +1,7 @@
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 /**
  * 一次帧插值运行的状态快照。
  *
@@ -177,13 +179,13 @@ public final class FramegenStats {
     public String qualityName() {
         switch (quality) {
             case 0:
-                return "基础（帧混合）";
+                return I18N.get("framegen.t0068");
             case 1:
-                return "标准（块匹配）";
+                return I18N.get("framegen.t0069");
             case 2:
-                return "神经";
+                return I18N.get("framegen.t0070");
             default:
-                return "未知(" + quality + ")";
+                return I18N.get("framegen.p0145", quality + ")");
         }
     }
 

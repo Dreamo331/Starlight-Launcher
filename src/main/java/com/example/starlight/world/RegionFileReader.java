@@ -1,5 +1,7 @@
 package com.example.starlight.world;
 
+
+import com.example.starlight.util.I18N;
 /**
  * 【占位桩】Region 文件读取器 —— 待接入启动器真实实现。
  *
@@ -24,6 +26,6 @@ public final class RegionFileReader {
     public static byte[] readChunkData(String regionFilePath, int chunkX, int chunkZ) {
         // TODO: 接入真实的 Anvil region 解析实现（偏移表 + 扇区定位 + 解压）。
         throw new UnsupportedOperationException(
-                "RegionFileReader 尚未接入真实实现（占位桩），请实现后删除本桩类");
+                I18N.get("world.t0001"));
     }
 }

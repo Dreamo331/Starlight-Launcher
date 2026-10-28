@@ -11,6 +11,8 @@
  */
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
@@ -27,7 +29,7 @@ public final class FramegenDllSelfTest {
 
         // ---- 1. 定位 DLL ----
         Path dll = FramegenNative.dllPath();
-        check("DLL 文件存在", Files.isRegularFile(dll), dll.toString());
+        check(I18N.get("framegen.t0033"), Files.isRegularFile(dll), dll.toString());
         if (!Files.isRegularFile(dll)) {
             System.out.println("请先构建并部署：build.ps1 -Deploy");
             finish();
@@ -37,7 +39,7 @@ public final class FramegenDllSelfTest {
 
         // ---- 2. 加载 ----
         boolean loaded = FramegenNative.ensureLoaded();
-        check("DLL 加载成功", loaded, FramegenNative.loadError());
+        check(I18N.get("framegen.t0034"), loaded, FramegenNative.loadError());
         if (!loaded) {
             finish();
             return;
@@ -56,7 +58,7 @@ public final class FramegenDllSelfTest {
             if (!Files.isRegularFile(tw)) {
                 tw = Paths.get("build", "framegen-testwindow.exe").toAbsolutePath().normalize();
             }
-            check("测试窗口可执行文件存在", Files.isRegularFile(tw), tw.toString());
+            check(I18N.get("framegen.t0035"), Files.isRegularFile(tw), tw.toString());
             if (!Files.isRegularFile(tw)) {
                 finish();
                 return;
@@ -74,7 +76,7 @@ public final class FramegenDllSelfTest {
             // ---- 4. 启动插值 ----
             int rc = FramegenEngine.start(pid, 1, 120,
                     FramegenEngine.Rect.ZERO);
-            check("nativeStart 返回 0", rc == 0,
+            check(I18N.get("framegen.t0036"), rc == 0,
                     "rc=" + rc + " err=" + FramegenEngine.lastError());
             if (rc != 0) {
                 finish();
@@ -113,19 +115,19 @@ public final class FramegenDllSelfTest {
             }
 
             System.out.println();
-            check("捕获帧数在增长", capturedGrew,
+            check(I18N.get("framegen.t0037"), capturedGrew,
                     "captured=" + last.capturedFrames);
-            check("渲染帧数在增长", renderedGrew,
+            check(I18N.get("framegen.t0038"), renderedGrew,
                     "rendered=" + last.renderedFrames);
-            check("渲染帧数 >= 捕获帧数（插值生效）",
+            check(I18N.get("framegen.t0039"),
                     last.renderedFrames >= last.capturedFrames,
                     last.renderedFrames + " vs " + last.capturedFrames);
-            check("读到了分辨率", last.width > 0 && last.height > 0,
+            check(I18N.get("framegen.t0040"), last.width > 0 && last.height > 0,
                     last.width + "x" + last.height);
-            check("读到了显示器刷新率", last.displayHz > 0,
+            check(I18N.get("framegen.t0041"), last.displayHz > 0,
                     String.valueOf(last.displayHz));
-            check("正在呈现", last.presenting, "presenting=" + last.presenting);
-            check("帧率在合理范围", last.renderFps > 1.0 && last.renderFps < 600.0,
+            check(I18N.get("framegen.t0042"), last.presenting, "presenting=" + last.presenting);
+            check(I18N.get("framegen.t0043"), last.renderFps > 1.0 && last.renderFps < 600.0,
                     String.valueOf(last.renderFps));
 
             System.out.println("\n  最终快照: " + last);
@@ -133,10 +135,10 @@ public final class FramegenDllSelfTest {
             // ---- 6. 停止 ----
             FramegenEngine.stop();
             Thread.sleep(300);
-            check("nativeStop 后不再运行", !FramegenEngine.isRunning(), "");
+            check(I18N.get("framegen.t0044"), !FramegenEngine.isRunning(), "");
 
             FramegenStats afterStop = FramegenEngine.poll();
-            check("停止后计数归零", afterStop.renderedFrames == 0,
+            check(I18N.get("framegen.t0045"), afterStop.renderedFrames == 0,
                     "rendered=" + afterStop.renderedFrames);
 
         } finally {

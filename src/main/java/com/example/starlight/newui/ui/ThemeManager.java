@@ -1,5 +1,7 @@
 package com.example.starlight.newui.ui;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AppDirs;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.update.UpdateInstaller;
@@ -51,17 +53,17 @@ public final class ThemeManager {
 
     public void chooseBackgroundImage(Label infoLabel) {
         FileChooser fc = new FileChooser();
-        fc.setTitle("选择启动器背景图片");
+        fc.setTitle(I18N.get("ui.t0011"));
         fc.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("图片文件", "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif"),
-                new FileChooser.ExtensionFilter("所有文件", "*.*")
+                new FileChooser.ExtensionFilter(I18N.get("ui.t0027"), "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif"),
+                new FileChooser.ExtensionFilter(I18N.get("ui.t0028"), "*.*")
         );
         File f = fc.showOpenDialog(host.stage());
         if (f == null) return;
         // 复制到用户数据目录 wallpaper/ 并重命名为随机 10 位字符串（保留原扩展名）
         File wallpaperDir = AppDirs.wallpaperDir().toFile();
         if (!wallpaperDir.isDirectory() && !wallpaperDir.mkdirs()) {
-            host.ui().toast("无法创建 wallpaper 目录");
+            host.ui().toast(I18N.get("ui.t0012"));
             return;
         }
         String ext = "";
@@ -71,7 +73,7 @@ public final class ThemeManager {
         try {
             Files.copy(f.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            host.ui().toast("背景图片复制失败: " + e.getMessage());
+            host.ui().toast(I18N.get("ui.p0030", e.getMessage()));
             return;
         }
         // 清理 wallpaper 目录中的旧背景文件（只保留最新一张，避免长期积累）
@@ -88,7 +90,7 @@ public final class ThemeManager {
         host.saveConfig();
         applyBackgroundImage();
         if (infoLabel != null) infoLabel.setText(target.getName());
-        host.ui().toast("背景图片已更新");
+        host.ui().toast(I18N.get("ui.t0013"));
     }
 
     /** 应用背景图片（读取配置 BackgroundImage，置于 host.rootPane() 最底层） */

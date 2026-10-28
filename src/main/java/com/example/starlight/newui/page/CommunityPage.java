@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.community.CommunityApi;
 import com.example.starlight.community.CommunityApi.ApiResult;
 import com.example.starlight.community.CommunityApi.CheckinResult;
@@ -99,11 +101,11 @@ public final class CommunityPage {
         // 标题行：帖子列表 + 发布帖子按钮（点击跳转到独立发帖页面）
         HBox postHeader = new HBox(10);
         postHeader.setAlignment(Pos.CENTER_LEFT);
-        Label postTitle = new Label("帖子列表");
+        Label postTitle = new Label(I18N.get("page.t0001"));
         postTitle.getStyleClass().add("home-card-title");
         Region headerSpacer = new Region();
         HBox.setHgrow(headerSpacer, Priority.ALWAYS);
-        Button communityPublishBtn = AppIcons.button("memo", "发布帖子");
+        Button communityPublishBtn = AppIcons.button("memo", I18N.get("page.t0002"));
         communityPublishBtn.getStyleClass().add("btn-primary");
         communityPublishBtn.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white; -fx-padding: 6 16; -fx-font-size: 12px;");
         communityPublishBtn.setOnAction(e -> ctx.switchToPage("postPublish"));
@@ -132,22 +134,21 @@ public final class CommunityPage {
         VBox card = new VBox(10);
         card.getStyleClass().add("community-notice-card");
 
-        Label title = new Label("提示");
+        Label title = new Label(I18N.get("page.t0003"));
         title.getStyleClass().add("community-notice-title");
 
-        Label desc = new Label("帖子API暂时不可用，使用请访问官网 "
-                + Endpoints.communitySiteUrl().replaceFirst("^https?://", ""));
+        Label desc = new Label(I18N.get("page.p0740", Endpoints.communitySiteUrl().replaceFirst("^https?://", "")));
         desc.getStyleClass().add("community-notice-desc");
         desc.setWrapText(true);
 
-        Button websiteBtn = AppIcons.button("external-link", "打开官网");
+        Button websiteBtn = AppIcons.button("external-link", I18N.get("page.t0004"));
         websiteBtn.getStyleClass().add("community-notice-btn");
         websiteBtn.setMaxWidth(Double.MAX_VALUE);
         websiteBtn.setOnAction(e -> {
             try {
                 java.awt.Desktop.getDesktop().browse(new java.net.URI(Endpoints.communitySiteUrl()));
             } catch (Exception ex) {
-                ctx.ui().toast("打开浏览器失败: " + ex.getMessage());
+                ctx.ui().toast(I18N.get("page.p0741", ex.getMessage()));
             }
         });
 
@@ -179,10 +180,10 @@ public final class CommunityPage {
             Label name = new Label(user.username);
             name.getStyleClass().add("community-login-name");
 
-            Label desc = new Label(user.email == null || user.email.isEmpty() ? "星光MC社区用户" : user.email);
+            Label desc = new Label(user.email == null || user.email.isEmpty() ? I18N.get("page.t0005") : user.email);
             desc.getStyleClass().add("community-login-desc");
 
-            Button logoutBtn = AppIcons.button("log-out", "退出登录");
+            Button logoutBtn = AppIcons.button("log-out", I18N.get("page.t0006"));
             logoutBtn.getStyleClass().addAll("community-login-btn");
             logoutBtn.setStyle("-fx-background-color: #ef4444;");
             logoutBtn.setMaxWidth(Double.MAX_VALUE);
@@ -190,20 +191,20 @@ public final class CommunityPage {
                 communityApi.logout();
                 refreshCommunityUserCard();
                 refreshCommunityCheckinCard();
-                ctx.ui().toast("已退出登录");
+                ctx.ui().toast(I18N.get("page.t0007"));
             });
 
             communityUserCard.getChildren().addAll(avatarBox, name, desc, logoutBtn);
             // 异步加载真实头像（未设置或失败时保留 emoji 占位）
             loadCommunityAvatar(avatarBox, avatarFallback, "community-avatar-lg", user.id, 64);
         } else {
-            Label name = new Label("未登录");
+            Label name = new Label(I18N.get("page.t0008"));
             name.getStyleClass().add("community-login-name");
 
-            Label desc = new Label("登录后即可发帖、点赞、评论");
+            Label desc = new Label(I18N.get("page.t0009"));
             desc.getStyleClass().add("community-login-desc");
 
-            Button loginBtn = AppIcons.button("user", "登录");
+            Button loginBtn = AppIcons.button("user", I18N.get("page.t0010"));
             loginBtn.getStyleClass().addAll("btn-primary", "community-login-btn");
             loginBtn.setMaxWidth(Double.MAX_VALUE);
             loginBtn.setOnAction(e -> showCommunityLoginDialog());
@@ -268,38 +269,38 @@ public final class CommunityPage {
 
         // 登录方式切换：账号登录 / 令牌登录 //
         ToggleGroup modeGroup = new ToggleGroup();
-        ToggleButton accountModeBtn = AppIcons.toggle("user", "账号登录");
+        ToggleButton accountModeBtn = AppIcons.toggle("user", I18N.get("page.t0011"));
         accountModeBtn.getStyleClass().add("login-mode-toggle");
         accountModeBtn.setToggleGroup(modeGroup);
         accountModeBtn.setSelected(true);
-        ToggleButton tokenModeBtn = AppIcons.toggle("key", "令牌登录");
+        ToggleButton tokenModeBtn = AppIcons.toggle("key", I18N.get("page.t0012"));
         tokenModeBtn.getStyleClass().add("login-mode-toggle");
         tokenModeBtn.setToggleGroup(modeGroup);
         HBox modeBox = new HBox(0, accountModeBtn, tokenModeBtn);
         modeBox.setAlignment(Pos.CENTER);
 
         // 账号密码输入区 //
-        Label userLabel = new Label("用户名:");
+        Label userLabel = new Label(I18N.get("page.t0013"));
         userLabel.getStyleClass().add("modal-text");
         TextField usernameField = new TextField();
-        usernameField.setPromptText("玩家名");
+        usernameField.setPromptText(I18N.get("page.t0014"));
         usernameField.getStyleClass().add("input-field");
         usernameField.setPrefWidth(Double.MAX_VALUE);
-        Label passLabel = new Label("密码:");
+        Label passLabel = new Label(I18N.get("page.t0015"));
         passLabel.getStyleClass().add("modal-text");
         PasswordField passwordField = new PasswordField();
-        passwordField.setPromptText("密码");
+        passwordField.setPromptText(I18N.get("page.t0016"));
         passwordField.getStyleClass().add("input-field");
         passwordField.setPrefWidth(Double.MAX_VALUE);
 
         // 令牌输入区 //
-        Label tokenLabel = new Label("登录令牌:");
+        Label tokenLabel = new Label(I18N.get("page.t0017"));
         tokenLabel.getStyleClass().add("modal-text");
         PasswordField tokenField = new PasswordField();
-        tokenField.setPromptText("粘贴社区登录令牌");
+        tokenField.setPromptText(I18N.get("page.t0018"));
         tokenField.getStyleClass().add("input-field");
         tokenField.setPrefWidth(Double.MAX_VALUE);
-        Label tokenHint = new Label("令牌在社区网站个人中心获取，粘贴后直接验证登录");
+        Label tokenHint = new Label(I18N.get("page.t0019"));
         tokenHint.getStyleClass().add("modal-hint");
         tokenHint.setWrapText(true);
 
@@ -313,10 +314,10 @@ public final class CommunityPage {
 
         HBox btns = new HBox(10);
         btns.setAlignment(Pos.CENTER_RIGHT);
-        Button cancelBtn = AppIcons.button("close", "取消");
+        Button cancelBtn = AppIcons.button("close", I18N.get("page.t0020"));
         cancelBtn.getStyleClass().add("modal-btn-cancel");
         cancelBtn.setOnAction(e -> ctx.ui().closeModal());
-        Button loginBtn = AppIcons.button("user", "登录");
+        Button loginBtn = AppIcons.button("user", I18N.get("page.t0021"));
         loginBtn.getStyleClass().add("modal-btn-ok");
         loginBtn.setDisable(true);
 
@@ -362,7 +363,7 @@ public final class CommunityPage {
 
         loginBtn.setOnAction(e -> {
             loginBtn.setDisable(true);
-            loginBtn.setText("登录中…");
+            loginBtn.setText(I18N.get("page.t0022"));
             statusLabel.setText("");
             boolean accountMode = accountModeBtn.isSelected();
             String username = usernameField.getText().trim();
@@ -378,18 +379,18 @@ public final class CommunityPage {
                             ctx.ui().closeModal();
                             refreshCommunityUserCard();
                             refreshCommunityCheckinCard();
-                            ctx.ui().toast("登录成功，欢迎 " + result.data.username);
+                            ctx.ui().toast(I18N.get("page.p0742", result.data.username));
                         } else {
                             loginBtn.setDisable(false);
-                            AppIcons.setText(loginBtn, "user", "登录");
-                            statusLabel.setText("登录失败：" + result.msg);
+                            AppIcons.setText(loginBtn, "user", I18N.get("page.t0023"));
+                            statusLabel.setText(I18N.get("page.p0743", result.msg));
                         }
                     });
                 } catch (Exception ex) {
                     Platform.runLater(() -> {
                         loginBtn.setDisable(false);
-                        AppIcons.setText(loginBtn, "user", "登录");
-                        statusLabel.setText("登录失败：" + ex.getMessage());
+                        AppIcons.setText(loginBtn, "user", I18N.get("page.t0024"));
+                        statusLabel.setText(I18N.get("page.p0744", ex.getMessage()));
                     });
                 }
             });
@@ -398,7 +399,7 @@ public final class CommunityPage {
 
         body.getChildren().addAll(modeBox, userLabel, usernameField, passLabel, passwordField,
                 tokenLabel, tokenField, tokenHint, statusLabel, spacer, btns);
-        ctx.ui().modal("登录星光MC社区", body, 360, 340);
+        ctx.ui().modal(I18N.get("page.t0025"), body, 360, 340);
     }
 
     /** 恢复登录态：本地存在 token 时异步调用 launcher_profile 验证 */
@@ -410,12 +411,12 @@ public final class CommunityPage {
                 Platform.runLater(() -> {
                     if (result.ok && communityApi.getCurrentUser() != null) {
                         refreshCommunityUserCard();
-                        ctx.ui().toast("欢迎回来，" + communityApi.getCurrentUser().username);
+                        ctx.ui().toast(I18N.get("page.p0745", communityApi.getCurrentUser().username));
                     } else if ("it".equals(result.code) || "nl".equals(result.code)) {
                         // token 已失效（profile 已清理登录态）：同步 UI 并提示重新登录
                         refreshCommunityUserCard();
                         refreshCommunityCheckinCard();
-                        ctx.ui().toast("社区登录已过期，请重新登录");
+                        ctx.ui().toast(I18N.get("page.t0026"));
                     }
                 });
             } catch (Exception ignored) {
@@ -429,13 +430,13 @@ public final class CommunityPage {
         VBox card = new VBox(10);
         card.getStyleClass().add("community-checkin-card");
 
-        Label title = new Label("每日签到");
+        Label title = new Label(I18N.get("page.t0027"));
         title.getStyleClass().add("community-checkin-title");
 
-        communityCheckinStatus = new Label("今日未签到");
+        communityCheckinStatus = new Label(I18N.get("page.t0028"));
         communityCheckinStatus.getStyleClass().add("community-checkin-status");
 
-        communityCheckinBtn = AppIcons.button("hand", "签到");
+        communityCheckinBtn = AppIcons.button("hand", I18N.get("page.t0029"));
         communityCheckinBtn.getStyleClass().add("community-checkin-btn");
         communityCheckinBtn.setMaxWidth(Double.MAX_VALUE);
         communityCheckinBtn.setOnAction(e -> doCommunityCheckin());
@@ -449,13 +450,13 @@ public final class CommunityPage {
     private void refreshCommunityCheckinCard() {
         if (communityCheckinStatus == null || communityCheckinBtn == null) return;
         if (communityApi.isCheckedInToday()) {
-            communityCheckinStatus.setText("今日已签到");
-            communityCheckinBtn.setText("已签到");
+            communityCheckinStatus.setText(I18N.get("page.t0030"));
+            communityCheckinBtn.setText(I18N.get("page.t0031"));
             communityCheckinBtn.setDisable(true);
             communityCheckinBtn.setStyle("-fx-background-color: #10b981;");
         } else {
-            communityCheckinStatus.setText(communityApi.hasToken() ? "今日未签到" : "登录后可签到");
-            AppIcons.setText(communityCheckinBtn, "hand", "签到");
+            communityCheckinStatus.setText(communityApi.hasToken() ? I18N.get("page.t0558") : I18N.get("page.t0559"));
+            AppIcons.setText(communityCheckinBtn, "hand", I18N.get("page.t0032"));
             communityCheckinBtn.setDisable(false);
             communityCheckinBtn.setStyle("");
         }
@@ -464,43 +465,44 @@ public final class CommunityPage {
     /** 每日签到：校验登录后异步调用签到接口，"今天已签到"同样更新为已完成 */
     private void doCommunityCheckin() {
         if (!communityApi.hasToken()) {
-            ctx.ui().toast("请先登录后再签到");
+            ctx.ui().toast(I18N.get("page.t0033"));
             return;
         }
         communityCheckinBtn.setDisable(true);
-        communityCheckinBtn.setText("签到中…");
+        communityCheckinBtn.setText(I18N.get("page.t0034"));
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
                 ApiResult<CheckinResult> result = communityApi.checkin();
                 Platform.runLater(() -> {
                     if (result.ok) {
-                        communityCheckinStatus.setText("今日已签到");
-                        communityCheckinBtn.setText("已签到");
+                        communityCheckinStatus.setText(I18N.get("page.t0035"));
+                        communityCheckinBtn.setText(I18N.get("page.t0036"));
                         communityCheckinBtn.setStyle("-fx-background-color: #10b981;");
                         String tip = result.data != null && result.data.msg != null
-                                ? result.data.msg : "签到成功";
+                                ? result.data.msg : I18N.get("page.t0037");
                         // 服务端返回签到后余额时一并展示，便于核对到账
                         if (result.data != null && result.data.tear > 0) {
-                            tip += "（当前余额：" + result.data.tear + " 恶魂之泪）";
+                            tip += I18N.get("cp.r0001", result.data.tear);
                         }
                         ctx.ui().toast(tip);
+                    // i18n-lock: 不要翻译此行中文——与 CommunityApi 同一服务端响应，翻译即功能失效
                     } else if (result.msg != null && result.msg.contains("已签到")) {
                         // 服务端对"今天已签到"返回 ok=false + msg，同样标记为已完成
-                        communityCheckinStatus.setText("今日已签到");
-                        communityCheckinBtn.setText("已签到");
+                        communityCheckinStatus.setText(I18N.get("page.t0038"));
+                        communityCheckinBtn.setText(I18N.get("page.t0039"));
                         communityCheckinBtn.setStyle("-fx-background-color: #10b981;");
-                        ctx.ui().toast("今天已经签到过了");
+                        ctx.ui().toast(I18N.get("page.t0040"));
                     } else {
                         communityCheckinBtn.setDisable(false);
-                        AppIcons.setText(communityCheckinBtn, "hand", "签到");
-                        ctx.ui().toast("签到失败：" + result.msg);
+                        AppIcons.setText(communityCheckinBtn, "hand", I18N.get("page.t0041"));
+                        ctx.ui().toast(I18N.get("page.p0746", result.msg));
                     }
                 });
             } catch (Exception ex) {
                 Platform.runLater(() -> {
                     communityCheckinBtn.setDisable(false);
-                    AppIcons.setText(communityCheckinBtn, "hand", "签到");
-                    ctx.ui().toast("签到失败：" + ex.getMessage());
+                    AppIcons.setText(communityCheckinBtn, "hand", I18N.get("page.t0042"));
+                    ctx.ui().toast(I18N.get("page.p0747", ex.getMessage()));
                 });
             }
         });
@@ -516,10 +518,10 @@ public final class CommunityPage {
         // 顶部：返回社区 + 页面标题
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = AppIcons.button("back", "返回社区");
+        Button backBtn = AppIcons.button("back", I18N.get("page.t0043"));
         backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> ctx.switchToPage("news"));
-        Label pageTitle = new Label("发布帖子");
+        Label pageTitle = new Label(I18N.get("page.t0044"));
         pageTitle.getStyleClass().add("content-title");
         header.getChildren().addAll(backBtn, pageTitle);
 
@@ -528,29 +530,29 @@ public final class CommunityPage {
         card.getStyleClass().add("home-card");
 
         communityPostTitleField = new TextField();
-        communityPostTitleField.setPromptText("帖子标题");
+        communityPostTitleField.setPromptText(I18N.get("page.t0045"));
         communityPostTitleField.getStyleClass().add("input-field");
         communityPostTitleField.setPrefWidth(Double.MAX_VALUE);
 
         HBox catRow = new HBox(10);
         catRow.setAlignment(Pos.CENTER_LEFT);
-        Label catLabel = new Label("分类：");
+        Label catLabel = new Label(I18N.get("page.t0046"));
         catLabel.getStyleClass().add("community-post-time");
         communityCategoryBox = new ComboBox<>();
-        communityCategoryBox.getItems().addAll("闲聊", "游戏", "求助", "资源", "公告", "其他");
-        communityCategoryBox.setValue("闲聊");
+        communityCategoryBox.getItems().addAll(I18N.get("page.t0560"), I18N.get("page.t0561"), I18N.get("page.t0562"), I18N.get("page.t0563"), I18N.get("page.t0564"), I18N.get("page.t0565"));
+        communityCategoryBox.setValue(I18N.get("page.t0047"));
         communityCategoryBox.setEditable(true);
         communityCategoryBox.setPrefWidth(160);
         catRow.getChildren().addAll(catLabel, communityCategoryBox);
 
         communityPostContentArea = new TextArea();
-        communityPostContentArea.setPromptText("分享你的游戏心得、疑问或趣事…");
+        communityPostContentArea.setPromptText(I18N.get("page.t0048"));
         communityPostContentArea.getStyleClass().add("textarea-field");
         communityPostContentArea.setPrefRowCount(12);
         communityPostContentArea.setWrapText(true);
         VBox.setVgrow(communityPostContentArea, Priority.ALWAYS);
 
-        Button publishBtn = AppIcons.button("memo", "发布帖子");
+        Button publishBtn = AppIcons.button("memo", I18N.get("page.t0049"));
         publishBtn.getStyleClass().add("btn-primary");
         publishBtn.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white; -fx-min-width: 120; -fx-padding: 8 20;");
         publishBtn.setOnAction(e -> publishCommunityPost(publishBtn));
@@ -567,35 +569,35 @@ public final class CommunityPage {
     /** 发布帖子：校验登录与输入，成功后返回社区页并刷新列表 */
     private void publishCommunityPost(Button publishBtn) {
         if (!communityApi.hasToken()) {
-            ctx.ui().toast("请先登录后再发帖");
+            ctx.ui().toast(I18N.get("page.t0050"));
             return;
         }
         String title = communityPostTitleField.getText().trim();
         String content = communityPostContentArea.getText().trim();
-        String category = communityCategoryBox.getValue() == null ? "闲聊" : communityCategoryBox.getValue().trim();
+        String category = communityCategoryBox.getValue() == null ? I18N.get("page.t0051") : communityCategoryBox.getValue().trim();
         if (title.isEmpty()) {
-            ctx.ui().toast("帖子标题不能为空");
+            ctx.ui().toast(I18N.get("page.t0052"));
             return;
         }
         if (content.isEmpty()) {
-            ctx.ui().toast("帖子内容不能为空");
+            ctx.ui().toast(I18N.get("page.t0053"));
             return;
         }
         publishBtn.setDisable(true);
-        publishBtn.setText("发布中…");
+        publishBtn.setText(I18N.get("page.t0054"));
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
                 ApiResult<Integer> result = communityApi.postPublish(title, content, category);
                 Platform.runLater(() -> {
                     publishBtn.setDisable(false);
-                    AppIcons.setText(publishBtn, "memo", "发布帖子");
+                    AppIcons.setText(publishBtn, "memo", I18N.get("page.t0055"));
                     if (result.ok) {
-                        ctx.ui().toast("发布成功");
+                        ctx.ui().toast(I18N.get("page.t0056"));
                         // 发布成功后跳转回社区页并刷新帖子列表
                         ctx.switchToPage("news");
                         loadCommunityPosts();
                     } else {
-                        ctx.ui().toast("发布失败：" + result.msg);
+                        ctx.ui().toast(I18N.get("page.p0748", result.msg));
                         // token 失效时（failOnAuthError 已清理登录态）同步刷新社区卡片
                         if ("it".equals(result.code) || "nl".equals(result.code)) {
                             refreshCommunityUserCard();
@@ -606,8 +608,8 @@ public final class CommunityPage {
             } catch (Exception ex) {
                 Platform.runLater(() -> {
                     publishBtn.setDisable(false);
-                    AppIcons.setText(publishBtn, "memo", "发布帖子");
-                    ctx.ui().toast("发布失败：" + ex.getMessage());
+                    AppIcons.setText(publishBtn, "memo", I18N.get("page.t0057"));
+                    ctx.ui().toast(I18N.get("page.p0749", ex.getMessage()));
                 });
             }
         });
@@ -627,7 +629,7 @@ public final class CommunityPage {
                 Platform.runLater(() -> {
                     communityPostList.getChildren().clear();
                     communityPostList.getChildren().add(PageKit.buildErrorState(
-                            "帖子加载失败", String.valueOf(e.getMessage()), this::loadCommunityPosts));
+                            I18N.get("page.t0058"), String.valueOf(e.getMessage()), this::loadCommunityPosts));
                 });
             }
         });
@@ -638,11 +640,11 @@ public final class CommunityPage {
         communityPostList.getChildren().clear();
         if (!result.ok) {
             communityPostList.getChildren().add(PageKit.buildErrorState(
-                    "帖子加载失败", result.msg, this::loadCommunityPosts));
+                    I18N.get("page.t0059"), result.msg, this::loadCommunityPosts));
             return;
         }
         if (result.data == null || result.data.isEmpty()) {
-            Label empty = new Label("暂无帖子，登录后发布第一条帖子吧～");
+            Label empty = new Label(I18N.get("page.t0060"));
             empty.getStyleClass().add("community-empty");
             communityPostList.getChildren().add(empty);
             return;
@@ -674,7 +676,7 @@ public final class CommunityPage {
 
         HBox meta = new HBox(10);
         meta.setAlignment(Pos.CENTER_LEFT);
-        Label authorLabel = new Label(post.username == null ? "匿名" : post.username);
+        Label authorLabel = new Label(post.username == null ? I18N.get("page.t0061") : post.username);
         authorLabel.getStyleClass().add("community-post-author");
         Label timeLabel = new Label(post.createdAt == null ? "" : post.createdAt);
         timeLabel.getStyleClass().add("community-post-time");
@@ -698,7 +700,7 @@ public final class CommunityPage {
         viewsLabel.getStyleClass().add("community-post-time");
         meta.getChildren().addAll(metaSpacer, viewsLabel);
 
-        Label titleLabel = new Label(post.title == null ? "（无标题）" : post.title);
+        Label titleLabel = new Label(post.title == null ? I18N.get("page.t0062") : post.title);
         titleLabel.getStyleClass().add("community-post-title");
         titleLabel.setCursor(javafx.scene.Cursor.HAND);
         titleLabel.setOnMouseClicked(e -> {
@@ -706,7 +708,7 @@ public final class CommunityPage {
             openCommunityPostDetail(post);
         });
 
-        Label contentLabel = new Label("点击查看完整内容与评论…");
+        Label contentLabel = new Label(I18N.get("page.t0063"));
         contentLabel.getStyleClass().add("community-post-content");
         contentLabel.setWrapText(true);
 
@@ -717,7 +719,7 @@ public final class CommunityPage {
             e.consume();
             toggleCommunityLike(post, likeBtn);
         });
-        Button commentBtn = AppIcons.button("comment", "评论");
+        Button commentBtn = AppIcons.button("comment", I18N.get("page.t0064"));
         commentBtn.getStyleClass().add("community-action-btn");
         VBox commentsArea = new VBox(8);
         commentsArea.setVisible(false);
@@ -748,7 +750,7 @@ public final class CommunityPage {
     /** 点赞 / 取消点赞（异步，成功后更新按钮文案与高亮状态） */
     private void toggleCommunityLike(CommunityPost post, Button likeBtn) {
         if (!communityApi.hasToken()) {
-            ctx.ui().toast("请先登录后再点赞");
+            ctx.ui().toast(I18N.get("page.t0065"));
             return;
         }
         boolean currentLiked = likeBtn.getStyleClass().contains("liked");
@@ -777,7 +779,7 @@ public final class CommunityPage {
             } catch (Exception ex) {
                 Platform.runLater(() -> {
                     likeBtn.setDisable(false);
-                    ctx.ui().toast("操作失败：" + ex.getMessage());
+                    ctx.ui().toast(I18N.get("page.p0750", ex.getMessage()));
                 });
             }
         });
@@ -826,10 +828,10 @@ public final class CommunityPage {
         // 顶部：返回社区 + 页面标题 //
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = AppIcons.button("back", "返回社区");
+        Button backBtn = AppIcons.button("back", I18N.get("page.t0066"));
         backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> ctx.switchToPage("news"));
-        Label pageTitle = new Label("帖子详情");
+        Label pageTitle = new Label(I18N.get("page.t0067"));
         pageTitle.getStyleClass().add("content-title");
         header.getChildren().addAll(backBtn, pageTitle);
 
@@ -866,7 +868,7 @@ public final class CommunityPage {
                     content.getChildren().clear();
                     if (!result.ok || result.data == null) {
                         content.getChildren().add(PageKit.buildErrorState(
-                                result.ok ? "帖子不存在" : "加载失败", result.msg,
+                                result.ok ? I18N.get("page.t0566") : I18N.get("page.t0567"), result.msg,
                                 result.ok ? null : () -> ctx.switchToPage("postDetail")));
                         return;
                     }
@@ -882,7 +884,7 @@ public final class CommunityPage {
                     avatarBox.getChildren().add(avatarFallback);
 
                     VBox authorInfo = new VBox(2);
-                    Label authorName = new Label(detail.username == null ? "匿名" : detail.username);
+                    Label authorName = new Label(detail.username == null ? I18N.get("page.t0068") : detail.username);
                     authorName.getStyleClass().add("community-dialog-author");
                     Label timeLabel = new Label(detail.createdAt == null ? "" : detail.createdAt);
                     timeLabel.getStyleClass().add("community-post-time");
@@ -903,13 +905,13 @@ public final class CommunityPage {
                     loadCommunityAvatar(avatarBox, avatarFallback, "community-avatar-sm", detail.userId, 36);
 
                     // 标题 //
-                    Label titleLabel = new Label(detail.title == null ? "（无标题）" : detail.title);
+                    Label titleLabel = new Label(detail.title == null ? I18N.get("page.t0069") : detail.title);
                     titleLabel.getStyleClass().add("community-dialog-title");
                     titleLabel.setWrapText(true);
 
                     // 正文卡片 //
                     Label bodyLabel = new Label(detail.content == null || detail.content.isEmpty()
-                            ? "（该帖没有正文内容）" : detail.content);
+                            ? I18N.get("page.t0070") : detail.content);
                     bodyLabel.getStyleClass().add("community-dialog-body");
                     bodyLabel.setWrapText(true);
 
@@ -919,7 +921,7 @@ public final class CommunityPage {
                     Button likeBtn = new Button("" + detail.likes);
                     likeBtn.getStyleClass().add("community-action-btn");
                     likeBtn.setOnAction(e -> toggleCommunityLike(detail, likeBtn));
-                    Label statLabel = new Label("" + detail.views + " 次浏览");
+                    Label statLabel = new Label(I18N.get("cp.r0002", detail.views));
                     statLabel.getStyleClass().add("community-dialog-stat");
                     actionRow.getChildren().addAll(likeBtn, statLabel);
                     applyPostLikedState(detail, likeBtn);
@@ -927,7 +929,7 @@ public final class CommunityPage {
                     // 分隔线 + 评论区 //
                     Region divider = new Region();
                     divider.getStyleClass().add("community-dialog-divider");
-                    Label commentTitle = new Label("评论");
+                    Label commentTitle = new Label(I18N.get("page.t0071"));
                     commentTitle.getStyleClass().add("community-dialog-title");
                     commentTitle.setStyle("-fx-font-size: 13px; -fx-font-weight: 600;");
 
@@ -940,7 +942,7 @@ public final class CommunityPage {
                 Platform.runLater(() -> {
                     content.getChildren().clear();
                     content.getChildren().add(PageKit.buildErrorState(
-                            "加载失败", String.valueOf(e.getMessage()),
+                            I18N.get("page.t0072"), String.valueOf(e.getMessage()),
                             () -> ctx.switchToPage("postDetail")));
                 });
             }
@@ -959,7 +961,7 @@ public final class CommunityPage {
      */
     private void loadCommunityComments(int postId, VBox area, boolean withInput) {
         area.getChildren().clear();
-        Label loading = new Label("加载评论中…");
+        Label loading = new Label(I18N.get("page.t0073"));
         loading.getStyleClass().add("community-empty");
         area.getChildren().add(loading);
 
@@ -970,13 +972,13 @@ public final class CommunityPage {
                     area.getChildren().clear();
                     if (!result.ok) {
                         area.getChildren().add(PageKit.buildErrorState(
-                                "评论加载失败", result.msg,
+                                I18N.get("page.t0074"), result.msg,
                                 () -> loadCommunityComments(postId, area, withInput)));
                         return;
                     }
                     List<CommunityComment> comments = result.data;
                     if (comments == null || comments.isEmpty()) {
-                        Label empty = new Label("暂无评论，快来抢沙发～");
+                        Label empty = new Label(I18N.get("page.t0075"));
                         empty.getStyleClass().add("community-empty");
                         area.getChildren().add(empty);
                     } else {
@@ -992,7 +994,7 @@ public final class CommunityPage {
                 Platform.runLater(() -> {
                     area.getChildren().clear();
                     area.getChildren().add(PageKit.buildErrorState(
-                            "评论加载失败", String.valueOf(e.getMessage()),
+                            I18N.get("page.t0076"), String.valueOf(e.getMessage()),
                             () -> loadCommunityComments(postId, area, withInput)));
                 });
             }
@@ -1016,7 +1018,7 @@ public final class CommunityPage {
 
         HBox meta = new HBox(8);
         meta.setAlignment(Pos.CENTER_LEFT);
-        Label author = new Label(comment.username == null ? "匿名" : comment.username);
+        Label author = new Label(comment.username == null ? I18N.get("page.t0077") : comment.username);
         author.getStyleClass().add("community-comment-author");
         Label time = new Label(comment.createdAt == null ? "" : comment.createdAt);
         time.getStyleClass().add("community-comment-time");
@@ -1041,20 +1043,20 @@ public final class CommunityPage {
     /** 评论输入行：withInput 透传给刷新调用，保证弹窗固定底部输入框刷新后不重复添加 */
     private HBox createCommentInputRow(int postId, VBox area, boolean withInput) {
         TextField input = new TextField();
-        input.setPromptText("输入评论…");
+        input.setPromptText(I18N.get("page.t0078"));
         input.getStyleClass().add("input-field");
         HBox.setHgrow(input, Priority.ALWAYS);
 
-        Button submitBtn = AppIcons.button("comment", "发表评论");
+        Button submitBtn = AppIcons.button("comment", I18N.get("page.t0079"));
         submitBtn.getStyleClass().add("btn-primary");
         submitBtn.setOnAction(e -> {
             if (!communityApi.hasToken()) {
-                ctx.ui().toast("请先登录后再评论");
+                ctx.ui().toast(I18N.get("page.t0080"));
                 return;
             }
             String content = input.getText().trim();
             if (content.isEmpty()) {
-                ctx.ui().toast("评论内容不能为空");
+                ctx.ui().toast(I18N.get("page.t0081"));
                 return;
             }
             submitBtn.setDisable(true);
@@ -1064,17 +1066,17 @@ public final class CommunityPage {
                     Platform.runLater(() -> {
                         submitBtn.setDisable(false);
                         if (result.ok) {
-                            ctx.ui().toast("评论成功");
+                            ctx.ui().toast(I18N.get("page.t0082"));
                             // 透传 withInput：弹窗固定底部输入框刷新后不重复添加输入行
                             loadCommunityComments(postId, area, withInput);
                         } else {
-                            ctx.ui().toast("评论失败：" + result.msg);
+                            ctx.ui().toast(I18N.get("page.p0751", result.msg));
                         }
                     });
                 } catch (Exception ex) {
                     Platform.runLater(() -> {
                         submitBtn.setDisable(false);
-                        ctx.ui().toast("评论失败：" + ex.getMessage());
+                        ctx.ui().toast(I18N.get("page.p0752", ex.getMessage()));
                     });
                 }
             });

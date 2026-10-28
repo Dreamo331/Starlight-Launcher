@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.service;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.model.JavaInfo;
 import com.example.starlight.download.task.JavaInstall;
@@ -55,6 +57,7 @@ public class JavaService {
                                 }
                             }
                         }
+                        // i18n-lock: 不要翻译此行中文——识别 java -version 输出，翻译即功能失效
                         if (chunk.contains("ERROR") || chunk.contains("失败") || chunk.contains("完成")) {
                             onProgress.onProgress(lastPercent < 0 ? 50 : lastPercent, chunk.trim());
                         }
@@ -67,10 +70,10 @@ public class JavaService {
                 if (downloadDir != null && !downloadDir.isEmpty()) args.add(downloadDir);
                 JavaInstall.main(args.toArray(String[]::new));
                 captured.flush();
-                onProgress.onProgress(100, "安装完成");
-                onResult.onSuccess("JDK " + version + " 安装完成");
+                onProgress.onProgress(100, I18N.get("service.t0048"));
+                onResult.onSuccess(I18N.get("jsv.r0001", version));
             } catch (Exception e) {
-                onResult.onError("安装失败: " + e.getMessage());
+                onResult.onError(I18N.get("service.p0104", e.getMessage()));
             } finally {
                 // 恢复默认输出，避免影响后续调用
                 JavaInstall.setOutput(System.out);

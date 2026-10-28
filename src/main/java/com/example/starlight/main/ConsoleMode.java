@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.main;
 
+
+import com.example.starlight.util.I18N;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
@@ -109,7 +111,7 @@ public final class ConsoleMode {
 
             Logger root = ctx.getLogger(Logger.ROOT_LOGGER_NAME);
             root.addAppender(appender);
-            root.info("[ConsoleMode] 命令行日志已开启（ConsoleMode=true 且启动参数含 --console）");
+            root.info(I18N.get("main.t0001"));
         } catch (Throwable ignored) {
             // 控制台日志是调试附加品，挂载失败不影响启动器运行
         }

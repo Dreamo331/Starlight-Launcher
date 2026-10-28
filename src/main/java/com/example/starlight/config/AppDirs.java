@@ -24,11 +24,12 @@ import java.util.List;
  * ~/.starlight/
  *   starlight.ini  starlight-client.ini  multiplayer.json
  *   accounts.json  login.json  external_login.json
- *   .account.dat   .community.dat   authlib-injector.jar
+ *   .account.dat   .community.dat   .sakura.dat   authlib-injector.jar
+ *   cape-url-patch-agent.jar（单 EXE 形态从内置资源释放，见 CapeAgentInstaller）
  *   java-cache.json  plugins-state.json  launcher.json
  *   uploaded_logs.json  source-health.json  version-manifest-cache.json
  *   avatars/  cache/  terracotta-cache/  mod-dictionary/  wallpaper/  skin/  mod/
- *   java/  terracotta/  slan/1.0/  ColorBlindOverlay/  framegen/  legacy/
+ *   java/  terracotta/  slan/1.0/  frp/  ColorBlindOverlay/  framegen/  legacy/
  * </pre>
  *
  * <h3>硬约定</h3>
@@ -234,8 +235,24 @@ public final class AppDirs {
         return file(".community.dat");
     }
 
+    /** SakuraFrp 访问密钥（Base64 + XOR 混淆，与普通配置分离） */
+    public static Path sakuraFrpTokenFile() {
+        return file(".sakura.dat");
+    }
+
     public static Path authlibInjectorJar() {
         return file("authlib-injector.jar");
+    }
+
+    /**
+     * 披风 URL 补丁 agent（{@code cape-url-patch-agent.jar}）。
+     *
+     * <p>单 EXE 发布形态没有 {@code lib/} 目录，agent jar 由 exe 内置的 classpath 资源
+     * 释放到这里，再以 {@code -javaagent:<本路径>=<端口>} 注入游戏 JVM。
+     * 详见 {@code auth/offline/CapeAgentInstaller}。
+     */
+    public static Path capeAgentJar() {
+        return file("cape-url-patch-agent.jar");
     }
 
     public static Path avatarsDir() {
@@ -312,6 +329,11 @@ public final class AppDirs {
     /** SL-MinecraftLAN 联机模块目录（其下为 {@code 1.0/}） */
     public static Path slanDir() {
         return file("slan");
+    }
+
+    /** SakuraFrp 运行目录（{@code frpc.exe}、{@code frpc.ini}、版本号） */
+    public static Path frpDir() {
+        return file("frp");
     }
 
     /** 色盲矫正工具所在目录 */

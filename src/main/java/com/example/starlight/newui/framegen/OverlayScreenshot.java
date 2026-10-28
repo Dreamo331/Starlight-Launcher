@@ -1,5 +1,7 @@
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.service.GameInstanceRegistry;
 
 import javax.imageio.ImageIO;
@@ -35,7 +37,7 @@ public final class OverlayScreenshot {
         GameProcessLocator.Target t;
         if (args.length > 2) {
             final int pid = Integer.parseInt(args[2]);
-            t = new GameProcessLocator.Target(pid, "命令行指定 PID " + pid,
+            t = new GameProcessLocator.Target(pid, I18N.get("framegen.p0147", pid),
                     GameProcessLocator.Source.SCAN);
         } else {
             t = GameProcessLocator.locate();

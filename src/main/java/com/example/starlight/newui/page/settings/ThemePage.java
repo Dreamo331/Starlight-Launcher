@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.PageKit;
@@ -26,13 +28,13 @@ public final class ThemePage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(ctx, "主题与背景");
+        VBox root = PageKit.settingsPage(ctx, I18N.get("theme.t0001"));
         HBox selector = new HBox(20);
         selector.getStyleClass().add("theme-selector");
         String[][] themes = {
-                {"浅色模式", "light", "#f8fafc"},
-                {"跟随系统", "system", "linear-gradient(to right, #f8fafc 50%, #1e293b 50%)"},
-                {"深色模式", "dark", "#1e293b"}
+                {I18N.get("theme.t0002"), "light", "#f8fafc"},
+                {I18N.get("theme.t0003"), "system", "linear-gradient(to right, #f8fafc 50%, #1e293b 50%)"},
+                {I18N.get("theme.t0004"), "dark", "#1e293b"}
         };
         for (String[] t : themes) {
             VBox opt = new VBox(6);
@@ -58,24 +60,24 @@ public final class ThemePage {
 
         // 背景图片：选择文件后立即应用并持久化，可恢复默认
         String bgPath = ctx.config().getOrDefault("BackgroundImage", "");
-        Label bgLabel = new Label(bgPath.isEmpty() ? "未设置（使用默认渐变背景）" : new File(bgPath).getName());
+        Label bgLabel = new Label(bgPath.isEmpty() ? I18N.get("theme.t0005") : new File(bgPath).getName());
         bgLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
-        Button chooseBgBtn = AppIcons.button("image", "选择图片");
+        Button chooseBgBtn = AppIcons.button("image", I18N.get("theme.t0006"));
         chooseBgBtn.getStyleClass().add("btn-primary");
         chooseBgBtn.setOnAction(e -> ctx.chooseBackgroundImage(bgLabel));
-        Button clearBgBtn = AppIcons.button("refresh", "恢复默认");
+        Button clearBgBtn = AppIcons.button("refresh", I18N.get("theme.t0007"));
         clearBgBtn.setStyle("-fx-background-color: #fee2e2; -fx-text-fill: #dc2626; -fx-font-size: 12px; -fx-padding: 6 12; -fx-background-radius: 6;");
         clearBgBtn.setOnAction(e -> {
             // 写入空值而非删除：saveClientConfig 为读-改-写合并，删除的键会保留旧值
             ctx.config().put("BackgroundImage", "");
             ctx.saveConfig();
-            bgLabel.setText("未设置（使用默认渐变背景）");
+            bgLabel.setText(I18N.get("theme.t0008"));
             ctx.applyBackgroundImage();
-            ctx.toast("已恢复默认背景");
+            ctx.toast(I18N.get("theme.t0009"));
         });
         HBox bgRow = new HBox(10, chooseBgBtn, clearBgBtn, bgLabel);
         bgRow.setAlignment(Pos.CENTER_LEFT);
-        root.getChildren().add(PageKit.settingsCard("背景图片", "更换启动器背景图片（支持 png/jpg）", bgRow));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("theme.t0010"), I18N.get("theme.t0011"), bgRow));
 
         // 自定义背景色：折叠调色盘 + 十六进制输入 + 恢复默认 //
         root.getChildren().add(buildCustomColorCard());
@@ -85,10 +87,10 @@ public final class ThemePage {
         keepPosToggle.setOnAction(e -> {
             ctx.config().put("KeepWindowPosition", String.valueOf(keepPosToggle.isSelected()));
             ctx.saveConfig();
-            ctx.toast("沿用上次关闭的窗口位置: " + (keepPosToggle.isSelected() ? "开启" : "关闭"));
+            ctx.toast(I18N.get("theme.k0039", (keepPosToggle.isSelected() ? I18N.get("theme.t0012") : I18N.get("theme.t0013"))));
         });
-        root.getChildren().add(PageKit.settingsCard("沿用上次关闭的窗口位置",
-                "开启后恢复上次关闭时的窗口位置；关闭后每次启动窗口居中显示", keepPosToggle));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("theme.t0014"),
+                I18N.get("theme.t0015"), keepPosToggle));
 
         // 标题栏窗口按钮样式：默认仿 macOS 三点式；关闭后改成「减号 + 叉号」两个按钮
         CheckBox macBtnToggle = PageKit.toggle(!"false".equalsIgnoreCase(
@@ -97,11 +99,10 @@ public final class ThemePage {
             ctx.config().put("MacStyleWindowButtons", String.valueOf(macBtnToggle.isSelected()));
             ctx.saveConfig();
             ctx.applyWindowButtonStyle();
-            ctx.toast("仿 macOS 三点式窗口按钮: " + (macBtnToggle.isSelected() ? "开启" : "关闭"));
+            ctx.toast(I18N.get("theme.k0040", (macBtnToggle.isSelected() ? I18N.get("theme.t0016") : I18N.get("theme.t0017"))));
         });
-        root.getChildren().add(PageKit.settingsCard("仿 macOS 三点式窗口按钮",
-                "开启后标题栏右上角是红黄绿三个圆点（最小化 / 最大化 / 关闭）；"
-                        + "关闭后改为减号与叉号（减号=最小化，叉号=关闭）", macBtnToggle));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("theme.t0018"),
+                I18N.get("theme.t0049"), macBtnToggle));
 
         // 节日主题开关：默认开启；关闭后问候语/启动按钮/灯笼/节日壁纸全部恢复默认
         boolean festivalOn = com.example.starlight.newui.festival.FestivalCalendar.isEnabled(ctx.config());
@@ -110,10 +111,10 @@ public final class ThemePage {
             ctx.config().put(com.example.starlight.newui.festival.FestivalCalendar.CONFIG_KEY,
                     festivalToggle.isSelected() ? "auto" : "off");
             ctx.saveConfig();
-            ctx.toast("节日主题: " + (festivalToggle.isSelected() ? "开启" : "关闭") + "（重启后完全生效）");
+            ctx.toast(I18N.get("theme.p0051", (festivalToggle.isSelected() ? I18N.get("theme.t0019") : I18N.get("theme.t0020"))));
         });
-        root.getChildren().add(PageKit.settingsCard("节日主题",
-                "节日（春节/中秋/圣诞等）自动更换问候语、启动按钮、灯笼与背景壁纸；关闭后恢复默认", festivalToggle));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("theme.t0021"),
+                I18N.get("theme.t0022"), festivalToggle));
         return root;
     }
 
@@ -121,11 +122,11 @@ public final class ThemePage {
 
     /** 调色盘预设色：按「中性 → 冷暖 → 深浅」排布，覆盖常见审美需求 */
     private static final String[][] PRESET_COLORS = {
-            {"#F8FAFC", "雾白"}, {"#EEF2F7", "云灰"}, {"#E0E7FF", "浅靛"},
-            {"#DBEAFE", "天蓝"}, {"#CFFAFE", "青碧"}, {"#DCFCE7", "新绿"},
-            {"#FEF3C7", "米黄"}, {"#FFE4E6", "樱粉"}, {"#F3E8FF", "薰衣草"},
-            {"#1E293B", "石板"}, {"#0F2847", "深海"}, {"#1A2E35", "墨青"},
-            {"#2D2438", "暗紫"}, {"#33241F", "咖褐"}, {"#14532D", "森林"}
+            {"#F8FAFC", I18N.get("theme.t0023")}, {"#EEF2F7", I18N.get("theme.t0024")}, {"#E0E7FF", I18N.get("theme.t0025")},
+            {"#DBEAFE", I18N.get("theme.t0026")}, {"#CFFAFE", I18N.get("theme.t0027")}, {"#DCFCE7", I18N.get("theme.t0028")},
+            {"#FEF3C7", I18N.get("theme.t0029")}, {"#FFE4E6", I18N.get("theme.t0030")}, {"#F3E8FF", I18N.get("theme.t0031")},
+            {"#1E293B", I18N.get("theme.t0032")}, {"#0F2847", I18N.get("theme.t0033")}, {"#1A2E35", I18N.get("theme.t0034")},
+            {"#2D2438", I18N.get("theme.t0035")}, {"#33241F", I18N.get("theme.t0036")}, {"#14532D", I18N.get("theme.t0037")}
     };
 
     /** 折叠状态：同一会话内保持（页面重建时把值传回来） */
@@ -173,25 +174,25 @@ public final class ThemePage {
             sw.setOnMouseClicked(e -> {
                 if (manager != null) manager.setColor(color);
                 syncSwatchSelection(swatches, swatchColors, color);
-                ctx.toast("背景色已设为 " + color);
+                ctx.toast(I18N.get("theme.k0001", color));
             });
             swatches.add(sw);
             swatchColors.add(hex);
             palette.getChildren().add(sw);
         }
-        content.getChildren().add(sectionLabel("预设颜色"));
+        content.getChildren().add(sectionLabel(I18N.get("theme.t0038")));
         content.getChildren().add(palette);
 
         // ② 十六进制输入
-        Label hexLabel = new Label("自定义");
+        Label hexLabel = new Label(I18N.get("theme.t0039"));
         hexLabel.getStyleClass().add("settings-card-desc");
         javafx.scene.control.TextField hexField = new javafx.scene.control.TextField(currentColor);
-        hexField.setPromptText("#RRGGBB，如 #1E293B");
+        hexField.setPromptText(I18N.get("theme.t0040"));
         hexField.getStyleClass().add("input-field");
         hexField.setPrefWidth(150);
         hexField.setMaxWidth(150);
 
-        Button applyBtn = AppIcons.button("check", "应用");
+        Button applyBtn = AppIcons.button("check", I18N.get("theme.t0041"));
         applyBtn.getStyleClass().add("btn-primary");
         applyBtn.setStyle("-fx-padding: 5 14; -fx-font-size: 12px;");
 
@@ -201,19 +202,19 @@ public final class ThemePage {
         Runnable applyHex = () -> {
             String raw = hexField.getText();
             if (raw == null || raw.isBlank()) {
-                hint.setText("请输入色值，或点上面的预设色块");
+                hint.setText(I18N.get("theme.t0042"));
                 return;
             }
             if (!com.example.starlight.newui.ui.CustomThemeColor.isValid(raw)) {
-                hint.setText("格式不对：请填 #RGB 或 #RRGGBB（例如 #1E293B）");
+                hint.setText(I18N.get("theme.t0043"));
                 return;
             }
             String normalized = com.example.starlight.newui.ui.CustomThemeColor.normalize(raw);
             if (manager != null) manager.setColor(normalized);
             hexField.setText(normalized);
             syncSwatchSelection(swatches, swatchColors, normalized);
-            hint.setText("已应用 " + normalized);
-            ctx.toast("背景色已设为 " + normalized);
+            hint.setText(I18N.get("theme.k0002", normalized));
+            ctx.toast(I18N.get("theme.k0003", normalized));
         };
         applyBtn.setOnAction(e -> applyHex.run());
         hexField.setOnAction(e -> applyHex.run());
@@ -223,15 +224,15 @@ public final class ThemePage {
         content.getChildren().add(hexRow);
 
         // ③ 恢复默认
-        Button resetBtn = AppIcons.button("refresh", "恢复默认");
+        Button resetBtn = AppIcons.button("refresh", I18N.get("theme.t0044"));
         resetBtn.setStyle("-fx-background-color: #fee2e2; -fx-text-fill: #dc2626;"
                 + " -fx-font-size: 12px; -fx-padding: 6 12; -fx-background-radius: 6;");
         resetBtn.setOnAction(e -> {
             if (manager != null) manager.reset();
             hexField.setText("");
             syncSwatchSelection(swatches, swatchColors, "");
-            hint.setText("已恢复默认背景");
-            ctx.toast("已恢复默认背景");
+            hint.setText(I18N.get("theme.t0045"));
+            ctx.toast(I18N.get("theme.t0046"));
         });
 
         HBox bottomRow = new HBox(10, resetBtn, hint);
@@ -241,8 +242,7 @@ public final class ThemePage {
         // 有壁纸时说明为什么看不到效果
         String bgPath = ctx.config().getOrDefault("BackgroundImage", "");
         if (bgPath != null && !bgPath.isBlank()) {
-            Label warn = new Label("当前已设置背景图片，自定义背景色不会生效（壁纸优先）。"
-                    + "如需使用纯色，请先在上方「背景图片」里点「恢复默认」。");
+            Label warn = new Label(I18N.get("theme.t0050"));
             warn.setWrapText(true);
             warn.getStyleClass().add("settings-card-desc");
             warn.setStyle("-fx-text-fill: #b45309;");
@@ -250,8 +250,8 @@ public final class ThemePage {
         }
 
         String summary = currentColor.isEmpty()
-                ? "使用默认渐变背景" : "当前：" + currentColor;
-        return PageKit.collapsibleSection("自定义背景色", summary, content,
+                ? I18N.get("theme.t0047") : I18N.get("theme.k0004", currentColor);
+        return PageKit.collapsibleSection(I18N.get("theme.t0048"), summary, content,
                 colorPaletteOpen, open -> colorPaletteOpen = open);
     }
 

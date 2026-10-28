@@ -63,14 +63,83 @@ public final class DownloadSettings {
     /** 镜像熔断冷却（秒，冷却结束放行探测请求，默认 60） */
     public static final String KEY_BREAKER_COOLDOWN_SEC = "DownloadBreakerCooldownSec";
 
+    // 下载引擎选择（2026-10-21） //
+    /**
+     * 下载引擎键：{@code Starlight}（原引擎，默认）或 {@code PCL}（对标 PCL2 逻辑的新引擎）。
+     *
+     * <p>两套引擎互不影响：原引擎实现保留在 {@code download.task.GameResourceCompleter}，
+     * 新引擎在 {@code download.pcl} 包内，由 {@code download.DownloadEngineRouter} 按本键分流。
+     * 切换后下一次补全即生效，无需重启。
+     */
+    public static final String KEY_ENGINE = "DownloadEngine";
+
+    /** 原引擎（默认；行为与本次改造前完全一致） */
+    public static final String ENGINE_STARLIGHT = "Starlight";
+
+    /** 新引擎（对标 PCL2：全局单一并发配额 + 连接复用 + 几何分裂分块 + 速率型停滞判定） */
+    public static final String ENGINE_PCL = "PCL";
+
+    /** 默认引擎：保持原引擎，避免升级后行为静默改变 */
+    public static final String DEFAULT_ENGINE = ENGINE_STARLIGHT;
+
+    /**
+     * PCL 引擎的并发线程数（对标 PCL2 的 {@code ToolDownloadThread + 1}，默认 63+1=64）。
+     *
+     * <p>与 {@link #KEY_THREADS} 分开是有意为之：原引擎的滑块上限是 32（受其停滞判定粒度限制），
+     * 而 PCL 引擎是「全局单一配额 + 长时间占用连接」的模型，64 起步才追得上 PCL2。
+     */
+    public static final String KEY_PCL_THREADS = "PclDownloadThreads";
+
     /** 全部可调参数键（诊断 / 批量读写用；设置页「恢复默认」是逐个显式写回默认值） */
     public static final String[] TUNABLE_KEYS = {
             KEY_THREADS, KEY_PIECE_LIMIT_KB, KEY_SPLIT_PERCENT,
             KEY_THRESHOLD_MB, KEY_LOW_SPEED_KBPS, KEY_SPEED_LIMIT_KBPS,
             KEY_STALL_TIMEOUT_SEC, KEY_FIRST_TRY_STALL_SEC, KEY_CONNECT_TIMEOUT_SEC,
             KEY_MERGE_RETRY, KEY_MERGE_BACKOFF_MS, KEY_SLOW_GAP_SEC,
-            KEY_BREAKER_THRESHOLD, KEY_BREAKER_COOLDOWN_SEC
+            KEY_BREAKER_THRESHOLD, KEY_BREAKER_COOLDOWN_SEC,
+            KEY_ENGINE, KEY_PCL_THREADS
     };
+
+    // PCL 引擎并发参数 //
+    /** PCL 引擎并发线程数默认 64（对齐 PCL2 默认 63+1） */
+    public static final int DEFAULT_PCL_THREADS = 64;
+    public static final int MIN_PCL_THREADS = 1;
+    public static final int MAX_PCL_THREADS = 256;
+
+    /** 设置页可拖范围上限（再高对家用宽带无意义，且容易触发镜像风控） */
+    public static final int SETTINGS_PCL_THREADS_MAX = 128;
+
+    /** 当前引擎 */
+    private static volatile String engine = DEFAULT_ENGINE;
+
+    /** 当前引擎名（{@code Starlight} / {@code PCL}） */
+    public static String getEngine() {
+        return engine;
+    }
+
+    /** 设置引擎；未知值回落到原引擎，保证不会因脏配置导致补全无引擎可用 */
+    public static void setEngine(String name) {
+        engine = ENGINE_PCL.equalsIgnoreCase(name == null ? "" : name.trim())
+                ? ENGINE_PCL : ENGINE_STARLIGHT;
+    }
+
+    /** 当前是否使用 PCL 引擎 */
+    public static boolean isPclEngine() {
+        return ENGINE_PCL.equals(engine);
+    }
+
+    /** PCL 引擎并发线程数 */
+    public static int getPclThreads() {
+        return pclThreads;
+    }
+
+    /** 设置 PCL 引擎并发线程数（自动限制在 1~256） */
+    public static void setPclThreads(int threads) {
+        pclThreads = clamp(threads, MIN_PCL_THREADS, MAX_PCL_THREADS);
+    }
+
+    /** PCL 引擎当前并发线程数（volatile：设置页可在任意线程切换） */
+    private static volatile int pclThreads = DEFAULT_PCL_THREADS;
 
     // 并发线程数 //
     /** 并发下载线程数默认值：8（文档 §4.3 建议默认 8~12） */
@@ -135,6 +204,19 @@ public final class DownloadSettings {
     // 前面的候选统一用更快的首试停滞判定，坏源代价从 15s 降到 5s。
     /** 首试停滞判定默认 5 秒 */
     public static final int DEFAULT_FIRST_TRY_STALL_SEC = 5;
+
+    /**
+     * 停滞判定的「速率阈值」（字节/秒）：窗口内实收字节低于此值才判该源卡死。
+     *
+     * <p><b>为什么必须有速率条件（2026-10-20）</b>：原来的判定是「单次 read 超时即判停滞」，
+     * 实测本机到 {@code resources.download.minecraft.net} 的<b>首包</b>耗时就有 5.7~8.85 秒，
+     * 与默认 5 秒判定线重叠——于是合法的慢响应被当成卡死，反复换源重试，
+     * 每次重试还要再付一遍首包延迟。日志里 90 秒只下 255 个文件、71 条「源停滞」告警即此。
+     *
+     * <p>PCL2 的判据是<b>速率</b>而非时长（ModNet.vb:1025-1028：间隔 &gt;5s <b>且</b> &lt;1KB/s 才断开）。
+     * 本常量即该语义：慢但在动的连接不掐，完全不动（或滴流）的才掐。
+     */
+    public static final long STALL_MIN_PROGRESS_BPS = 1024L;
     public static final int MIN_FIRST_TRY_STALL_SEC = 1;
     public static final int MAX_FIRST_TRY_STALL_SEC = 60;
 
@@ -307,6 +389,36 @@ public final class DownloadSettings {
         return firstTryStallSec * 1000;
     }
 
+    // 停滞判定（速率条件，2026-10-20） //
+    /**
+     * 停滞「窗口」长度（毫秒）：窗口到期时按窗口内实收字节判定，而不是按单次 read 是否超时。
+     *
+     * <p>与 socket 读超时的分工（对标 PCL2 ModNet.vb:1025-1032）：
+     * <ul>
+     *   <li><b>socket 读超时</b>（{@link #getStallTimeoutMs()}，15s）是外层兜底：连接彻底无响应时靠它抛异常；</li>
+     *   <li><b>本窗口 + 速率阈值</b>是内层判据：数据在动但慢到「滴流」的连接，在窗口到期时就被判掉，
+     *       不必等满每个 read 的超时。</li>
+     * </ul>
+     * 首试窗口默认 5 秒（比最后候选短），坏源付出更小；最后候选放宽到 30 秒，slow 但可用的源能下完。
+     */
+    public static long getStallWindowMs(boolean lastResort) {
+        return lastResort ? getStallTimeoutMs() * 2L : Math.max(3_000L, getFirstTryStallMs());
+    }
+
+    /**
+     * 判定「停滞窗口内是否毫无进展」。
+     *
+     * <p>窗口到期后，实收字节低于 {@code STALL_MIN_PROGRESS_BPS × 窗口秒数} 才算卡死；
+     * 慢但在动的连接（例如实测 259KB/s 的官方源）不满足该条件，会继续下完而不是被掐断重来。
+     *
+     * @param windowMs      本窗口已持续的毫秒数
+     * @param bytesInWindow 本窗口内实收字节数
+     */
+    public static boolean isStalled(long windowMs, long bytesInWindow) {
+        long required = STALL_MIN_PROGRESS_BPS * Math.max(1L, windowMs) / 1000L;
+        return bytesInWindow < required;
+    }
+
     /** 建连超时（秒） */
     public static int getConnectTimeoutSec() {
         return connectTimeoutSec;
@@ -441,6 +553,9 @@ public final class DownloadSettings {
         slowGapSec = DEFAULT_SLOW_GAP_SEC;
         setBreakerThreshold(DEFAULT_BREAKER_THRESHOLD);
         setBreakerCooldownSec(DEFAULT_BREAKER_COOLDOWN_SEC);
+        // 2026-10-21：引擎与 PCL 并发数一并复位（复位后回到原引擎，行为与改造前一致）
+        engine = DEFAULT_ENGINE;
+        pclThreads = DEFAULT_PCL_THREADS;
     }
 
     /** 容错解析：空值 / 非法值回落默认值 */

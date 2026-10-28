@@ -1,5 +1,7 @@
 package com.example.starlight.newui.ui;
 
+
+import com.example.starlight.util.I18N;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -78,11 +80,11 @@ public final class UiService {
         try {
             img = new Image(new File(filePath).toURI().toString());
             if (img.isError()) {
-                toast("加载图片失败");
+                toast(I18N.get("ui.t0014"));
                 return;
             }
         } catch (Exception e) {
-            toast("加载图片失败: " + e.getMessage());
+            toast(I18N.get("ui.p0031", e.getMessage()));
             return;
         }
 
@@ -100,7 +102,7 @@ public final class UiService {
         imageView.setStyle("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 20, 0, 0, 4);");
 
         // 关闭提示
-        Label closeHint = new Label("点击任意位置关闭");
+        Label closeHint = new Label(I18N.get("ui.t0015"));
         closeHint.setStyle("-fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 12px;");
         StackPane.setAlignment(closeHint, Pos.BOTTOM_CENTER);
         StackPane.setMargin(closeHint, new Insets(0, 0, 20, 0));
@@ -217,11 +219,11 @@ public final class UiService {
         try {
             img = new javafx.scene.image.Image(UiService.class.getResourceAsStream(imagePath));
             if (img.isError()) {
-                toast("加载图片失败");
+                toast(I18N.get("ui.t0016"));
                 return;
             }
         } catch (Exception e) {
-            toast("加载图片失败: " + e.getMessage());
+            toast(I18N.get("ui.p0032", e.getMessage()));
             return;
         }
 
@@ -238,7 +240,7 @@ public final class UiService {
         imageView.setStyle("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 20, 0, 0, 4);");
 
         // 关闭提示
-        Label closeHint = new Label("点击任意位置关闭");
+        Label closeHint = new Label(I18N.get("ui.t0017"));
         closeHint.setStyle("-fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 12px;");
         StackPane.setAlignment(closeHint, Pos.BOTTOM_CENTER);
         StackPane.setMargin(closeHint, new Insets(0, 0, 20, 0));
@@ -433,7 +435,7 @@ public final class UiService {
     /** 确认面板（异步回调风格）：点击 okText 按钮后关闭面板并执行 onConfirm，danger=true 时按钮红色 */
     public void confirm(String title, String message, String okText, boolean danger, Runnable onConfirm) {
         HBox actions = new HBox(10);
-        Button cancelBtn = new Button("取消");
+        Button cancelBtn = new Button(I18N.get("ui.t0018"));
         cancelBtn.getStyleClass().add("modal-btn-cancel");
         fillWidth(cancelBtn);
         cancelBtn.setOnAction(e -> closeModal());
@@ -453,13 +455,13 @@ public final class UiService {
     /** 信息提示面板（替代 Alert INFORMATION） */
     public void info(String title, String message) {
         dialog("info", "info", title, message, null,
-                singleAction("确定", "modal-btn-ok", this::closeModal), 380, false);
+                singleAction(I18N.get("ui.t0019"), "modal-btn-ok", this::closeModal), 380, false);
     }
 
     /** 错误提示面板（替代 Alert ERROR） */
     public void error(String title, String message) {
         dialog("error", "danger", title, message, null,
-                singleAction("确定", "modal-btn-danger", this::closeModal), 380, false);
+                singleAction(I18N.get("ui.t0020"), "modal-btn-danger", this::closeModal), 380, false);
     }
 
     /** 单行文本输入面板（替代 TextInputDialog）：输入非空时点击确定回调 onOk，回车等效确定 */
@@ -480,11 +482,11 @@ public final class UiService {
         VBox.setMargin(field, new Insets(0));
 
         HBox actions = new HBox(10);
-        Button cancelBtn = new Button("取消");
+        Button cancelBtn = new Button(I18N.get("ui.t0021"));
         cancelBtn.getStyleClass().add("modal-btn-cancel");
         fillWidth(cancelBtn);
         cancelBtn.setOnAction(e -> closeModal());
-        Button okBtn = new Button("确定");
+        Button okBtn = new Button(I18N.get("ui.t0022"));
         okBtn.getStyleClass().add("modal-btn-ok");
         fillWidth(okBtn);
         okBtn.setDisable(field.getText().trim().isEmpty());
@@ -538,7 +540,7 @@ public final class UiService {
         VBox body = new VBox(10, area);
         body.setPadding(new Insets(8, 4, 0, 4));
         VBox.setVgrow(area, Priority.ALWAYS);
-        modal("项目许可", body, 560, 420);
+        modal(I18N.get("ui.t0023"), body, 560, 420);
     }
 
     /** 显示第三方开源许可列表（读取 /assets/licenses.json） */
@@ -555,13 +557,14 @@ public final class UiService {
                     String ver = o.has("version") ? o.get("version").getAsString() : "-";
                     String lic = o.has("license") ? o.get("license").getAsString() : "-";
                     String url = o.has("url") && !o.get("url").isJsonNull() ? o.get("url").getAsString() : "";
-                    lines.add(name + " " + ver + "\n   许可证: " + lic + (url.isEmpty() ? "" : "\n   " + url));
+                    lines.add(I18N.get("uis.r0001", name, ver, lic,
+                        url.isEmpty() ? "" : I18N.get("uis.r0002", url)));
                 }
             } else {
-                lines.add("未找到 licenses.json");
+                lines.add(I18N.get("ui.t0024"));
             }
         } catch (Exception e) {
-            lines.add("加载许可证信息失败: " + e.getMessage());
+            lines.add(I18N.get("ui.p0033", e.getMessage()));
         }
 
         ListView<String> list = new ListView<>();
@@ -569,11 +572,11 @@ public final class UiService {
         list.setPrefSize(480, 320);
         list.setStyle("-fx-background-radius: 8;");
         VBox.setVgrow(list, Priority.ALWAYS);
-        Label hint = new Label("Starlight Launcher 使用的第三方组件");
+        Label hint = new Label(I18N.get("ui.t0025"));
         hint.getStyleClass().add("modal-hint");
         VBox body = new VBox(10, hint, list);
         body.setPadding(new Insets(8, 4, 0, 4));
-        modal("开源许可", body, 500, 380);
+        modal(I18N.get("ui.t0026"), body, 500, 380);
     }
 }
 

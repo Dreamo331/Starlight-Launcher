@@ -1,5 +1,7 @@
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AppDirs;
 
 import java.io.InputStream;
@@ -110,7 +112,7 @@ public final class FramegenNative {
                 System.out.println("[FrameGen] 已加载 " + p);
                 return;
             }
-            throw new UnsatisfiedLinkError("指定的 DLL 不存在: " + explicit);
+            throw new UnsatisfiedLinkError(I18N.get("framegen.p0144", explicit));
         }
 
         // 2) 启动器数据目录

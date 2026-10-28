@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.newui;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.auth.offline.Skin;
@@ -81,7 +83,7 @@ public class SkinSettingsPanel extends VBox {
         previewSection.setAlignment(Pos.CENTER);
         previewSection.setPrefWidth(182);
         previewSection.getStyleClass().add("skin-preview-card");
-        Label previewSectionTitle = new Label("预览");
+        Label previewSectionTitle = new Label(I18N.get("newui.t0079"));
         previewSectionTitle.getStyleClass().add("skin-card-label");
         StackPane avatarFrame = new StackPane();
         avatarFrame.getStyleClass().add("skin-avatar-frame");
@@ -92,7 +94,7 @@ public class SkinSettingsPanel extends VBox {
         avatarFrame.getChildren().add(previewSkinImage);
         previewNameLabel = new Label(account.name);
         previewNameLabel.getStyleClass().add("skin-player-name");
-        previewTypeBadge = new Label("宽模型 (Steve)");
+        previewTypeBadge = new Label(I18N.get("newui.t0080"));
         previewTypeBadge.getStyleClass().add("skin-model-badge");
         previewSection.getChildren().addAll(previewSectionTitle, avatarFrame, previewNameLabel, previewTypeBadge);
 
@@ -101,21 +103,21 @@ public class SkinSettingsPanel extends VBox {
         VBox.setVgrow(settingsSection, Priority.ALWAYS);
         settingsSection.getStyleClass().add("skin-config-card");
 
-        Label sourceLabel = new Label("皮肤来源");
+        Label sourceLabel = new Label(I18N.get("newui.t0081"));
         sourceLabel.getStyleClass().add("skin-card-label");
 
         sourceToggleGroup = new ToggleGroup();
         FlowPane sourceButtons = new FlowPane(6, 6);
         sourceButtons.getStyleClass().add("skin-source-seg");
-        srcDefaultBtn = AppIcons.toggle("check", "默认");
+        srcDefaultBtn = AppIcons.toggle("check", I18N.get("newui.t0082"));
         srcDefaultBtn.setToggleGroup(sourceToggleGroup);
         srcDefaultBtn.setUserData("DEFAULT");
         srcDefaultBtn.getStyleClass().add("skin-source-btn");
-        srcBuiltinBtn = AppIcons.toggle("package", "内置");
+        srcBuiltinBtn = AppIcons.toggle("package", I18N.get("newui.t0083"));
         srcBuiltinBtn.setToggleGroup(sourceToggleGroup);
         srcBuiltinBtn.setUserData("BUILTIN");
         srcBuiltinBtn.getStyleClass().add("skin-source-btn");
-        srcLocalBtn = AppIcons.toggle("folder", "本地文件");
+        srcLocalBtn = AppIcons.toggle("folder", I18N.get("newui.t0084"));
         srcLocalBtn.setToggleGroup(sourceToggleGroup);
         srcLocalBtn.setUserData("LOCAL_FILE");
         srcLocalBtn.getStyleClass().add("skin-source-btn");
@@ -145,10 +147,10 @@ public class SkinSettingsPanel extends VBox {
         // 底部：按钮 //
         HBox bottomButtons = new HBox(10);
         bottomButtons.setAlignment(Pos.CENTER_RIGHT);
-        Button cancelBtn = AppIcons.button("close", "取消");
+        Button cancelBtn = AppIcons.button("close", I18N.get("newui.t0085"));
         cancelBtn.getStyleClass().add("skin-btn-ghost");
         cancelBtn.setOnAction(e -> closeHandler.run());
-        applyBtn = AppIcons.button("check", "应用");
+        applyBtn = AppIcons.button("check", I18N.get("newui.t0086"));
         applyBtn.getStyleClass().add("skin-btn-primary");
         applyBtn.setOnAction(e -> handleApply());
         bottomButtons.getChildren().addAll(cancelBtn, applyBtn);
@@ -196,17 +198,17 @@ public class SkinSettingsPanel extends VBox {
     }
 
     private void showDefaultHint() {
-        Label hint = new Label("使用 Minecraft 默认皮肤（Steve/Alex 模型按玩家名确定）");
+        Label hint = new Label(I18N.get("newui.t0087"));
         hint.getStyleClass().add("modal-text");
         ImageView defaultIv = new ImageView(new Image(getClass().getResourceAsStream("/Skins/Steve.png"), 80, 80, true, true));
-        HBox previewBox = new HBox(12, defaultIv, new Label("Steve\n默认宽模型皮肤"));
+        HBox previewBox = new HBox(12, defaultIv, new Label(I18N.get("newui.t0088")));
         previewBox.setAlignment(Pos.CENTER_LEFT);
         previewBox.getStyleClass().add("skin-default-card");
         skinConfigArea.getChildren().addAll(hint, previewBox);
     }
 
     private void showBuiltinGrid() {
-        Label hint = new Label("选择一个内置皮肤：");
+        Label hint = new Label(I18N.get("newui.t0089"));
         hint.getStyleClass().add("modal-text-title");
         GridPane grid = new GridPane();
         Skin.Type[] builtins = Skin.getBuiltinTypes();
@@ -260,21 +262,21 @@ public class SkinSettingsPanel extends VBox {
     }
 
     private void showLocalFileSelector() {
-        Label hint = new Label("皮肤文件：角色外观；披风文件：角色背后的披风（PNG，仅自己可见）");
+        Label hint = new Label(I18N.get("newui.t0090"));
         hint.getStyleClass().add("modal-text-title");
 
         // 皮肤文件区：小节标题 + 按钮行 + 完整文件名（可换行） //
         VBox skinSection = new VBox(12);
         skinSection.getStyleClass().add("skin-file-card");
-        Label skinSectionTitle = new Label("皮肤文件");
+        Label skinSectionTitle = new Label(I18N.get("newui.t0091"));
         skinSectionTitle.getStyleClass().add("skin-file-title");
-        Label skinFileLabel = new Label((pendingLocalSkinPath != null ? new File(pendingLocalSkinPath).getName() : "未选择皮肤文件"));
+        Label skinFileLabel = new Label((pendingLocalSkinPath != null ? new File(pendingLocalSkinPath).getName() : I18N.get("newui.t0092")));
         skinFileLabel.getStyleClass().add("skin-file-label");
         skinFileLabel.setWrapText(true);
         skinFileLabel.setMaxWidth(Double.MAX_VALUE);
-        Button browseSkinBtn = AppIcons.button("folder", "浏览皮肤...");
+        Button browseSkinBtn = AppIcons.button("folder", I18N.get("newui.t0093"));
         browseSkinBtn.getStyleClass().add("skin-browse-btn");
-        skinRemoveBgBox = new CheckBox("去背景");
+        skinRemoveBgBox = new CheckBox(I18N.get("newui.t0094"));
         skinRemoveBgBox.setSelected(removeSkinBgFlag);
         skinRemoveBgBox.getStyleClass().add("skin-checkbox");
         skinRemoveBgBox.setOnAction(e -> {
@@ -285,8 +287,8 @@ public class SkinSettingsPanel extends VBox {
         });
         browseSkinBtn.setOnAction(e -> {
             FileChooser fc = new FileChooser();
-            fc.setTitle("选择皮肤文件");
-            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG图片", "*.png"));
+            fc.setTitle(I18N.get("newui.t0095"));
+            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(I18N.get("newui.t0096"), "*.png"));
             File file = fc.showOpenDialog(getScene().getWindow());
             if (file != null) {
                 pendingLocalSkinPath = file.getAbsolutePath();
@@ -302,11 +304,11 @@ public class SkinSettingsPanel extends VBox {
         // 皮肤模型（对应 PCL2 LaunchSkinSlim）：宽体用 Steve、纤细用 Alex //
         HBox modelRow = new HBox(8);
         modelRow.setAlignment(Pos.CENTER_LEFT);
-        Label modelLabel = new Label("皮肤模型:");
+        Label modelLabel = new Label(I18N.get("newui.t0097"));
         modelLabel.getStyleClass().add("modal-text");
         ToggleGroup modelGroup = new ToggleGroup();
-        RadioButton wideModel = new RadioButton("宽模型 (Steve)");
-        RadioButton slimModel = new RadioButton("纤细模型 (Alex)");
+        RadioButton wideModel = new RadioButton(I18N.get("newui.t0098"));
+        RadioButton slimModel = new RadioButton(I18N.get("newui.t0099"));
         wideModel.setToggleGroup(modelGroup);
         slimModel.setToggleGroup(modelGroup);
         boolean slimNow = editingSkin != null && editingSkin.isSlim();
@@ -325,15 +327,15 @@ public class SkinSettingsPanel extends VBox {
         // 披风文件区：小节标题 + 按钮行 + 完整文件名（可换行） //
         VBox capeSection = new VBox(12);
         capeSection.getStyleClass().add("skin-file-card");
-        Label capeSectionTitle = new Label("披风文件");
+        Label capeSectionTitle = new Label(I18N.get("newui.t0100"));
         capeSectionTitle.getStyleClass().add("skin-file-title");
-        Label capeFileLabel = new Label((pendingLocalCapePath != null ? new File(pendingLocalCapePath).getName() : "未选择披风文件"));
+        Label capeFileLabel = new Label((pendingLocalCapePath != null ? new File(pendingLocalCapePath).getName() : I18N.get("newui.t0101")));
         capeFileLabel.getStyleClass().add("skin-file-label");
         capeFileLabel.setWrapText(true);
         capeFileLabel.setMaxWidth(Double.MAX_VALUE);
-        Button browseCapeBtn = AppIcons.button("folder", "浏览披风...");
+        Button browseCapeBtn = AppIcons.button("folder", I18N.get("newui.t0102"));
         browseCapeBtn.getStyleClass().add("skin-browse-btn");
-        capeRemoveBgBox = new CheckBox("去背景");
+        capeRemoveBgBox = new CheckBox(I18N.get("newui.t0103"));
         capeRemoveBgBox.setSelected(removeCapeBgFlag);
         capeRemoveBgBox.getStyleClass().add("skin-checkbox");
         capeRemoveBgBox.setOnAction(e -> {
@@ -344,8 +346,8 @@ public class SkinSettingsPanel extends VBox {
         });
         browseCapeBtn.setOnAction(e -> {
             FileChooser fc = new FileChooser();
-            fc.setTitle("选择披风文件");
-            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG图片", "*.png"));
+            fc.setTitle(I18N.get("newui.t0104"));
+            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(I18N.get("newui.t0105"), "*.png"));
             File file = fc.showOpenDialog(getScene().getWindow());
             if (file != null) {
                 pendingLocalCapePath = file.getAbsolutePath();
@@ -364,7 +366,7 @@ public class SkinSettingsPanel extends VBox {
     private void showLittleSkinHint() {
         Label hint = new Label("LittleSkin (littleskin.cn)");
         hint.getStyleClass().add("modal-text-title");
-        Label desc = new Label("将自动从 LittleSkin 获取此账号的皮肤和披风纹理。\n确保已在 LittleSkin 官网上传了皮肤");
+        Label desc = new Label(I18N.get("newui.t0106"));
         desc.getStyleClass().add("modal-text");
         VBox card = new VBox(6, desc);
         card.getStyleClass().add("skin-default-card");
@@ -372,9 +374,9 @@ public class SkinSettingsPanel extends VBox {
     }
 
     private void showCslApiInput() {
-        Label hint = new Label("Custom Skin Loader API 地址:");
+        Label hint = new Label(I18N.get("newui.t0107"));
         hint.getStyleClass().add("modal-text-title");
-        Label desc = new Label("输入支持 CSL API 标准的服务器地址");
+        Label desc = new Label(I18N.get("newui.t0108"));
         desc.getStyleClass().add("modal-hint");
         TextField apiField = new TextField(cslApiUrl != null ? cslApiUrl : "");
         apiField.getStyleClass().add("input-field");
@@ -391,11 +393,11 @@ public class SkinSettingsPanel extends VBox {
     private void updatePreview() {
         if (editingSkin == null) {
             previewSkinImage.setImage(null);
-            previewTypeBadge.setText("未选择皮肤");
+            previewTypeBadge.setText(I18N.get("newui.t0109"));
             return;
         }
         boolean isSlim = editingSkin.isSlim();
-        previewTypeBadge.setText(isSlim ? "纤细模型 (Alex)" : "宽模型 (Steve)");
+        previewTypeBadge.setText(isSlim ? I18N.get("newui.t0138") : I18N.get("newui.t0139"));
         Skin.LoadedSkin loaded = editingSkin.load("preview");
         if (loaded != null && loaded.getSkin() != null) {
             previewSkinImage.setImage(loaded.getSkin().getImage());

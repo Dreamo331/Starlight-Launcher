@@ -25,6 +25,7 @@ import com.example.starlight.modpack.PackManifest;
 import com.example.starlight.newui.AppConfig;
 import com.example.starlight.newui.MarkdownRenderer;
 import com.example.starlight.newui.LauncherContext;
+import com.example.starlight.newui.download.CustomDownloadDialog;
 import com.example.starlight.newui.download.DownloadTaskCard;
 import com.example.starlight.newui.download.DownloadTaskManager;
 import com.example.starlight.newui.download.ModHit;
@@ -34,8 +35,10 @@ import com.example.starlight.newui.download.SearchCacheEntry;
 import com.example.starlight.modfile.ModFileFormatter;
 import com.example.starlight.newui.ui.InertiaScrollSupport;
 import com.example.starlight.newui.ui.IconService;
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.ui.PageKit;
 import com.example.starlight.newui.ui.SkeletonFactory;
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.util.ArchiveUtils;
 import com.example.starlight.util.FormatUtils;
@@ -89,6 +92,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -109,6 +114,42 @@ import java.util.stream.Collectors;
  * 保证「详情页 / 选版本页 / 版本配置页」的上下文在切页后仍然有效。
  */
 public final class DownloadCenterPage {
+
+    /**
+     * 下拉框当前值是否等于「全部」占位项。
+     *
+     * <p>旧实现写 {@code "全部".equals(v)} —— 把<b>显示文案</b>当哨兵。
+     * 界面语言一换该判定立刻失效（筛选静默失灵，且编译不报错）。
+     * 这里改为「是否为列表中第一项」：我们始终把「全部」放在首位，
+     * 文案由 {@code I18N} 翻译，位置合同稳定。
+     */
+    private static boolean isAllPlaceholder(ComboBox<String> combo) {
+        if (combo == null) return true;
+        String v = combo.getSelectionModel().getSelectedItem();
+        if (v == null) return true;
+        return combo.getItems().isEmpty() || combo.getItems().get(0).equals(v);
+    }
+
+    /** 值是否为「全部」占位（用于纯字符串场景，比较对象是下拉首项文案） */
+    private static boolean isAllPlaceholder(String value, ComboBox<String> combo) {
+        if (value == null || value.isBlank()) return true;
+        return combo != null && !combo.getItems().isEmpty() && combo.getItems().get(0).equals(value);
+    }
+
+    /**
+     * 详情页「版本」标签页的 key。
+     *
+     * <p>不能写成 {@code static final String = I18N.get(...)}——那会在<b>类初始化时</b>
+     * 把语言冻结住，之后切配置永不生效。必须每次现取。
+     */
+    private static String tabVersionsKey() {
+        return I18N.get("dc.tabVersions");
+    }
+
+    /** 该名称是否为「原版（Vanilla）」显示名（当前语言下） */
+    private static boolean isVanillaLabel(String name) {
+        return name != null && name.equals(I18N.get("dc.vanillaLabel"));
+    }
 
     private final LauncherContext host;
     private final DownloadTaskManager downloads;
@@ -206,7 +247,7 @@ public final class DownloadCenterPage {
         nav.setMaxWidth(160);
         nav.setMaxHeight(Double.MAX_VALUE);
         nav.getStyleClass().add("download-nav");
-        Label title = new Label("下载中心");
+        Label title = new Label(I18N.get("page.t0083"));
         title.getStyleClass().add("download-nav-title");
         nav.getChildren().add(title);
 
@@ -216,13 +257,13 @@ public final class DownloadCenterPage {
 
         // 侧边栏顺序：游戏版本 → 模组 → 整合包 → 数据包 → 资源包 → 光影包 → 世界
         String[][] types = {
-                {"dl_versions", "游戏版本", "version-select"},
-                {"dl_mods", "模组", "puzzle"},
-                {"dl_modpacks", "整合包", "package"},
-                {"dl_datapacks", "数据包", "file"},
-                {"dl_resourcepacks", "资源包", "image"},
-                {"dl_shaders", "光影包", "sun"},
-                {"dl_worlds", "世界", "world"}
+                {"dl_versions", I18N.get("page.t0084"), "version-select"},
+                {"dl_mods", I18N.get("page.t0085"), "puzzle"},
+                {"dl_modpacks", I18N.get("page.t0086"), "package"},
+                {"dl_datapacks", I18N.get("page.t0087"), "file"},
+                {"dl_resourcepacks", I18N.get("page.t0088"), "image"},
+                {"dl_shaders", I18N.get("page.t0089"), "sun"},
+                {"dl_worlds", I18N.get("page.t0090"), "world"}
         };
 
         // 整合包面板额外提供「导入本地整合包」入口（支持 .mrpack 与 CurseForge zip），
@@ -230,14 +271,14 @@ public final class DownloadCenterPage {
         VBox modpackPanel = new VBox(10);
         HBox importRow = new HBox(10);
         importRow.setAlignment(Pos.CENTER_LEFT);
-        Button importBtn = AppIcons.button("folder", "导入本地整合包");
+        Button importBtn = AppIcons.button("folder", I18N.get("page.t0091"));
         importBtn.getStyleClass().add("btn-primary");
         importBtn.setMinWidth(Region.USE_PREF_SIZE);
         importBtn.setOnAction(e -> importLocalModpack());
-        Label importHint = new Label("支持 Modrinth .mrpack 与 CurseForge 整合包 zip（.zip）");
+        Label importHint = new Label(I18N.get("page.t0092"));
         importHint.setStyle("-fx-font-size: 11px; -fx-text-fill: -sl-text-dim;");
         importRow.getChildren().addAll(importBtn, importHint);
-        Node modpackContent = buildContentPanel("整合包", RemoteModRepository.Type.MODPACK,
+        Node modpackContent = buildContentPanel(I18N.get("page.t0093"), RemoteModRepository.Type.MODPACK,
                 List.of(new ModSource("Modrinth", ModrinthRemoteModRepository.MODPACKS),
                         new ModSource("CurseForge", CurseForgeRemoteModRepository.MODPACKS)),
                 importRow);
@@ -245,17 +286,17 @@ public final class DownloadCenterPage {
 
         Node[] panels = {
                 buildDownloadVersionsPanel(),
-                buildContentPanel("模组", RemoteModRepository.Type.MOD,
+                buildContentPanel(I18N.get("page.t0568"), RemoteModRepository.Type.MOD,
                         List.of(new ModSource("Modrinth", ModrinthRemoteModRepository.MODS),
                                 new ModSource("CurseForge", CurseForgeRemoteModRepository.MODS))),
                 modpackPanel,
-                buildContentPanel("数据包", RemoteModRepository.Type.CUSTOMIZATION,
+                buildContentPanel(I18N.get("page.t0569"), RemoteModRepository.Type.CUSTOMIZATION,
                         List.of(new ModSource("Modrinth", ModrinthRemoteModRepository.DATAPACKS),
                                 new ModSource("CurseForge", CurseForgeRemoteModRepository.DATAPACKS))),
-                buildContentPanel("资源包", RemoteModRepository.Type.RESOURCE_PACK,
+                buildContentPanel(I18N.get("page.t0570"), RemoteModRepository.Type.RESOURCE_PACK,
                         List.of(new ModSource("Modrinth", ModrinthRemoteModRepository.RESOURCE_PACKS),
                                 new ModSource("CurseForge", CurseForgeRemoteModRepository.RESOURCE_PACKS))),
-                buildContentPanel("光影包", RemoteModRepository.Type.SHADER_PACK,
+                buildContentPanel(I18N.get("page.t0571"), RemoteModRepository.Type.SHADER_PACK,
                         List.of(new ModSource("Modrinth", ModrinthRemoteModRepository.SHADER_PACKS),
                                 new ModSource("CurseForge", CurseForgeRemoteModRepository.SHADER_PACKS))),
                 buildDownloadWorldsPanel()
@@ -307,6 +348,19 @@ public final class DownloadCenterPage {
             nav.getChildren().add(btn);
         }
 
+        // 侧边栏最下方：自定义下载（任意直链 + 自选保存目录，支持断点续传）。
+        // 用可伸缩的空白把入口压到底部，窗口再矮也不会和上面的分类挤在一起。
+        Region navSpacer = new Region();
+        VBox.setVgrow(navSpacer, Priority.ALWAYS);
+        nav.getChildren().add(navSpacer);
+        Button customDownloadBtn = new Button(I18N.get("page.t0094"));
+        customDownloadBtn.getStyleClass().add("sidebar-item");
+        customDownloadBtn.setMaxWidth(Double.MAX_VALUE);
+        AppIcons.apply(customDownloadBtn, "download", 15, null);
+        customDownloadBtn.setTooltip(new Tooltip(I18N.get("page.t0095")));
+        customDownloadBtn.setOnAction(e -> showCustomDownloadDialog());
+        nav.getChildren().add(customDownloadBtn);
+
         contentArea.getChildren().add(panels[0]);
         contentScroll.setFitToHeight(true);                       // 初始显示的就是「游戏版本」
         contentScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
@@ -322,7 +376,7 @@ public final class DownloadCenterPage {
 
     /** 版本页分类标签：key + 显示名（顺序与 VersePc2 版本页一致） */
     private static final String[][] CATEGORY_TABS = {
-            {"release", "正式版"}, {"snapshot", "快照"}, {"april", "愚人节版"}, {"old", "远古版"}
+            {"release", I18N.get("page.t0096")}, {"snapshot", I18N.get("page.t0097")}, {"april", I18N.get("page.t0098")}, {"old", I18N.get("page.t0099")}
     };
 
     /** 分类标签 key → 版本分类枚举 */
@@ -346,7 +400,7 @@ public final class DownloadCenterPage {
         VBox root = new VBox(12);
         root.setPadding(new Insets(0, 4, 0, 0));
 
-        Label titleLabel = new Label("游戏版本");
+        Label titleLabel = new Label(I18N.get("page.t0100"));
         titleLabel.getStyleClass().add("content-title");
         root.getChildren().add(titleLabel);
 
@@ -354,12 +408,12 @@ public final class DownloadCenterPage {
         HBox toolbar = new HBox(8);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         TextField searchField = new TextField();
-        searchField.setPromptText("搜索版本，如 1.20.1");
+        searchField.setPromptText(I18N.get("page.t0101"));
         searchField.getStyleClass().add("input-field");
         HBox.setHgrow(searchField, Priority.ALWAYS);
-        Button searchBtn = AppIcons.button("search", "搜索");
+        Button searchBtn = AppIcons.button("search", I18N.get("page.t0102"));
         searchBtn.getStyleClass().add("btn-primary");
-        Button refreshBtn = AppIcons.button("refresh", "刷新");
+        Button refreshBtn = AppIcons.button("refresh", I18N.get("page.t0103"));
         refreshBtn.getStyleClass().add("btn-primary");
         toolbar.getChildren().addAll(searchField, searchBtn, refreshBtn);
 
@@ -495,13 +549,13 @@ public final class DownloadCenterPage {
                 lastVersionInfos = infos;
                 Platform.runLater(() -> {
                     if (infos.isEmpty()) {
-                        versionList.setPlaceholder(errorPlaceholder("版本清单加载失败，请检查网络后重试", null,
+                        versionList.setPlaceholder(errorPlaceholder(I18N.get("page.t0104"), null,
                                 () -> loadDownloadVersions(versionList, countLabel, onLoaded)));
                         return;
                     }
                     onLoaded.accept(infos);
                     // 加载完成后换成空态提示：列表为空是因为「没有匹配」，而不是还在加载
-                    versionList.setPlaceholder(skeletonHint("没有匹配的版本"));
+                    versionList.setPlaceholder(skeletonHint(I18N.get("page.t0105")));
                     // 不再预加载热门版本：这批 21 个请求只在版本清单加载后立即发起，
                     // 与配置页的加载器查询时间重叠，抢带宽且配置页的列表查询不读 LOADER_CACHE
                     //（见 VersionDownloadService.fetchAllLoaderVersionsListAsync），纯属无效预热。
@@ -509,7 +563,7 @@ public final class DownloadCenterPage {
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> versionList.setPlaceholder(
-                        errorPlaceholder("版本清单加载失败", String.valueOf(e.getMessage()),
+                        errorPlaceholder(I18N.get("page.t0106"), String.valueOf(e.getMessage()),
                                 () -> loadDownloadVersions(versionList, countLabel, onLoaded))));
             }
         });
@@ -551,13 +605,13 @@ public final class DownloadCenterPage {
 
     /** 版本分类显示名 */
     private static String categoryLabel(VersionDownloadService.VersionCategory category) {
-        if (category == null) return "版本";
+        if (category == null) return I18N.get("page.t0107");
         return switch (category) {
-            case RELEASE -> "正式版";
-            case SNAPSHOT -> "快照";
-            case OLD -> "远古版";
-            case APRIL -> "愚人节版";
-            default -> "版本";
+            case RELEASE -> I18N.get("page.t0108");
+            case SNAPSHOT -> I18N.get("page.t0109");
+            case OLD -> I18N.get("page.t0110");
+            case APRIL -> I18N.get("page.t0111");
+            default -> I18N.get("page.t0112");
         };
     }
 
@@ -591,7 +645,7 @@ public final class DownloadCenterPage {
         meta.getStyleClass().add("settings-card-desc");
         info.getChildren().addAll(idLabel, meta);
 
-        Button configBtn = AppIcons.button("sliders", "下载配置");
+        Button configBtn = AppIcons.button("sliders", I18N.get("page.t0113"));
         configBtn.getStyleClass().add("btn-primary");
         configBtn.setStyle("-fx-padding: 4 14; -fx-font-size: 12px;");
         configBtn.setOnAction(e -> openVersionConfigPage(v));
@@ -614,14 +668,14 @@ public final class DownloadCenterPage {
         list.getItems().clear();
         filteredOut[0] = List.of();
         if (versions == null || versions.isEmpty()) {
-            if (countLabel != null) countLabel.setText("没有找到匹配的版本");
+            if (countLabel != null) countLabel.setText(I18N.get("page.t0114"));
             updateVersionMoreRow(moreBtn, moreRow, 0, 0);
             return;
         }
         List<VersionDownloadService.VersionInfo> filtered =
                 VersionDownloadService.filterByCategory(versions, categoryOf(categoryKey));
         if (filtered.isEmpty()) {
-            if (countLabel != null) countLabel.setText("该分类下暂无版本");
+            if (countLabel != null) countLabel.setText(I18N.get("page.t0115"));
             updateVersionMoreRow(moreBtn, moreRow, 0, 0);
             return;
         }
@@ -640,8 +694,8 @@ public final class DownloadCenterPage {
         });
         if (countLabel != null) {
             countLabel.setText(filtered.size() > VERSION_LIST_PAGE
-                    ? "共 " + filtered.size() + " 个版本 · 每次显示 " + first + " 个，点下方按钮继续往下加载"
-                    : "共 " + filtered.size() + " 个版本 · 左键单击任意版本进入它的下载配置");
+                    ? I18N.get("page.q0001", filtered.size(), first)
+                    : I18N.get("page.q0002", filtered.size()));
         }
         updateVersionMoreRow(moreBtn, moreRow, first, filtered.size());
     }
@@ -650,7 +704,7 @@ public final class DownloadCenterPage {
     private static void updateVersionMoreRow(Button moreBtn, HBox moreRow, int shown, int total) {
         boolean hasMore = shown < total;
         if (moreBtn != null) {
-            moreBtn.setText("向下加载更多（已显示 " + shown + " / " + total + "）");
+            moreBtn.setText(I18N.get("page.p0753", shown + " / " + total + "）"));
         }
         if (moreRow != null) {
             moreRow.setVisible(hasMore);
@@ -687,19 +741,19 @@ public final class DownloadCenterPage {
         root.setPadding(new Insets(0, 4, 0, 0));
         VBox.setVgrow(root, Priority.ALWAYS);
 
-        Button backBtn = AppIcons.button("back", "返回");
+        Button backBtn = AppIcons.button("back", I18N.get("page.t0116"));
         backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> goBackFromVersionConfig());
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
-        Label titleLabel = new Label(v == null ? "下载配置" : "下载配置 - " + v.getId());
+        Label titleLabel = new Label(v == null ? I18N.get("page.t0572") : I18N.get("page.p0754", v.getId()));
         // 页面级标题统一用 content-title（19px）；home-card-title 是卡片内小节标题（12px）
         titleLabel.getStyleClass().add("content-title");
         header.getChildren().addAll(backBtn, titleLabel);
         root.getChildren().add(header);
 
         if (v == null) {
-            root.getChildren().add(versionHint("请先在「游戏版本」里左键单击一个版本。"));
+            root.getChildren().add(versionHint(I18N.get("page.t0117")));
             return root;
         }
 
@@ -718,7 +772,7 @@ public final class DownloadCenterPage {
         HBox footer = new HBox(10);
         footer.setAlignment(Pos.CENTER);
         footer.setPadding(new Insets(6, 0, 4, 0));
-        Button installBtn = AppIcons.button("download", "开始下载");
+        Button installBtn = AppIcons.button("download", I18N.get("page.t0118"));
         installBtn.getStyleClass().add("btn-primary");
         installBtn.setStyle("-fx-padding: 8 34; -fx-font-size: 14px; -fx-background-radius: 22;");
         installBtn.setOnAction(e -> installGameVersion(v, selection[0], currentVersionConfigDirName));
@@ -783,24 +837,23 @@ public final class DownloadCenterPage {
         // 版本文件夹名 //
         HBox dirRow = new HBox(8);
         dirRow.setAlignment(Pos.CENTER_LEFT);
-        Label dirLabel = new Label("版本文件夹名:");
+        Label dirLabel = new Label(I18N.get("page.t0119"));
         dirLabel.getStyleClass().add("config-field-label");
         // 目录已存在时自动改用「版本号-2 / -3…」，避免和已有版本撞名覆盖
         String configGameDir = host.config().getOrDefault("GameDir", ".minecraft");
         String suggestedDir = suggestFreeVersionDir(configGameDir, v.getId());
         TextField dirField = new TextField(suggestedDir);
-        dirField.setPromptText("留空使用版本号");
+        dirField.setPromptText(I18N.get("page.t0120"));
         dirField.getStyleClass().add("input-field");
         HBox.setHgrow(dirField, Priority.ALWAYS);
-        Tooltip.install(dirField, new Tooltip("自定义保存游戏文件的文件夹名，如 " + v.getId() + "-联机版"));
+        Tooltip.install(dirField, new Tooltip(I18N.get("page.q0003", v.getId())));
         currentVersionConfigDirName = suggestedDir;
         dirField.textProperty().addListener((o, ov, nv) -> currentVersionConfigDirName = nv);
         dirRow.getChildren().addAll(dirLabel, dirField);
         body.getChildren().add(dirRow);
 
         if (!suggestedDir.equals(v.getId())) {
-            Label dupHint = new Label("已存在同名版本文件夹，自动改为「" + suggestedDir
-                    + "」以免覆盖原有版本（可手动修改）");
+            Label dupHint = new Label(I18N.get("page.q0004", suggestedDir));
             dupHint.setWrapText(true);
             dupHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #b45309;");
             body.getChildren().add(dupHint);
@@ -809,11 +862,11 @@ public final class DownloadCenterPage {
         body.getChildren().add(new Separator());
 
         // 组件列表（PCL2 式：一行一个加载器，点开展开版本列表） //
-        Label sectionTitle = new Label("选择要安装的组件");
+        Label sectionTitle = new Label(I18N.get("page.t0121"));
         sectionTitle.getStyleClass().add("config-section-title");
 
         VBox componentList = new VBox(6);
-        Label componentHint = new Label("正在查询各加载器的可用版本...");
+        Label componentHint = new Label(I18N.get("page.t0122"));
         componentHint.getStyleClass().add("config-hint");
         body.getChildren().addAll(sectionTitle, componentHint, componentList);
 
@@ -839,7 +892,7 @@ public final class DownloadCenterPage {
             // ① 原版行：始终可选、可点，没有可展开的版本列表。
             //    versionCount 传 -1：表示「可用但没有版本列表」，区别于 0（该加载器无可用版本 → 置灰不可点）
             componentList.getChildren().add(buildComponentRow(
-                    "原版（Vanilla）", -1, selected[0] == null ? "已选择" : "可以直接下载",
+                    I18N.get("page.t0573"), -1, selected[0] == null ? I18N.get("page.t0574") : I18N.get("page.t0575"),
                     selected[0] == null, false, false, () -> {
                         selected[0] = null;
                         expanded[0] = null;
@@ -861,15 +914,15 @@ public final class DownloadCenterPage {
                 if (isChosen) {
                     status = selected[0].getVersion();
                 } else if (!queried[0]) {
-                    status = "正在查询…";
+                    status = I18N.get("page.t0123");
                 } else if (timedOutLoaders.contains(name)) {
-                    status = "查询超时，点击重试";
+                    status = I18N.get("page.t0124");
                 } else if (VersionMatcher.matchesInstalledLoader(installedLoader[0], name)) {
-                    status = "已安装";
+                    status = I18N.get("page.t0125");
                 } else if (known) {
-                    status = "可以添加";
+                    status = I18N.get("page.t0126");
                 } else {
-                    status = "无";
+                    status = I18N.get("page.t0127");
                 }
 
                 // versionCount 传 -1 表示「数量未知（查询中/超时）」，此时也允许点开；
@@ -898,7 +951,7 @@ public final class DownloadCenterPage {
                                     render[0].run();
                                 }));
                     } else {
-                        Label waiting = new Label("正在查询 " + loaderName + " 的版本列表...");
+                        Label waiting = new Label(I18N.get("page.q0005", loaderName));
                         waiting.getStyleClass().addAll("config-hint", "loader-version-item");
                         componentList.getChildren().add(waiting);
                     }
@@ -906,7 +959,7 @@ public final class DownloadCenterPage {
             }
 
             if (queried[0] && groups.isEmpty()) {
-                Label none = new Label("该版本暂无可用加载器，可直接下载原版");
+                Label none = new Label(I18N.get("page.t0128"));
                 none.getStyleClass().add("config-hint");
                 componentList.getChildren().add(none);
             }
@@ -916,8 +969,7 @@ public final class DownloadCenterPage {
             boolean fabricChosen = selected[0] != null && "Fabric".equalsIgnoreCase(selected[0].getLoaderName());
             boolean fabricApiKnown = groups.containsKey("FabricAPI") && !groups.get("FabricAPI").isEmpty();
             if (fabricChosen && fabricApiKnown) {
-                Label apiHint = new Label("Fabric 加载器本身不含任何 API，绝大多数 Fabric 模组需要额外安装 "
-                        + "Fabric API 才能正常运行 —— 可在上方「FabricAPI」一行单独选版本安装。");
+                Label apiHint = new Label(I18N.get("page.t0552"));
                 apiHint.setWrapText(true);
                 apiHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #b45309; -fx-padding: 2 0 0 2;");
                 componentList.getChildren().add(apiHint);
@@ -929,7 +981,7 @@ public final class DownloadCenterPage {
 
         // 异步查询组件清单（可重入：首查与「重试」按钮共用）
         queryLoaders[0] = () -> {
-            componentHint.setText("正在查询各加载器的可用版本...");
+            componentHint.setText(I18N.get("page.t0129"));
             componentHint.setStyle(null);
             timedOutLoaders.clear();
             VersionDownloadService.fetchAllLoaderVersionsListAsync(v.getId())
@@ -959,20 +1011,20 @@ public final class DownloadCenterPage {
                         long withVersions = ordered.values().stream().filter(l -> !l.isEmpty()).count();
                         if (!timedOutLoaders.isEmpty()) {
                             componentHint.setText(withVersions == 0
-                                    ? "部分加载器查询超时，点「查询超时」的行可单独重试"
-                                    : "部分加载器查询超时，点「查询超时」的行可单独重试（已查到的可直接用）");
+                                    ? I18N.get("page.t0576")
+                                    : I18N.get("page.t0577"));
                             componentHint.setStyle("-fx-text-fill: #b45309;");
                         } else {
                             componentHint.setText(withVersions == 0
-                                    ? "该版本暂无可用加载器，可直接下载原版"
-                                    : "选择一个加载器展开版本列表，或直接下载原版");
+                                    ? I18N.get("page.t0578")
+                                    : I18N.get("page.t0579"));
                             componentHint.setStyle(null);
                         }
                         render[0].run();
                     }, Platform::runLater)
                     .exceptionally(ex -> {
                         Platform.runLater(() -> {
-                            componentHint.setText("组件查询失败（" + ex.getMessage() + "），仍可直接下载原版");
+                            componentHint.setText(I18N.get("page.q0006", ex.getMessage()));
                             componentHint.setStyle("-fx-text-fill: #ef4444;");
                             queried[0] = true;
                             render[0].run();
@@ -1003,8 +1055,8 @@ public final class DownloadCenterPage {
     /** 加载器筛选下拉的选项（开了「忽略 Quilt」就不列 Quilt） */
     private List<String> loaderFilterOptions() {
         return ignoreQuilt()
-                ? List.of("全部", "Fabric", "Forge", "NeoForge")
-                : List.of("全部", "Fabric", "Forge", "NeoForge", "Quilt");
+                ? List.of(I18N.get("page.t0580"), "Fabric", "Forge", "NeoForge")
+                : List.of(I18N.get("page.t0581"), "Fabric", "Forge", "NeoForge", "Quilt");
     }
 
     /** 过滤掉要忽略的加载器（用于版本行的「加载器: …」显示） */
@@ -1035,8 +1087,8 @@ public final class DownloadCenterPage {
         if (chosen) row.getStyleClass().add("chosen");
 
         // 加载器图标（原版用草方块）
-        String iconName = "原版（Vanilla）".equals(name) ? null : name;
-        StackPane iconBox = new StackPane("原版（Vanilla）".equals(name)
+        String iconName = isVanillaLabel(name) ? null : name;
+        StackPane iconBox = new StackPane(isVanillaLabel(name)
                 ? IconService.versionIconView(VersionDownloadService.VersionCategory.RELEASE, 26)
                 : IconService.loaderIconView(iconName, 26));
         iconBox.setMinSize(34, 34);
@@ -1083,10 +1135,10 @@ public final class DownloadCenterPage {
 
         // 最新版推荐
         VersionDownloadService.LoaderVersion newest = versions.get(0);
-        panel.getChildren().add(buildLoaderVersionItem(loaderName, newest, "最新版", current, onPick));
+        panel.getChildren().add(buildLoaderVersionItem(loaderName, newest, I18N.get("page.t0130"), current, onPick));
         panel.getChildren().add(new Separator());
 
-        Label allTitle = new Label("全部版本 (" + versions.size() + ")");
+        Label allTitle = new Label(I18N.get("page.p0755", versions.size() + ")"));
         allTitle.getStyleClass().add("config-panel-title");
         panel.getChildren().add(allTitle);
 
@@ -1096,7 +1148,7 @@ public final class DownloadCenterPage {
             list.getChildren().add(buildLoaderVersionItem(loaderName, lv, "", current, onPick));
         }
         if (list.getChildren().isEmpty()) {
-            Label onlyOne = new Label("该加载器当前只有一个版本");
+            Label onlyOne = new Label(I18N.get("page.t0131"));
             onlyOne.getStyleClass().add("config-hint");
             list.getChildren().add(onlyOne);
         }
@@ -1146,6 +1198,10 @@ public final class DownloadCenterPage {
      *
      * <p>自定义文件夹名时，{@link InstallEngine} 会同时把原版基底保留在标准版本目录，
      * 以便加载器（Fabric 等）能按标准版本号继承，这一点与改造前一致。
+     *
+     * <p>「取消下载」是立即生效的：取消标志一路传进下载引擎（分块每读 64KB 检查一次）
+     * 与加载器安装器（200ms 轮询，必要时强杀子进程），不会等当前分块/当前文件下完；
+     * 取消后删除本次安装新建的版本目录，不留半截版本。
      */
     private void installGameVersion(VersionDownloadService.VersionInfo v,
                                     VersionDownloadService.LoaderVersion loader, String folderName) {
@@ -1153,22 +1209,33 @@ public final class DownloadCenterPage {
         // 校验并规范化自定义文件夹名：含非法字符或为空时回退版本号
         String dirName = (folderName == null || folderName.isBlank()
                 || folderName.matches(".*[\\\\/:*?\"<>|].*")) ? v.getId() : folderName.trim();
-        String loaderName = loader != null ? loader.getLoaderName() : "原版";
+        String loaderName = loader != null ? loader.getLoaderName() : I18N.get("page.t0132");
         final VersionDownloadService.LoaderVersion finalLoader = loader;
         final String finalDirName = dirName;
-        DownloadTaskCard dialog = downloads.open("安装 " + dirName
-                + (loader != null ? " + " + loaderName + " " + loader.getVersion() : ""));
+        DownloadTaskCard dialog = downloads.open(I18N.get("page.p0756", dirName
+                + (loader != null ? " + " + loaderName + " " + loader.getVersion() : "")));
         // 失败后可一键重试
         dialog.setRetryAction(() -> installGameVersion(v, finalLoader, finalDirName));
-        dialog.stage("准备安装...");
-        dialog.logLine("目标版本目录: " + gameDir + "/versions/" + dirName, true);
+        dialog.stage(I18N.get("page.t0133"));
+        dialog.logLine(I18N.get("page.p0757", gameDir + "/versions/" + dirName), true);
         if (loader != null) {
-            dialog.logLine("加载器: " + loaderName + " " + loader.getVersion(), true);
+            dialog.logLine(I18N.get("page.p0758", loaderName + " " + loader.getVersion()), true);
             if (loader.getDownloadUrl() != null && !loader.getDownloadUrl().isBlank()) {
-                dialog.logLine("加载器安装器: " + loader.getDownloadUrl(), true);
+                dialog.logLine(I18N.get("page.p0759", loader.getDownloadUrl()), true);
             }
         }
-        dialog.beginFile("客户端与依赖库");
+        dialog.beginFile(I18N.get("page.t0134"));
+
+        // 取消标志：点「取消下载」后立即置位，下载引擎/加载器安装器都直接轮询它
+        final java.util.concurrent.atomic.AtomicBoolean cancel = dialog.cancelFlag();
+        // 安装前先记下版本目录是否已存在：取消时只删本次新建的，
+        // 避免「覆盖安装到已有版本时点取消」把用户能正常启动的版本删掉
+        final boolean versionDirExisted = Files.exists(Path.of(gameDir, "versions", dirName));
+        final boolean baseVersionDirExisted = dirName.equals(v.getId())
+                || Files.exists(Path.of(gameDir, "versions", v.getId()));
+        // 版本目录快照：取消时只删「安装过程中新出现」的目录，
+        // 一并清掉 Forge/NeoForge 安装器可能留下的中间版本目录，又不会误删用户原有版本
+        final java.util.Set<String> versionsBefore = listVersionDirNames(gameDir);
 
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
@@ -1180,18 +1247,21 @@ public final class DownloadCenterPage {
                             dialog.message(msg);
                             // 把每个阶段也写进文件列表，失败时能看出卡在哪一步
                             if (msg != null && !msg.isBlank()) dialog.logLine(msg, true);
-                        }, dirName);
-                if (!ok) throw new IOException("原版安装失败");
+                        }, dirName, cancel);
+                if (!ok) throw new IOException(I18N.get("page.t0135"));
+                // 最后一个文件下完的瞬间用户也可能刚点了取消：这里再确认一次，
+                // 免得半截安装接着装加载器、最后还显示「安装完成」
+                checkDownloadCancelled(dialog);
                 dialog.finishFile(true);
 
                 if (loader == null) {
                     initIsolationAfterInstall(gameDir, dirName, dialog);
-                    dialog.finish(true, dirName + " 安装完成", null);
-                    Platform.runLater(() -> host.ui().toast(dirName + " 安装完成"));
+                    dialog.finish(true, I18N.get("page.q0007", dirName), null);
+                    Platform.runLater(() -> host.ui().toast(I18N.get("page.q0007", dirName)));
                     return;
                 }
 
-                dialog.stage("安装 " + loaderName + " " + loader.getVersion() + "...");
+                dialog.stage(I18N.get("page.p0760", loaderName + " " + loader.getVersion() + "..."));
                 dialog.beginFile(loaderName + " " + loader.getVersion());
                 java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
                 final boolean[] okRef = {false};
@@ -1219,26 +1289,138 @@ public final class DownloadCenterPage {
                                 errRef[0] = error;
                                 latch.countDown();
                             }
-                        }, dirName);
-                if (!latch.await(30, java.util.concurrent.TimeUnit.MINUTES)) {
-                    throw new IOException(loaderName + " 安装超时");
+                        }, dirName, cancel);
+                // 每 200ms 醒一次而不是一口气等 30 分钟：取消时加载器引擎自己会尽快收尾
+                // （强杀安装器子进程），这里只做超时兜底
+                long deadline = System.currentTimeMillis() + 30L * 60L * 1000L;
+                while (!latch.await(200, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    if (System.currentTimeMillis() > deadline) {
+                    throw new IOException(I18N.get("page.q0008", loaderName));
+                    }
                 }
+                checkDownloadCancelled(dialog);
                 dialog.finishFile(okRef[0]);
                 if (!okRef[0]) {
-                    throw new IOException(loaderName + " 安装失败"
-                            + (errRef[0] != null ? ": " + errRef[0] : ""));
+                    throw new IOException(I18N.get("page.q0009", loaderName,
+                            errRef[0] != null ? ": " + errRef[0] : ""));
                 }
                 initIsolationAfterInstall(gameDir, dirName, dialog);
-                dialog.finish(true, dirName + " + " + loaderName + " 安装完成", null);
-                Platform.runLater(() -> host.ui().toast(dirName + " + " + loaderName + " 安装完成"));
+                dialog.finish(true, I18N.get("page.q0010", dirName, loaderName), null);
+                Platform.runLater(() -> host.ui().toast(I18N.get("page.q0010", dirName, loaderName)));
             } catch (Exception ex) {
-                boolean cancelled = HttpDownloadEngine.CANCELLED_MESSAGE.equals(ex.getMessage());
+                boolean cancelled = dialog.isCancelled()
+                        || HttpDownloadEngine.CANCELLED_MESSAGE.equals(ex.getMessage());
                 // 失败原因同时写进文件列表，卡片上能直接看到，不用去翻日志文件
-                dialog.logLine("失败: " + ex, false);
-                if (ex.getCause() != null) dialog.logLine("原因: " + ex.getCause(), false);
-                dialog.finish(false, cancelled ? "已取消安装" : "安装失败: " + ex.getMessage(), null);
+                if (cancelled) {
+                    dialog.logLine(I18N.get("page.t0136"), false);
+                } else {
+                    dialog.logLine(I18N.get("page.p0761", ex), false);
+                    if (ex.getCause() != null) dialog.logLine(I18N.get("page.p0762", ex.getCause()), false);
+                }
+                String summary;
+                if (cancelled) {
+                    // 取消后立刻清掉本次新建的（不完整）版本目录
+                    String cleanupNote = cleanupIncompleteVersionInstall(gameDir, dirName, v.getId(),
+                            versionDirExisted, baseVersionDirExisted, versionsBefore, dialog);
+                    summary = cleanupNote == null || cleanupNote.isBlank()
+                            ? I18N.get("page.t0582") : I18N.get("page.p0763", cleanupNote);
+                } else {
+                    summary = I18N.get("page.p0764", ex.getMessage());
+                }
+                dialog.finish(false, summary, null);
             }
         });
+    }
+
+    /**
+     * 取消安装后清理未完成的版本目录，返回一句给任务卡片显示的说明。
+     *
+     * <p><b>只删本次新建的目录</b>：安装前已存在的版本（把新加载器装到已有版本上、
+     * 或重复安装同一版本号）一律保留，否则一次误点「取消下载」会把用户能正常启动的版本删掉。
+     *
+     * @param versionDirExisted     开始安装前 {@code versions/<dirName>} 是否已存在
+     * @param baseVersionDirExisted 开始安装前标准版本目录 {@code versions/<原版版本号>} 是否已存在
+     * @param versionsBefore        开始安装前 {@code versions/} 下已有的目录名快照
+     */
+    private String cleanupIncompleteVersionInstall(String gameDir, String dirName, String baseVersionId,
+                                                   boolean versionDirExisted, boolean baseVersionDirExisted,
+                                                   java.util.Set<String> versionsBefore,
+                                                   DownloadTaskCard dialog) {
+        StringBuilder note = new StringBuilder();
+        if (versionDirExisted) {
+            note.append(I18N.get("page.t0137")).append(dirName);
+        } else {
+            Path versionDir = Path.of(gameDir, "versions", dirName);
+            try {
+                ArchiveUtils.deleteRecursively(versionDir);
+                note.append(I18N.get("page.t0138")).append(dirName);
+                if (dialog != null) {
+                    dialog.logLine(I18N.get("page.p0765", dirName), true);
+                }
+            } catch (Exception e) {
+                note.append(I18N.get("page.t0139")).append(e.getMessage());
+                if (dialog != null) {
+                    dialog.logLine(I18N.get("page.p0766", e.getMessage()), false);
+                }
+            }
+        }
+        // 自定义文件夹名时 InstallEngine 会额外写一份标准版本基底供加载器继承，
+        // 同样只在「本次新建」时才删，避免误删用户已有的同版本安装
+        if (baseVersionId != null && !baseVersionId.equals(dirName) && !baseVersionDirExisted) {
+            try {
+                ArchiveUtils.deleteRecursively(Path.of(gameDir, "versions", baseVersionId));
+                note.append(I18N.get("page.t0140")).append(baseVersionId);
+                if (dialog != null) {
+                    dialog.logLine(I18N.get("page.p0767", baseVersionId), true);
+                }
+            } catch (Exception e) {
+                note.append(I18N.get("page.t0141")).append(e.getMessage());
+                if (dialog != null) {
+                    dialog.logLine(I18N.get("page.p0768", e.getMessage()), false);
+                }
+            }
+        }
+        // Forge / NeoForge 安装器会先建 versions/<mc>-forge-<加载器版本> 这样的中间目录再改名，
+        // 装到一半取消就得一起清掉，否则版本列表里会多出一个打不开的残版本。
+        // 只处理「安装过程中新出现」且名字带 forge 的目录，绝不碰用户原有版本。
+        java.util.Set<String> freshLoaderDirs = new java.util.LinkedHashSet<>();
+        try (java.util.stream.Stream<Path> stream = Files.list(Path.of(gameDir, "versions"))) {
+            stream.filter(Files::isDirectory)
+                    .map(p -> p.getFileName().toString())
+                    .filter(n -> !versionsBefore.contains(n))
+                    .filter(n -> !n.equals(dirName) && !n.equals(baseVersionId))
+                    .filter(n -> n.toLowerCase(java.util.Locale.ROOT).contains("forge"))
+                    .forEach(freshLoaderDirs::add);
+        } catch (Exception ignored) {
+            // versions/ 不存在或不可读：没有可清理的中间目录
+        }
+        for (String name : freshLoaderDirs) {
+            try {
+                ArchiveUtils.deleteRecursively(Path.of(gameDir, "versions", name));
+                note.append(I18N.get("page.t0142")).append(name);
+                if (dialog != null) {
+                    dialog.logLine(I18N.get("page.p0769", name), true);
+                }
+            } catch (Exception e) {
+                note.append(I18N.get("page.t0143")).append(e.getMessage());
+                if (dialog != null) {
+                    dialog.logLine(I18N.get("page.p0770", e.getMessage()), false);
+                }
+            }
+        }
+        return note.toString();
+    }
+
+    /** 列出版本目录下的子目录名（取消清理用：只删安装过程中新出现的目录） */
+    private static java.util.Set<String> listVersionDirNames(String gameDir) {
+        java.util.Set<String> names = new java.util.HashSet<>();
+        try (java.util.stream.Stream<Path> stream = Files.list(Path.of(gameDir, "versions"))) {
+            stream.filter(Files::isDirectory)
+                    .forEach(p -> names.add(p.getFileName().toString()));
+        } catch (Exception ignored) {
+            // 目录还不存在（首次安装）时按空集处理
+        }
+        return names;
     }
 
     /**
@@ -1252,7 +1434,7 @@ public final class DownloadCenterPage {
         GameDirInitializer.InitResult init =
                 GameDirInitializer.initializeVersionIsolation(Path.of(gameDir), dirName);
         if (init.created() > 0) {
-            dialog.logLine("已初始化版本隔离目录: versions/" + dirName + "（" + init.created() + " 个子目录）", true);
+                dialog.logLine(I18N.get("page.q0011", dirName, init.created()), true);
         }
         if (!init.ok()) dialog.logLine(init.summary(), false);
     }
@@ -1277,33 +1459,62 @@ public final class DownloadCenterPage {
      */
     private record ModCategoryOption(String label, String modrinthName, int curseForgeId) {
         static ModCategoryOption all() {
-            return new ModCategoryOption("全部", "", -1);
+            return new ModCategoryOption(I18N.get("page.t0144"), "", -1);
         }
     }
 
-    /** 下载页「排序」下拉的显示名（与 VersePc2 模组页一致） */
-    private static final String[] SORT_LABELS = {"相关度", "下载量", "更新时间", "最新发布"};
+    /**
+     * 下载页「排序」下拉的显示名（与 VersePc2 模组页一致）。
+     *
+     * <p>必须是方法而不是 {@code static final String[]}：数组会在<b>类加载那一刻</b>
+     * 求值，那时界面语言还是默认值，之后切语言也不会更新
+     * （表现为「英文模式下排序下拉仍是中文」）。每次构建时现取才正确。
+     */
+    private static String[] sortLabels() {
+        return new String[]{
+                I18N.get("page.t0583"), I18N.get("page.t0584"),
+                I18N.get("page.t0585"), I18N.get("page.t0586")
+        };
+    }
 
     /** 排序显示名 → 排序枚举；「相关度」返回 null，表示不传 index 交给后端相关度排序 */
+    /**
+     * 排序下拉项 -> SortType。
+     *
+     * <p>旧实现按<b>显示文案</b> switch，语言一变就全部落到 default（排序静默失效）。
+     * 现在下拉项直接承载 SortType，显示名由 {@link #sortLabel} 负责翻译。
+     */
     private static RemoteModRepository.SortType sortTypeOf(String label) {
         if (label == null) return null;
-        return switch (label) {
-            case "下载量" -> RemoteModRepository.SortType.TOTAL_DOWNLOADS;
-            case "更新时间" -> RemoteModRepository.SortType.LAST_UPDATED;
-            case "最新发布" -> RemoteModRepository.SortType.DATE_CREATED;
-            default -> null;
+        for (RemoteModRepository.SortType t : RemoteModRepository.SortType.values()) {
+            if (sortLabel(t).equals(label)) return t;
+        }
+        return null;
+    }
+
+    /** SortType -> 当前语言下的显示名 */
+    private static String sortLabel(RemoteModRepository.SortType t) {
+        if (t == null) return "";
+        return switch (t) {
+            case TOTAL_DOWNLOADS -> I18N.get("page.sortDownloads");
+            case LAST_UPDATED -> I18N.get("page.sortUpdated");
+            case DATE_CREATED -> I18N.get("page.sortCreated");
+            case POPULARITY -> I18N.get("page.sortPopularity");
+            case NAME -> I18N.get("page.sortName");
+            case AUTHOR -> I18N.get("page.sortAuthor");
         };
     }
 
     /** 取下拉框选中项；未选中或为「全部」占位时返回空串 */
     private static String comboValue(ComboBox<String> combo) {
-        String v = combo == null ? null : combo.getSelectionModel().getSelectedItem();
-        return v == null || "全部".equals(v) ? "" : v;
+        if (combo == null) return "";
+        String v = combo.getSelectionModel().getSelectedItem();
+        return isAllPlaceholder(v, combo) ? "" : v;
     }
 
     /** 从「加载器」下拉的显示名反查加载器键（{@code Fabric} → {@code fabric}） */
     private static String loaderKeyOf(String label) {
-        if (label == null || label.isBlank() || "全部".equals(label)) return "";
+        if (label == null || label.isBlank()) return "";
         for (ModCategories.LoaderOption o : ModCategories.loaderOptions()) {
             if (o.label().equalsIgnoreCase(label)) return o.key();
         }
@@ -1380,7 +1591,7 @@ public final class DownloadCenterPage {
         final List<ModSource> effectiveSources = localizedSources;
         final boolean supportsChinese = LocalizedRemoteModRepository.supportsChinese(type);
         final String targetGameDir = host.config().getOrDefault("GameDir", ".minecraft");
-        final String currentVersion = host.config().getOrDefault("Version", "");
+        final String currentVersion = SelectedVersion.of(host.config());
 
         Label titleLabel = new Label(panelTitle);
         titleLabel.getStyleClass().add("content-title");
@@ -1389,16 +1600,15 @@ public final class DownloadCenterPage {
         // ① 搜索栏 //
         TextField searchField = new TextField();
         searchField.setPromptText(supportsChinese
-                ? "搜索" + panelTitle + "（支持中英文，如「机械动力」）"
-                : "搜索" + panelTitle + "...");
+                ? I18N.get("page.q0012", panelTitle)
+                : I18N.get("page.q0013", panelTitle));
         searchField.getStyleClass().add("input-field");
         if (supportsChinese) {
-            searchField.setTooltip(new Tooltip("支持中文名搜索：输入「机械动力」会自动翻译为 Create 去检索，"
-                    + "并优先展示收录了中文名的结果"));
+            searchField.setTooltip(new Tooltip(I18N.get("page.t0553")));
         }
-        Button searchBtn = AppIcons.button("search", "搜索");
+        Button searchBtn = AppIcons.button("search", I18N.get("page.t0148"));
         searchBtn.getStyleClass().add("btn-primary");
-        Button refreshBtn = AppIcons.button("refresh", "刷新");
+        Button refreshBtn = AppIcons.button("refresh", I18N.get("page.t0149"));
         refreshBtn.getStyleClass().add("btn-primary");
         HBox searchBar = new HBox(8, searchField, searchBtn, refreshBtn);
         searchBar.setAlignment(Pos.CENTER_LEFT);
@@ -1406,11 +1616,11 @@ public final class DownloadCenterPage {
 
         // ② 筛选行 //
         ComboBox<String> sourceCombo = new ComboBox<>();
-        sourceCombo.getItems().add("全部");
+        sourceCombo.getItems().add(I18N.get("page.t0150"));
         for (ModSource s : effectiveSources) sourceCombo.getItems().add(s.label());
         // 只有一个数据源时去掉「全部」（没有可选之分），否则默认「全部」跨源搜索
         if (effectiveSources.size() <= 1) {
-            sourceCombo.getItems().remove("全部");
+            sourceCombo.getItems().remove(I18N.get("page.t0151"));
         }
         sourceCombo.getSelectionModel().select(0);
 
@@ -1419,15 +1629,15 @@ public final class DownloadCenterPage {
         loaderCombo.getSelectionModel().select(0);
 
         ComboBox<String> versionCombo = new ComboBox<>();
-        versionCombo.getItems().add("全部");
+        versionCombo.getItems().add(I18N.get("page.t0152"));
         versionCombo.getSelectionModel().select(0);
 
         ComboBox<String> categoryCombo = new ComboBox<>();
-        categoryCombo.getItems().add("全部");
+        categoryCombo.getItems().add(I18N.get("page.t0153"));
         categoryCombo.getSelectionModel().select(0);
 
         ComboBox<String> sortCombo = new ComboBox<>();
-        sortCombo.getItems().addAll(SORT_LABELS);
+        sortCombo.getItems().addAll(sortLabels());
         sortCombo.getSelectionModel().select(0);
 
         // 加载器/分类对资源包、光影包、世界没有意义，隐藏以免误导
@@ -1437,14 +1647,14 @@ public final class DownloadCenterPage {
         FlowPane filterRow = new FlowPane(12, 8);
         filterRow.setAlignment(Pos.CENTER_LEFT);
         filterRow.getChildren().addAll(
-                buildFilterGroup("来源", sourceCombo, 110),
-                buildFilterGroup("游戏版本", versionCombo, 110));
+                buildFilterGroup(I18N.get("page.t0587"), sourceCombo, 110),
+                buildFilterGroup(I18N.get("page.t0588"), versionCombo, 110));
         if (loaderRelevant) {
-            filterRow.getChildren().add(buildFilterGroup("加载器", loaderCombo, 110));
+            filterRow.getChildren().add(buildFilterGroup(I18N.get("page.t0154"), loaderCombo, 110));
         }
         filterRow.getChildren().addAll(
-                buildFilterGroup("分类", categoryCombo, 130),
-                buildFilterGroup("排序", sortCombo, 110));
+                buildFilterGroup(I18N.get("page.t0589"), categoryCombo, 130),
+                buildFilterGroup(I18N.get("page.t0590"), sortCombo, 110));
 
         // 搜索栏 + 筛选行（+ 额外的工具行）装进同一张卡片（标题留在卡片外，与其它页面同一套版式）
         Node[] toolbarRows = new Node[extraToolbarRows.length + 2];
@@ -1459,11 +1669,11 @@ public final class DownloadCenterPage {
 
         HBox pager = new HBox(10);
         pager.setAlignment(Pos.CENTER);
-        Button prevBtn = AppIcons.button("arrow-left", "上一页");
+        Button prevBtn = AppIcons.button("arrow-left", I18N.get("page.t0155"));
         prevBtn.getStyleClass().add("btn-primary");
-        Button nextBtn = AppIcons.button("arrow-right", "下一页 ");
+        Button nextBtn = AppIcons.button("arrow-right", I18N.get("page.t0156"));
         nextBtn.getStyleClass().add("btn-primary");
-        Label pageLabel = new Label("第 1 页");
+        Label pageLabel = new Label(I18N.get("page.t0157"));
         pageLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim; -fx-padding: 0 8;");
         pager.getChildren().addAll(prevBtn, pageLabel, nextBtn);
         root.getChildren().add(pager);
@@ -1587,8 +1797,8 @@ public final class DownloadCenterPage {
                         listContainer.getChildren().clear();
                         if (merged.isEmpty() && failCount == repos.size()) {
                             listContainer.getChildren().add(PageKit.buildErrorState(
-                                    "加载失败，请检查网络后重试", null, loadRef[0]));
-                            pageLabel.setText("第 " + (pageOffset[0] + 1) + " / " + totalPages + " 页");
+                                    I18N.get("page.t0158"), null, loadRef[0]));
+                            pageLabel.setText(I18N.get("page.q0014", pageOffset[0] + 1, totalPages));
                             return;
                         }
                         renderModHits(listContainer, pageLabel, prevBtn, nextBtn, pageOffset[0],
@@ -1599,7 +1809,7 @@ public final class DownloadCenterPage {
                     Platform.runLater(() -> {
                         listContainer.getChildren().clear();
                         listContainer.getChildren().add(PageKit.buildErrorState(
-                                "加载失败", String.valueOf(ex.getMessage()), loadRef[0]));
+                                I18N.get("page.t0159"), String.valueOf(ex.getMessage()), loadRef[0]));
                     });
                 }
             });
@@ -1632,7 +1842,7 @@ public final class DownloadCenterPage {
         sourceCombo.setOnAction(e -> {
             String sel = sourceCombo.getSelectionModel().getSelectedItem();
             List<ModSource> picked = new ArrayList<>();
-            if (sel == null || "全部".equals(sel)) {
+            if (isAllPlaceholder(sel, sourceCombo)) {
                 picked.addAll(effectiveSources);
             } else {
                 for (ModSource s : effectiveSources) {
@@ -1674,11 +1884,11 @@ public final class DownloadCenterPage {
                                RemoteModRepository.Type type, String panelTitle,
                                String gameDir, String currentVersion) {
         listContainer.getChildren().clear();
-        pageLabel.setText("第 " + (pageOffset + 1) + " / " + totalPages + " 页");
+        pageLabel.setText(I18N.get("page.q0014", pageOffset + 1, totalPages));
         prevBtn.setDisable(pageOffset <= 0);
         nextBtn.setDisable(pageOffset + 1 >= totalPages);
         if (hits.isEmpty()) {
-            Label empty = new Label("没有找到相关资源");
+            Label empty = new Label(I18N.get("page.t0160"));
             empty.setStyle("-fx-text-fill: -sl-text-dim; -fx-padding: 20;");
             listContainer.getChildren().add(empty);
             return;
@@ -1694,9 +1904,9 @@ public final class DownloadCenterPage {
      * <p>兼容旧调用点，等价于填充「全部」+ 版本号列表。
      */
     private void loadDownloadVersionOptions(ComboBox<String> versionCombo) {
-        String current = host.config().getOrDefault("Version", "");
+        String current = SelectedVersion.of(host.config());
         java.util.function.Consumer<List<String>> fill = versions -> {
-            versionCombo.getItems().setAll("全部");
+            versionCombo.getItems().setAll(I18N.get("page.t0161"));
             if (!current.isBlank()) versionCombo.getItems().add(current);
             for (String v : versions) {
                 if (!versionCombo.getItems().contains(v)) versionCombo.getItems().add(v);
@@ -1882,15 +2092,15 @@ public final class DownloadCenterPage {
 
         Label desc = new Label(nullToEmpty(mod.getDescription()));
         desc.getStyleClass().add("settings-card-desc");
-        desc.setMaxWidth(Double.MAX_VALUE);
-        desc.setTextOverrun(OverrunStyle.ELLIPSIS);
+        // 简介可能很长：单行省略，悬停 Tooltip 看全文（卡片高度保持一致）
+        PageKit.cardTooltip(desc);
         info.getChildren().add(desc);
 
         HBox meta = new HBox(12);
         meta.setAlignment(Pos.CENTER_LEFT);
         meta.getChildren().add(metaLabel("download", FormatUtils.formatCompactNumber(mod.getDownloads())));
         meta.getChildren().add(metaLabel("heart", (mod.getAuthor() == null || mod.getAuthor().isBlank()
-                ? "未知作者" : mod.getAuthor())));
+                ? I18N.get("page.t0162") : mod.getAuthor())));
         List<String> cats = mod.getCategories();
         if (cats != null && !cats.isEmpty()) {
             meta.getChildren().add(metaLabel(cats.stream().limit(3).map(ModCategories::zhCategory)
@@ -1898,12 +2108,12 @@ public final class DownloadCenterPage {
         }
         info.getChildren().add(meta);
 
-        Button detailBtn = AppIcons.button("info", "详情");
+        Button detailBtn = AppIcons.button("info", I18N.get("page.t0163"));
         detailBtn.getStyleClass().add("btn-primary");
         detailBtn.setStyle("-fx-padding: 4 14; -fx-font-size: 12px;");
         detailBtn.setOnAction(e -> openRemoteModDetailPage(mod, repo, type, panelTitle, gameDir, currentVersion));
 
-        Button installBtn = AppIcons.button("download", "安装");
+        Button installBtn = AppIcons.button("download", I18N.get("page.t0164"));
         installBtn.getStyleClass().add("btn-primary");
         installBtn.setStyle("-fx-padding: 4 14; -fx-font-size: 12px;");
         installBtn.setOnAction(e -> openVersionPickerPage(mod, repo, type, panelTitle, gameDir, currentVersion));
@@ -1938,15 +2148,15 @@ public final class DownloadCenterPage {
         String style;
         switch (type == null ? RemoteMod.VersionType.Release : type) {
             case Beta -> {
-                text = "测试版";
+                text = I18N.get("page.t0165");
                 style = " -fx-background-color: rgba(255,152,0,0.18); -fx-text-fill: #f59e0b;";
             }
             case Alpha -> {
-                text = "内测版";
+                text = I18N.get("page.t0166");
                 style = " -fx-background-color: rgba(239,83,80,0.18); -fx-text-fill: #ef5350;";
             }
             default -> {
-                text = "稳定版";
+                text = I18N.get("page.t0167");
                 style = " -fx-background-color: rgba(76,175,80,0.18); -fx-text-fill: #4caf50;";
             }
         }
@@ -2002,14 +2212,13 @@ public final class DownloadCenterPage {
         root.setPadding(new Insets(0, 4, 0, 0));
         VBox.setVgrow(root, Priority.ALWAYS);
 
-        Button backBtn = AppIcons.button("back", "返回");
+        Button backBtn = AppIcons.button("back", I18N.get("page.t0168"));
         backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> goBackFromVersionPick());
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
         if (ctx != null) {
-            Label titleLabel = new Label("选择版本 - "
-                    + LocalizedRemoteModRepository.localizedTitle(ctx.mod(), ctx.type()));
+            Label titleLabel = new Label(I18N.get("page.p0771", LocalizedRemoteModRepository.localizedTitle(ctx.mod(), ctx.type())));
             titleLabel.getStyleClass().add("content-title");
             header.getChildren().addAll(backBtn, titleLabel);
         } else {
@@ -2018,21 +2227,21 @@ public final class DownloadCenterPage {
         root.getChildren().add(header);
 
         if (ctx == null) {
-            Label tip = new Label("请先在下载中心选择要安装的资源。");
+            Label tip = new Label(I18N.get("page.t0169"));
             tip.setStyle("-fx-text-fill: -sl-text-dim; -fx-padding: 20;");
             root.getChildren().add(tip);
             return root;
         }
 
         ComboBox<String> verFilter = new ComboBox<>();
-        verFilter.getItems().add("全部");
+        verFilter.getItems().add(I18N.get("page.t0170"));
         verFilter.getSelectionModel().select(0);
         ComboBox<String> loaderFilter = new ComboBox<>();
         loaderFilter.getItems().addAll(loaderFilterOptions());
         loaderFilter.getSelectionModel().select(0);
         HBox filterRow = new HBox(12,
-                buildFilterGroup("游戏版本", verFilter, 140),
-                buildFilterGroup("加载器", loaderFilter, 120));
+                buildFilterGroup(I18N.get("page.t0591"), verFilter, 140),
+                buildFilterGroup(I18N.get("page.t0592"), loaderFilter, 120));
         filterRow.setAlignment(Pos.CENTER_LEFT);
         root.getChildren().add(filterRow);
 
@@ -2066,7 +2275,7 @@ public final class DownloadCenterPage {
                 Platform.runLater(() -> {
                     if (versions.isEmpty()) {
                         list.getChildren().clear();
-                        list.getChildren().add(skeletonHint("该资源暂无可用版本"));
+                        list.getChildren().add(skeletonHint(I18N.get("page.t0171")));
                         countLabel.setText("");
                         return;
                     }
@@ -2075,7 +2284,7 @@ public final class DownloadCenterPage {
                     for (RemoteMod.Version v : versions) {
                         if (v.getGameVersions() != null) gameVersions.addAll(v.getGameVersions());
                     }
-                    verFilter.getItems().setAll("全部");
+                    verFilter.getItems().setAll(I18N.get("page.t0172"));
                     verFilter.getItems().addAll(gameVersions);
 
                     Runnable render = () -> {
@@ -2087,9 +2296,9 @@ public final class DownloadCenterPage {
                                 .filter(v -> matchesLoaderFilter(v, loaderLabel))
                                 .collect(Collectors.toList());
                         list.getChildren().clear();
-                        countLabel.setText("共 " + filtered.size() + " 个版本（总 " + versions.size() + " 个）");
+                        countLabel.setText(I18N.get("page.q0015", filtered.size(), versions.size()));
                         if (filtered.isEmpty()) {
-                            Label none = new Label("没有符合筛选条件的版本");
+                            Label none = new Label(I18N.get("page.t0173"));
                             none.setStyle("-fx-text-fill: -sl-text-dim; -fx-padding: 10;");
                             list.getChildren().add(none);
                             return;
@@ -2107,7 +2316,7 @@ public final class DownloadCenterPage {
                 Platform.runLater(() -> {
                     list.getChildren().clear();
                     list.getChildren().add(PageKit.buildErrorState(
-                            "版本加载失败", String.valueOf(ex.getMessage()),
+                            I18N.get("page.t0174"), String.valueOf(ex.getMessage()),
                             () -> loadPickerVersions(list, countLabel, verFilter, loaderFilter, ctx)));
                 });
             }
@@ -2138,7 +2347,7 @@ public final class DownloadCenterPage {
         date.getStyleClass().add("mod-version-date");
         top.getChildren().add(date);
         if (withInstall) {
-            Button dlBtn = AppIcons.button("download", "下载");
+            Button dlBtn = AppIcons.button("download", I18N.get("page.t0175"));
             dlBtn.getStyleClass().add("btn-primary");
             dlBtn.setStyle("-fx-padding: 3 12; -fx-font-size: 11px;");
             dlBtn.setOnAction(e -> installRemoteContent(ver, repo, type, panelTitle, gameDir, currentVersion));
@@ -2149,14 +2358,15 @@ public final class DownloadCenterPage {
         List<String> parts = new ArrayList<>();
         if (ver.getGameVersions() != null && !ver.getGameVersions().isEmpty()) {
             List<String> gv = ver.getGameVersions();
-            parts.add("游戏版本: " + (gv.size() > 6 ? String.join(", ", gv.subList(0, 6)) + " 等 " + gv.size() + " 个"
+            parts.add(I18N.get("page.q0016", gv.size() > 6
+                    ? I18N.get("page.q0017", String.join(", ", gv.subList(0, 6)), gv.size())
                     : String.join(", ", gv)));
         }
         if (ver.getLoaders() != null && !ver.getLoaders().isEmpty()) {
-            parts.add("加载器: " + visibleLoaders(ver.getLoaders()).stream()
+            parts.add(I18N.get("page.p0772", visibleLoaders(ver.getLoaders()).stream()
 
                     .filter(l -> l != ModLoaderType.UNKNOWN)
-                    .map(Enum::name).collect(Collectors.joining(", ")));
+                    .map(Enum::name).collect(Collectors.joining(", "))));
         }
         if (ver.getFile() != null && ver.getFile().getFilename() != null) {
             parts.add(ver.getFile().getFilename());
@@ -2175,10 +2385,10 @@ public final class DownloadCenterPage {
         long optional = ver.getDependencies() == null ? 0 : ver.getDependencies().stream()
                 .filter(d -> d.getType() == RemoteMod.DependencyType.OPTIONAL).count();
         if (required > 0 || optional > 0) {
-            String base = "依赖: " + required + " 个必需" + (optional > 0 ? "，" + optional + " 个可选" : "");
-            Label deps = new Label(base + "　点击展开查看");
+            String base = I18N.get("page.q0018", required, optional > 0
+                    ? I18N.get("page.q0019", optional) : "");
+            Label deps = new Label(I18N.get("page.q0020", base));
             deps.getStyleClass().add("mod-version-deps");
-            deps.setStyle("-fx-cursor: hand;");
             deps.setMinWidth(Region.USE_PREF_SIZE);
 
             VBox depPanel = new VBox(3);
@@ -2189,7 +2399,7 @@ public final class DownloadCenterPage {
                 boolean show = !depPanel.isVisible();
                 depPanel.setVisible(show);
                 depPanel.setManaged(show);
-                deps.setText(base + (show ? "　点击收起" : "　点击展开查看"));
+                deps.setText(base + (show ? I18N.get("page.t0593") : I18N.get("page.t0594")));
                 if (show && depPanel.getChildren().isEmpty()) {
                     fillDependencyPanel(depPanel, ver, repo, gameDir, currentVersion);
                 }
@@ -2207,7 +2417,7 @@ public final class DownloadCenterPage {
      */
     private void fillDependencyPanel(VBox panel, RemoteMod.Version ver, RemoteModRepository repo,
                                      String gameDir, String currentVersion) {
-        Label loading = new Label("正在解析前置模组...");
+        Label loading = new Label(I18N.get("page.t0176"));
         loading.getStyleClass().add("config-hint");
         panel.getChildren().add(loading);
 
@@ -2217,11 +2427,11 @@ public final class DownloadCenterPage {
             List<Node> rows = new ArrayList<>();
             for (RemoteMod.Dependency d : deps) {
                 String kind = switch (d.getType()) {
-                    case REQUIRED -> "必需";
-                    case OPTIONAL -> "可选";
-                    case INCOMPATIBLE -> "不兼容";
-                    case EMBEDDED -> "已内置";
-                    default -> "其它";
+                    case REQUIRED -> I18N.get("page.t0177");
+                    case OPTIONAL -> I18N.get("page.t0178");
+                    case INCOMPATIBLE -> I18N.get("page.t0179");
+                    case EMBEDDED -> I18N.get("page.t0180");
+                    default -> I18N.get("page.t0181");
                 };
                 String color = switch (d.getType()) {
                     case REQUIRED -> "#dc2626";
@@ -2247,7 +2457,7 @@ public final class DownloadCenterPage {
             Platform.runLater(() -> {
                 panel.getChildren().clear();
                 if (rows.isEmpty()) {
-                    Label none = new Label("该版本没有声明前置依赖");
+                    Label none = new Label(I18N.get("page.t0182"));
                     none.getStyleClass().add("config-hint");
                     panel.getChildren().add(none);
                 } else {
@@ -2289,18 +2499,18 @@ public final class DownloadCenterPage {
             // CurseForge 上作者可关闭「允许第三方分发」，此时接口不会返回直链。
             // 列表阶段已不再逐文件补查（50 个文件 = 50 次串行请求、约 32 秒，
             // 实测补查对这类项目 0/3 命中，纯属白等），因此这里直接给明确提示。
-            host.ui().toast("该版本没有可下载的文件（CurseForge 资源若未开放第三方分发，请前往官网下载）");
+            host.ui().toast(I18N.get("page.t0183"));
             return;
         }
         // 模组先问清楚装到哪个 mods 文件夹：放错位置游戏不会加载，用户很难自己发现
         if (type == RemoteModRepository.Type.MOD && modsDir == null) {
-            String what = "模组" + (ver.getName() == null || ver.getName().isBlank()
-                    ? "" : "「" + ver.getName() + "」");
+            String what = I18N.get("page.p0773", (ver.getName() == null || ver.getName().isBlank()
+                    ? "" : "「" + ver.getName() + "」"));
             ModInstallTargetDialog.show(host, gameDir, currentVersion, what,
                     dir -> installRemoteContent(ver, repo, type, panelTitle, gameDir, currentVersion, dir));
             return;
         }
-        String title = "安装 " + panelTitle + " · " + (ver.getName() == null ? ver.getVersion() : ver.getName());
+        String title = I18N.get("page.p0774", panelTitle + " · " + (ver.getName() == null ? ver.getVersion() : ver.getName()));
         DownloadTaskCard dialog = downloads.open(title);
         // 失败后可一键重试（沿用本次选定的安装位置，不再弹一次路径选择）
         dialog.setRetryAction(() ->
@@ -2327,20 +2537,20 @@ public final class DownloadCenterPage {
             // 但用户往往还没建世界，这里先落到全局 datapacks 目录，由用户自行放入世界
             targetDir = Paths.get(gameDir, "datapacks");
         } else {
-            host.ui().toast("该分类暂不支持直接下载");
+            host.ui().toast(I18N.get("page.t0184"));
             return;
         }
 
         String filename = ver.getFile().getFilename();
         // 净化文件名：拒绝路径分隔与非法字符（防目录穿越）
         if (filename == null || filename.isBlank()) {
-            host.ui().toast("该版本文件名为空");
+            host.ui().toast(I18N.get("page.t0185"));
             return;
         }
         filename = filename.replace('\\', '_').replace('/', '_')
                 .replaceAll("[\\x00-\\x1f<>:\"|?*]", "_");
         if (filename.equals(".") || filename.equals("..") || filename.contains("..")) {
-            host.ui().toast("文件名不合法: " + filename);
+            host.ui().toast(I18N.get("page.p0775", filename));
             return;
         }
         // 按「高级设置 → 文件名格式」重写落盘文件名（模组/整合包才有意义）
@@ -2359,27 +2569,27 @@ public final class DownloadCenterPage {
             try {
                 Files.createDirectories(destDir);
                 Path dest = destDir.resolve(safeFilename);
-                dialog.stage("下载 " + safeFilename);
+                dialog.stage(I18N.get("page.p0776", safeFilename));
                 dialog.logLine("来源: " + sourceBadgeOf(repo) + "　版本: " + finalVer.getVersion(), true);
-                dialog.logLine("直链: " + finalVer.getFile().getUrl(), true);
-                dialog.logLine("目标: " + dest, true);
+                dialog.logLine(I18N.get("page.p0777", finalVer.getFile().getUrl()), true);
+                dialog.logLine(I18N.get("page.p0778", dest), true);
                 dialog.beginFile(safeFilename);
 
                 // 先探测文件大小，进度弹窗据此把百分比换算成实时速度
                 long size = ContentDownloader.probeSize(ver.getFile().getUrl());
                 dialog.totalBytes(size);
-                if (size > 0) dialog.logLine("文件大小: " + FormatUtils.formatFileSize(size), true);
+                if (size > 0) dialog.logLine(I18N.get("page.p0779", FormatUtils.formatFileSize(size)), true);
 
                 ContentDownloader.downloadContent(finalVer, dest, dialog::progress, dialog.cancelFlag());
                 dialog.finishFile(true);
-                dialog.finish(true, panelTitle + "「" + finalVer.getName() + "」已安装到 " + destDir, null);
-                Platform.runLater(() -> host.ui().toast(panelTitle + "「" + finalVer.getName() + "」安装完成"));
+                dialog.finish(true, I18N.get("page.q0022", panelTitle, finalVer.getName(), destDir), null);
+                Platform.runLater(() -> host.ui().toast(I18N.get("page.q0023", panelTitle, finalVer.getName())));
             } catch (Exception ex) {
                 boolean cancelled = ContentDownloader.CANCELLED_MESSAGE.equals(ex.getMessage());
                 dialog.finishFile(false);
-                dialog.logLine("失败: " + ex, false);
-                if (ex.getCause() != null) dialog.logLine("原因: " + ex.getCause(), false);
-                dialog.finish(false, cancelled ? "已取消下载" : "下载失败: " + ex.getMessage(), null);
+                dialog.logLine(I18N.get("page.p0780", ex), false);
+                if (ex.getCause() != null) dialog.logLine(I18N.get("page.p0781", ex.getCause()), false);
+                dialog.finish(false, cancelled ? I18N.get("page.t0595") : I18N.get("page.p0782", ex.getMessage()), null);
             }
         });
     }
@@ -2455,12 +2665,12 @@ public final class DownloadCenterPage {
         // 顶部：返回 + 面包屑 //
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = AppIcons.button("back", "返回下载中心");
+        Button backBtn = AppIcons.button("back", I18N.get("page.t0186"));
         // 页面级返回按钮统一用 back-btn（胶囊形），与 PageKit.settingsPage 的返回按钮一致；
         // community-action-btn 是社区页的操作按钮样式，不属于页面导航
         backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> host.switchToPage("download"));
-        Label crumb = new Label(ctx.panelTitle() + " / 详情");
+        Label crumb = new Label(I18N.get("page.q0024", ctx.panelTitle()));
         crumb.getStyleClass().add("content-title");
         header.getChildren().addAll(backBtn, crumb);
         root.getChildren().add(header);
@@ -2535,14 +2745,14 @@ public final class DownloadCenterPage {
         String author = detail.getAuthor() != null && !detail.getAuthor().isBlank()
                 ? detail.getAuthor() : mod.getAuthor();
         if (author != null && !author.isBlank()) {
-            stats.getChildren().add(detailStat("作者 " + author));
+            stats.getChildren().add(detailStat(I18N.get("page.p0783", author)));
         }
         if (detail.getUpdated() != null && !detail.getUpdated().isBlank()) {
-            stats.getChildren().add(detailStat("更新 " + detail.getUpdated().substring(0,
-                    Math.min(10, detail.getUpdated().length()))));
+            stats.getChildren().add(detailStat(I18N.get("page.p0784", detail.getUpdated().substring(0,
+                    Math.min(10, detail.getUpdated().length())))));
         }
         if (detail.getLicense() != null && !detail.getLicense().isBlank()) {
-            stats.getChildren().add(detailStat("许可 " + detail.getLicense()));
+            stats.getChildren().add(detailStat(I18N.get("page.p0785", detail.getLicense())));
         }
         info.getChildren().add(stats);
 
@@ -2566,7 +2776,7 @@ public final class DownloadCenterPage {
         String pageUrl = detail.getPageUrl() != null && !detail.getPageUrl().isBlank()
                 ? detail.getPageUrl() : mod.getPageUrl();
         if (pageUrl != null && !pageUrl.isBlank()) {
-            Button openBtn = AppIcons.button("external-link", "打开主页");
+            Button openBtn = AppIcons.button("external-link", I18N.get("page.t0187"));
             openBtn.getStyleClass().add("btn-primary");
             openBtn.setStyle("-fx-padding: 4 12; -fx-font-size: 12px;");
             openBtn.setOnAction(e -> host.openWebUrl(pageUrl));
@@ -2577,7 +2787,7 @@ public final class DownloadCenterPage {
         if (translation != null && translation.hasChineseName() && !translation.getMcmod().isEmpty()) {
             String mcmodUrl = ModTranslations.getTranslationsByAddonType(type).getMcmodUrl(translation);
             if (!mcmodUrl.isEmpty()) {
-                Button mcmodBtn = AppIcons.button("external-link", "MC百科");
+                Button mcmodBtn = AppIcons.button("external-link", I18N.get("page.t0188"));
                 mcmodBtn.getStyleClass().add("btn-primary");
                 mcmodBtn.setStyle("-fx-padding: 4 12; -fx-font-size: 12px;");
                 mcmodBtn.setTooltip(new Tooltip(mcmodUrl));
@@ -2586,7 +2796,7 @@ public final class DownloadCenterPage {
             }
         }
         for (String[] link : new String[][]{
-                {"源码", detail.getSourceUrl()}, {"问题反馈", detail.getIssuesUrl()},
+                {I18N.get("page.t0189"), detail.getSourceUrl()}, {I18N.get("page.t0190"), detail.getIssuesUrl()},
                 {"Wiki", detail.getWikiUrl()}, {"Discord", detail.getDiscordUrl()}}) {
             if (link[1] == null || link[1].isBlank()) continue;
             Button b = new Button(link[0]);
@@ -2596,7 +2806,7 @@ public final class DownloadCenterPage {
             headerActions.getChildren().add(b);
         }
         if (!versions.isEmpty()) {
-            Button installLatest = AppIcons.button("download", "安装最新版");
+            Button installLatest = AppIcons.button("download", I18N.get("page.t0191"));
             installLatest.getStyleClass().add("btn-primary");
             installLatest.setStyle("-fx-padding: 4 12; -fx-font-size: 12px;");
             installLatest.setOnAction(e -> {
@@ -2617,9 +2827,9 @@ public final class DownloadCenterPage {
         tabContent.setMinHeight(Region.USE_PREF_SIZE);
 
         Map<String, Node> pages = new LinkedHashMap<>();
-        pages.put("描述", buildModDescriptionTab(detail));
-        pages.put("图库", buildModGalleryTab(detail));
-        pages.put("版本", buildModVersionsTab(mod, repo, type, panelTitle, gameDir,
+        pages.put(I18N.get("page.t0192"), buildModDescriptionTab(detail));
+        pages.put(I18N.get("page.t0193"), buildModGalleryTab(detail));
+        pages.put(tabVersionsKey(), buildModVersionsTab(mod, repo, type, panelTitle, gameDir,
                 currentVersion, versions));
 
         HBox tabBar = new HBox(6);
@@ -2627,7 +2837,7 @@ public final class DownloadCenterPage {
         final Button[] tabButtons = new Button[pages.size()];
         int index = 0;
         for (Map.Entry<String, Node> e : pages.entrySet()) {
-            Button tab = new Button(e.getKey() + (e.getKey().equals("版本") ? " (" + versions.size() + ")" : ""));
+            Button tab = new Button(e.getKey() + (tabVersionsKey().equals(e.getKey()) ? " (" + versions.size() + ")" : ""));
             tab.getStyleClass().add("detail-tab");
             final int tabIndex = index;
             tab.setOnAction(ev -> {
@@ -2642,7 +2852,7 @@ public final class DownloadCenterPage {
             index++;
         }
         tabButtons[0].getStyleClass().add("selected");
-        tabContent.getChildren().add(pages.get("描述"));
+        tabContent.getChildren().add(pages.get(I18N.get("page.t0194")));
         body.getChildren().addAll(tabBar, tabContent);
     }
 
@@ -2651,7 +2861,7 @@ public final class DownloadCenterPage {
         if (!detail.hasBody()) {
             VBox empty = new VBox(8);
             empty.setPadding(new Insets(16));
-            Label tip = new Label("该资源没有提供详细描述。");
+            Label tip = new Label(I18N.get("page.t0195"));
             tip.setStyle("-fx-text-fill: -sl-text-dim;");
             empty.getChildren().add(tip);
             if (detail.getDescription() != null && !detail.getDescription().isBlank()) {
@@ -2699,7 +2909,7 @@ public final class DownloadCenterPage {
         if (images == null || images.isEmpty()) {
             VBox empty = new VBox(8);
             empty.setPadding(new Insets(16));
-            Label tip = new Label("该资源没有提供图库截图。");
+            Label tip = new Label(I18N.get("page.t0196"));
             tip.getStyleClass().add("config-hint");
             empty.getChildren().add(tip);
             return empty;
@@ -2726,7 +2936,7 @@ public final class DownloadCenterPage {
         VBox box = new VBox(10);
 
         if (versions.isEmpty()) {
-            Label none = new Label("该资源没有可用版本（可能是网络问题，请稍后重试）");
+            Label none = new Label(I18N.get("page.t0197"));
             none.setStyle("-fx-text-fill: -sl-text-dim; -fx-padding: 16;");
             box.getChildren().add(none);
             return box;
@@ -2748,12 +2958,12 @@ public final class DownloadCenterPage {
                 .collect(Collectors.toList());
 
         ComboBox<String> majorFilter = new ComboBox<>();
-        majorFilter.getItems().add("全部");
+        majorFilter.getItems().add(I18N.get("page.t0198"));
         majorFilter.getItems().addAll(majors);
         majorFilter.getSelectionModel().select(0);
 
         ComboBox<String> minorFilter = new ComboBox<>();
-        minorFilter.getItems().add("全部");
+        minorFilter.getItems().add(I18N.get("page.t0199"));
         minorFilter.getSelectionModel().select(0);
 
         ComboBox<String> loaderFilter = new ComboBox<>();
@@ -2761,9 +2971,9 @@ public final class DownloadCenterPage {
         loaderFilter.getSelectionModel().select(0);
 
         HBox filterRow = new HBox(12,
-                buildFilterGroup("大版本", majorFilter, 150),
-                buildFilterGroup("子版本", minorFilter, 190),
-                buildFilterGroup("加载器", loaderFilter, 140));
+                buildFilterGroup(I18N.get("page.t0596"), majorFilter, 150),
+                buildFilterGroup(I18N.get("page.t0597"), minorFilter, 190),
+                buildFilterGroup(I18N.get("page.t0598"), loaderFilter, 140));
         filterRow.setAlignment(Pos.CENTER_LEFT);
         box.getChildren().add(filterRow);
 
@@ -2783,12 +2993,12 @@ public final class DownloadCenterPage {
                     .filter(v -> VersionMatcher.matchesGameVersionFilter(v, major, minor))
                     .filter(v -> matchesLoaderFilter(v, loaderLabel))
                     .collect(Collectors.toList());
-            String scope = !minor.isEmpty() ? minor : (!major.isEmpty() ? major + " 系列" : "全部");
-            countLabel.setText("共 " + filtered.size() + " / " + versions.size() + " 个版本（" + scope
-                    + "）· 每次显示 " + VERSION_LIST_PAGE + " 个，可点底部按钮继续往下加载");
+            String scope = !minor.isEmpty() ? minor : (!major.isEmpty() ? I18N.get("page.q0025", major) : I18N.get("page.t0599"));
+            countLabel.setText(I18N.get("page.q0026", filtered.size(), versions.size(), scope,
+                    VERSION_LIST_PAGE));
             if (filtered.isEmpty()) {
                 list.getChildren().clear();
-                Label none = new Label("没有符合筛选条件的版本");
+                Label none = new Label(I18N.get("page.t0200"));
                 none.getStyleClass().add("config-hint");
                 list.getChildren().add(none);
                 return;
@@ -2803,7 +3013,7 @@ public final class DownloadCenterPage {
             String major = comboValue(majorFilter);
             String previous = minorFilter.getSelectionModel().getSelectedItem();
             List<String> minors = new ArrayList<>();
-            minors.add("全部");
+            minors.add(I18N.get("page.t0201"));
             if (!major.isEmpty()) {
                 gameVersions.stream()
                         .filter(gv -> major.equals(VersionMatcher.majorVersionOf(gv)))
@@ -2811,7 +3021,9 @@ public final class DownloadCenterPage {
                         .forEach(minors::add);
             }
             minorFilter.getItems().setAll(minors);
-            minorFilter.getSelectionModel().select(minors.contains(previous) ? previous : "全部");
+            minorFilter.getSelectionModel().select(
+                    minors.contains(previous) ? previous
+                            : (minorFilter.getItems().isEmpty() ? null : minorFilter.getItems().get(0)));
         };
 
         majorFilter.setOnAction(e -> {
@@ -2854,7 +3066,7 @@ public final class DownloadCenterPage {
         }
 
         if (to < filtered.size()) {
-            Button more = new Button("向下加载更多（已显示 " + to + " / " + filtered.size() + "）");
+            Button more = new Button(I18N.get("page.p0786", to + " / " + filtered.size() + "）"));
             more.getStyleClass().add("btn-primary");
             more.setStyle("-fx-padding: 6 20; -fx-font-size: 12px; -fx-background-radius: 18;");
             more.setMinWidth(Region.USE_PREF_SIZE);
@@ -2876,7 +3088,7 @@ public final class DownloadCenterPage {
         long required = ver.getDependencies() == null ? 0 : ver.getDependencies().stream()
                 .filter(d -> d.getType() == RemoteMod.DependencyType.REQUIRED).count();
         if (required > 0 && repo.getType() == RemoteModRepository.Type.MOD) {
-            Button depBtn = new Button("下载必需依赖 (" + required + ")");
+            Button depBtn = new Button(I18N.get("page.p0787", required + ")"));
             depBtn.getStyleClass().add("btn-primary");
             depBtn.setStyle("-fx-padding: 3 10; -fx-font-size: 11px;");
             depBtn.setMinWidth(Region.USE_PREF_SIZE);
@@ -2937,19 +3149,19 @@ public final class DownloadCenterPage {
                 .filter(d -> d.getType() == RemoteMod.DependencyType.REQUIRED)
                 .collect(Collectors.toList());
         if (required.isEmpty()) {
-            host.ui().toast("该版本没有必需依赖");
+            host.ui().toast(I18N.get("page.t0202"));
             return;
         }
         if (modsDir == null) {
-            String what = "必需依赖（随 " + (ver.getName() == null || ver.getName().isBlank()
-                    ? ver.getVersion() : ver.getName()) + "）";
+            String what = I18N.get("page.p0788", (ver.getName() == null || ver.getName().isBlank()
+                    ? ver.getVersion() : ver.getName()) + "）");
             ModInstallTargetDialog.show(host, gameDir, currentVersion, what,
                     dir -> installDependencies(ver, repo, gameDir, currentVersion, dir));
             return;
         }
         DownloadTaskCard dialog = downloads.open(
-                "下载依赖 · " + (ver.getName() == null ? ver.getVersion() : ver.getName()));
-        dialog.stage("解析依赖列表...");
+                I18N.get("page.p0789", (ver.getName() == null ? ver.getVersion() : ver.getName())));
+        dialog.stage(I18N.get("page.t0203"));
 
         // modsDir 是参数且从未被改写，可直接被下面的异步任务捕获
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
@@ -2985,7 +3197,7 @@ public final class DownloadCenterPage {
                             failed++;
                             continue;
                         }
-                        dialog.stage("依赖 " + index + "/" + required.size() + "：" + depMod.getTitle());
+                        dialog.stage(I18N.get("page.p0790", index + "/" + required.size() + "：" + depMod.getTitle()));
                         dialog.beginFile(fileName);
                         dialog.totalBytes(ContentDownloader.probeSize(pick.getFile().getUrl()));
                         ContentDownloader.downloadContent(pick, modsDir.resolve(fileName), dialog::progress, dialog.cancelFlag());
@@ -2998,12 +3210,12 @@ public final class DownloadCenterPage {
                         failed++;
                     }
                 }
-                dialog.finish(true, "依赖下载完成：成功 " + ok + " 个"
-                        + (failed > 0 ? "，失败 " + failed + " 个" : ""), null);
-                Platform.runLater(() -> host.ui().toast("依赖已下载到 " + modsDir));
+                dialog.finish(true, I18N.get("page.q0028", ok,
+                        failed > 0 ? I18N.get("page.q0029", failed) : ""), null);
+                Platform.runLater(() -> host.ui().toast(I18N.get("page.p0791", modsDir)));
             } catch (Exception ex) {
                 boolean cancelled = ContentDownloader.CANCELLED_MESSAGE.equals(ex.getMessage());
-                dialog.finish(false, cancelled ? "已取消下载" : "依赖下载失败: " + ex.getMessage(), null);
+                dialog.finish(false, cancelled ? I18N.get("page.t0600") : I18N.get("page.p0792", ex.getMessage()), null);
             }
         });
     }
@@ -3036,7 +3248,7 @@ public final class DownloadCenterPage {
      */
     private void installWorld(RemoteMod.Version ver, String gameDir, String panelTitle,
                               DownloadTaskCard dialog) {
-        dialog.stage("下载世界存档...");
+        dialog.stage(I18N.get("page.t0204"));
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
                 String zipName = ver.getFile() != null && ver.getFile().getFilename() != null
@@ -3050,12 +3262,12 @@ public final class DownloadCenterPage {
                 dialog.finishFile(true);
 
                 final boolean hasLevelDat = Files.exists(dest.resolve("level.dat"));
-                dialog.finish(true, panelTitle + "「" + ver.getName() + "」已解压到 " + dest
-                        + (hasLevelDat ? "" : "（未发现 level.dat，可能不是标准存档）"), null);
-                Platform.runLater(() -> host.ui().toast(panelTitle + "「" + ver.getName() + "」下载完成"));
+                dialog.finish(true, I18N.get("page.q0030", panelTitle, ver.getName(), dest,
+                        hasLevelDat ? "" : I18N.get("page.t0601")), null);
+                Platform.runLater(() -> host.ui().toast(I18N.get("page.q0031", panelTitle, ver.getName())));
             } catch (Exception ex) {
                 boolean cancelled = ContentDownloader.CANCELLED_MESSAGE.equals(ex.getMessage());
-                dialog.finish(false, cancelled ? "已取消下载" : "下载失败: " + ex.getMessage(), null);
+                dialog.finish(false, cancelled ? I18N.get("page.t0602") : I18N.get("page.p0793", ex.getMessage()), null);
             }
         });
     }
@@ -3069,13 +3281,12 @@ public final class DownloadCenterPage {
      */
     private Node buildDownloadWorldsPanel() {
         VBox root = new VBox(12);
-        Node content = buildContentPanel("世界", RemoteModRepository.Type.WORLD,
+        Node content = buildContentPanel(I18N.get("page.t0205"), RemoteModRepository.Type.WORLD,
                 List.of(new ModSource("CurseForge", CurseForgeRemoteModRepository.WORLDS)));
         worldsContentPanel = content;
         root.getChildren().add(content);
 
-        Label hint = new Label("说明：世界存档来自 CurseForge。下载后会自动解压到存档目录（saves）；"
-                + "若压缩包内含单一顶层文件夹，则以该文件夹名作为存档名，否则以资源名命名。");
+        Label hint = new Label(I18N.get("page.t0554"));
         hint.setWrapText(true);
         hint.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
         root.getChildren().add(hint);
@@ -3092,7 +3303,7 @@ public final class DownloadCenterPage {
     private void installModpack(RemoteMod.Version ver, String gameDir, DownloadTaskCard dialog) {
         String url = ver.getFile() != null ? ver.getFile().getUrl() : null;
         if (url == null) {
-            host.ui().toast("该整合包没有可下载的文件");
+            host.ui().toast(I18N.get("page.t0206"));
             return;
         }
         String packName = ver.getName() == null ? ver.getVersion() : ver.getName();
@@ -3101,19 +3312,19 @@ public final class DownloadCenterPage {
             try {
                 tempDir = Files.createTempDirectory("sl-pack-");
                 Path archive = tempDir.resolve("pack.zip");
-                dialog.stage("下载整合包主体...");
-                dialog.beginFile("整合包主体");
-                dialog.logLine("整合包地址: " + url, true);
+                dialog.stage(I18N.get("page.t0207"));
+                dialog.beginFile(I18N.get("page.t0208"));
+                dialog.logLine(I18N.get("page.p0794", url), true);
                 dialog.totalBytes(ContentDownloader.probeMirrorSize(url));
                 // 镜像优先（mcimirror）→ 官方直链兜底，整合包主体通常几十 MB，国内直连 CDN 很慢
                 ContentDownloader.downloadModpackBody(url, archive, dialog::progress, dialog.cancelFlag());
                 dialog.finishFile(true);
-                dialog.logLine("整合包主体已下载（" + FormatUtils.formatFileSize(Files.size(archive)) + "）", true);
+                dialog.logLine(I18N.get("page.p0795", FormatUtils.formatFileSize(Files.size(archive)) + "）"), true);
                 installModpackArchive(archive, packName, gameDir, dialog);
             } catch (Exception ex) {
                 boolean cancelled = ContentDownloader.CANCELLED_MESSAGE.equals(ex.getMessage());
-                dialog.logLine("失败: " + ex, false);
-                dialog.finish(false, cancelled ? "已取消安装" : "安装失败: " + ex.getMessage(), null);
+                dialog.logLine(I18N.get("page.p0796", ex), false);
+                dialog.finish(false, cancelled ? I18N.get("page.t0603") : I18N.get("page.p0797", ex.getMessage()), null);
             } finally {
                 if (tempDir != null) {
                     try { ArchiveUtils.deleteRecursively(tempDir); } catch (Exception ignored) {}
@@ -3128,24 +3339,24 @@ public final class DownloadCenterPage {
      */
     private void importLocalModpack() {
         FileChooser fc = new FileChooser();
-        fc.setTitle("选择本地整合包文件");
+        fc.setTitle(I18N.get("page.t0209"));
         fc.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("整合包 (*.mrpack, *.zip)", "*.mrpack", "*.zip"),
-                new FileChooser.ExtensionFilter("全部文件", "*.*"));
+                new FileChooser.ExtensionFilter(I18N.get("page.t0604"), "*.mrpack", "*.zip"),
+                new FileChooser.ExtensionFilter(I18N.get("page.t0605"), "*.*"));
         File chosen = fc.showOpenDialog(host.stage());
         if (chosen == null) return;
 
         String gameDir = host.config().getOrDefault("GameDir", ".minecraft");
         String packName = chosen.getName().replaceAll("(?i)\\.(mrpack|zip)$", "");
-        DownloadTaskCard dialog = downloads.open("导入整合包 " + packName);
-        dialog.stage("读取本地整合包...");
-        dialog.logLine("本地文件: " + chosen.getAbsolutePath(), true);
+        DownloadTaskCard dialog = downloads.open(I18N.get("page.p0798", packName));
+        dialog.stage(I18N.get("page.t0210"));
+        dialog.logLine(I18N.get("page.p0799", chosen.getAbsolutePath()), true);
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
                 installModpackArchive(chosen.toPath(), packName, gameDir, dialog);
             } catch (Exception ex) {
-                dialog.logLine("失败: " + ex, false);
-                dialog.finish(false, "导入失败: " + ex.getMessage(), null);
+                dialog.logLine(I18N.get("page.p0800", ex), false);
+                dialog.finish(false, I18N.get("page.p0801", ex.getMessage()), null);
             }
         });
     }
@@ -3166,7 +3377,7 @@ public final class DownloadCenterPage {
                                        DownloadTaskCard dialog) throws Exception {
         Path tempDir = Files.createTempDirectory("sl-pack-x-");
         try {
-            dialog.stage("解压整合包...");
+            dialog.stage(I18N.get("page.t0211"));
             Path extractDir = tempDir.resolve("extracted");
             Files.createDirectories(extractDir);
             ArchiveUtils.unzipTo(archive, extractDir);
@@ -3178,27 +3389,26 @@ public final class DownloadCenterPage {
             PackManifest manifest = ModpackManifestParser.parse(extractDir, progress);
             String mcVersion = resolveMcVersion(manifest.mcVersionRaw(), gameDir);
             if (mcVersion == null) {
-                throw new IOException("无法在版本清单中找到兼容的 Minecraft 版本："
-                        + manifest.mcVersionRaw());
+                throw new IOException(I18N.get("page.p0802", manifest.mcVersionRaw()));
             }
             String packId = ModpackManifestParser.sanitizePackId(packName);
-            dialog.logLine("Minecraft: " + mcVersion + "（清单声明 " + manifest.mcVersionRaw() + "）", true);
+            dialog.logLine(I18N.get("page.q0032", mcVersion, manifest.mcVersionRaw()), true);
             if (manifest.loaderType() != null) {
-                dialog.logLine("加载器: " + manifest.loaderType() + " " + manifest.loaderVersion(), true);
+                dialog.logLine(I18N.get("page.p0803", manifest.loaderType() + " " + manifest.loaderVersion()), true);
             }
-            dialog.logLine("清单内文件: " + manifest.files().size() + " 个", true);
+            dialog.logLine(I18N.get("page.q0033", manifest.files().size()), true);
 
             // 1. 确保原版已安装 //
             Path mcVerDir = Paths.get(gameDir, "versions", mcVersion);
             boolean mcInstalled = Files.isDirectory(mcVerDir)
                     && Files.exists(mcVerDir.resolve(mcVersion + ".json"));
             if (mcInstalled) {
-                dialog.logLine("原版 " + mcVersion + " 已安装，跳过", true);
+            dialog.logLine(I18N.get("page.q0034", mcVersion), true);
             } else {
-                dialog.stage("安装原版 " + mcVersion + "...");
-                dialog.beginFile("原版 " + mcVersion);
+                dialog.stage(I18N.get("page.p0804", mcVersion + "..."));
+                dialog.beginFile(I18N.get("page.p0805", mcVersion));
                 VersionDownloadService.VersionInfo vi = findVersionInfo(mcVersion);
-                if (vi == null) throw new IOException("无法在版本清单中找到 " + mcVersion);
+                if (vi == null) throw new IOException(I18N.get("page.p0806", mcVersion));
                 boolean ok = InstallEngine.installVanilla(vi, gameDir,
                         VersionDownloadService.getDownloadProvider(),
                         (pct, msg) -> {
@@ -3207,7 +3417,7 @@ public final class DownloadCenterPage {
                             dialog.message(msg);
                         });
                 dialog.finishFile(ok);
-                if (!ok) throw new IOException("原版 " + mcVersion + " 安装失败");
+            if (!ok) throw new IOException(I18N.get("page.q0035", mcVersion));
             }
 
             // 2. 加载器 //
@@ -3216,10 +3426,10 @@ public final class DownloadCenterPage {
                 String loaderType = manifest.loaderType();
                 String installedId = VersionMatcher.findLoaderVersionId(gameDir, mcVersion, loaderType);
                 if (installedId != null) {
-                    dialog.logLine(loaderType + " 已安装，跳过", true);
+            dialog.logLine(I18N.get("page.q0036", loaderType), true);
                     inheritsFrom = installedId;
                 } else {
-                    dialog.stage("安装 " + loaderType + " " + manifest.loaderVersion() + "...");
+                    dialog.stage(I18N.get("page.p0807", loaderType + " " + manifest.loaderVersion() + "..."));
                     dialog.beginFile(loaderType + " " + manifest.loaderVersion());
                     java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
                     final boolean[] okRef = {false};
@@ -3247,15 +3457,15 @@ public final class DownloadCenterPage {
                                 }
                             });
                     if (!latch.await(10, java.util.concurrent.TimeUnit.MINUTES)) {
-                        throw new IOException(loaderType + " 安装超时");
+            throw new IOException(I18N.get("page.q0037", loaderType));
                     }
                     dialog.finishFile(okRef[0]);
                     if (!okRef[0]) {
-                        throw new IOException(loaderType + " 安装失败"
-                                + (errRef[0] != null ? ": " + errRef[0] : ""));
+                        throw new IOException(I18N.get("page.q0038", loaderType,
+                                errRef[0] != null ? ": " + errRef[0] : ""));
                     }
                     String installed = VersionMatcher.findLoaderVersionId(gameDir, mcVersion, loaderType);
-                    if (installed == null) throw new IOException(loaderType + " 安装后未找到版本记录");
+            if (installed == null) throw new IOException(I18N.get("page.q0039", loaderType));
                     inheritsFrom = installed;
                 }
             }
@@ -3284,16 +3494,16 @@ public final class DownloadCenterPage {
             // 4. 复制 overrides/ //
             Path overrides = extractDir.resolve(manifest.overridesDir());
             if (Files.isDirectory(overrides)) {
-                dialog.stage("复制整合包配置...");
-                dialog.logLine("覆盖目录: " + manifest.overridesDir(), true);
+                dialog.stage(I18N.get("page.t0212"));
+                dialog.logLine(I18N.get("page.p0808", manifest.overridesDir()), true);
                 ArchiveUtils.copyDirectory(overrides, packDir);
             }
 
             // 5. 下载清单内的文件（4 线程并发，逻辑平移到 ContentDownloader） //
             List<PackFile> files = manifest.files();
             if (!files.isEmpty()) {
-                dialog.stage("下载整合包文件...");
-                dialog.beginFile("整合包文件（共 " + files.size() + " 个）");
+                dialog.stage(I18N.get("page.t0213"));
+                dialog.beginFile(I18N.get("page.q0040", files.size()));
                 boolean fileOk = true;
                 try {
                     ContentDownloader.downloadModpackFiles(files, packDir,
@@ -3305,11 +3515,11 @@ public final class DownloadCenterPage {
                     dialog.finishFile(fileOk);
                 }
                 dialog.progress(100);
-                dialog.logLine("全部 " + files.size() + " 个文件就绪", true);
+                dialog.logLine(I18N.get("page.q0041", files.size()), true);
             }
 
-            dialog.finish(true, "整合包已安装到 versions/" + packId, null);
-            Platform.runLater(() -> host.ui().toast("整合包「" + packName + "」安装完成"));
+            dialog.finish(true, I18N.get("page.p0809", packId), null);
+                Platform.runLater(() -> host.ui().toast(I18N.get("page.q0042", packName)));
         } finally {
             try { ArchiveUtils.deleteRecursively(tempDir); } catch (Exception ignored) {}
         }
@@ -3364,6 +3574,199 @@ public final class DownloadCenterPage {
             if (vi.getId().equals(mcVersion)) return vi;
         }
         return null;
+    }
+
+    // 下载中心：自定义下载（任意直链 / 文件名自定义 / 多文件 / 自选目录 / 断点续传） //
+
+    /** 正在下载的自定义下载 .part 文件：同一地址重复点「开始下载」时挡住第二个任务，避免两个线程写同一个文件 */
+    private static final java.util.Set<Path> ACTIVE_CUSTOM_PARTS =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** 侧边栏底部「自定义下载」：填地址、文件名与保存目录，确定后登记一张下载任务卡片 */
+    private void showCustomDownloadDialog() {
+        CustomDownloadDialog.show(host, req -> startCustomDownloads(req.files(), req.dir()));
+    }
+
+    /**
+     * 自定义下载（支持一次多个文件）：每个文件独立探测大小 / 续传 / 落盘，按顺序逐个下载。
+     *
+     * <p>单文件时卡片标题就是文件名；多文件时标题为「自定义下载 · N 个文件」，
+     * 阶段文案显示「(2/4) 文件名」。取消后已下完的文件保留，当前文件的 .part 也保留，
+     * 重新开始同一批（或同一地址）会从断点继续。
+     *
+     * <p>每个文件先写 {@code <文件名>.<地址短哈希>.part}，下完再改名成正式文件：
+     * <ul>
+     *   <li>取消 / 断网 / 关掉启动器后 part 还在，下次用<b>同一地址</b>再点开始下载即从断点继续
+     *       （部分文件名带地址哈希，换个地址不会把两份内容的字节拼在一起）；</li>
+     *   <li>服务器不支持 Range 时自动删掉残片从头下；</li>
+     *   <li>同名完整文件已存在时自动改名为 {@code name (2).ext}，不覆盖用户已有文件。</li>
+     * </ul>
+     */
+    private void startCustomDownloads(List<CustomDownloadDialog.FileRequest> files, Path dir) {
+        if (files == null || files.isEmpty()) return;
+        final List<CustomDownloadDialog.FileRequest> items = List.copyOf(files);
+        String title = items.size() == 1
+                ? I18N.get("page.q0043", items.get(0).fileName())
+                : I18N.get("page.q0044", items.size());
+        DownloadTaskCard dialog = downloads.open(title);
+        // 失败后可一键重试：已下完的文件会被识别并跳过，当前文件从 .part 断点继续
+        dialog.setRetryAction(() -> startCustomDownloads(items, dir));
+        dialog.stage(items.size() == 1
+                ? I18N.get("page.t0606")
+                : I18N.get("page.q0045", items.size()));
+        dialog.logLine(I18N.get("page.p0810", dir), true);
+        for (int i = 0; i < items.size(); i++) {
+            dialog.logLine((i + 1) + ". " + items.get(i).url(), true);
+        }
+
+        UIGeneralControlClass.ASYNC_POOL.submit(() -> {
+            Path lastTarget = null;
+            try {
+                Files.createDirectories(dir);
+                for (int i = 0; i < items.size(); i++) {
+                    checkDownloadCancelled(dialog);
+                    CustomDownloadDialog.FileRequest item = items.get(i);
+                    // 多文件共用一张卡片：切到下一个文件时进度条/速度归零
+                    dialog.resetForNextFile();
+                    dialog.stage(items.size() > 1
+                            ? "(" + (i + 1) + "/" + items.size() + ") " + item.fileName()
+                            : I18N.get("page.t0214"));
+                    dialog.beginFile(item.fileName());
+                    lastTarget = downloadCustomFile(dialog, dir, item);
+                    dialog.finishFile(true);
+                }
+                String summary = items.size() == 1
+                        ? I18N.get("page.q0046", lastTarget)
+                        : I18N.get("page.q0047", items.size(), dir);
+                dialog.finish(true, summary, null);
+                final String toast = items.size() == 1
+                        ? I18N.get("page.q0049", lastTarget.getFileName())
+                        : I18N.get("page.q0050", items.size());
+                Platform.runLater(() -> host.ui().toast(toast, "success"));
+            } catch (Exception ex) {
+                boolean cancelled = dialog.isCancelled()
+                        || HttpDownloadEngine.CANCELLED_MESSAGE.equals(ex.getMessage());
+                dialog.finishFile(false);
+                if (cancelled) {
+                    // 已下完的文件与当前 .part 都保留，下次继续
+                    dialog.logLine(I18N.get("page.t0215"), true);
+                    dialog.finish(false, I18N.get("page.t0216"), null);
+                } else {
+                    dialog.logLine(I18N.get("page.p0811", ex), false);
+                    if (ex.getCause() != null) dialog.logLine(I18N.get("page.p0812", ex.getCause()), false);
+                    dialog.finish(false, I18N.get("page.p0813", ex.getMessage()), null);
+                }
+            }
+        });
+    }
+
+    /**
+     * 下载自定义列表里的一个文件，返回最终落盘路径。
+     *
+     * <p>同名的完整文件（大小与远端一致）直接跳过：批量下载中途失败后重试时，
+     * 已经下完的文件不会被重复下载成 {@code name (2).ext}。
+     */
+    private Path downloadCustomFile(DownloadTaskCard dialog, Path dir,
+                                    CustomDownloadDialog.FileRequest file) throws IOException {
+        String url = file.url();
+        String fileName = file.fileName();
+        long remoteSize = HttpDownloadEngine.probeFileSize(HttpDownloadEngine.HTTP_CLIENT, url);
+        dialog.totalBytes(remoteSize);
+        if (remoteSize > 0) {
+            dialog.logLine(I18N.get("page.p0814", FormatUtils.formatFileSize(remoteSize)), true);
+        }
+
+        Path plain = dir.resolve(fileName);
+        if (remoteSize > 0 && Files.isRegularFile(plain) && Files.size(plain) == remoteSize) {
+            dialog.progress(100);
+            dialog.logLine(I18N.get("page.p0815", fileName), true);
+            return plain;
+        }
+
+        Path target = uniqueFileTarget(dir, fileName);
+        Path part = dir.resolve(target.getFileName() + "." + shortHash(url) + ".part")
+                .toAbsolutePath().normalize();
+        boolean ownsPart = false;
+        try {
+            // 同一地址 / 同一目标已在下载：再开一个任务会两个线程同时写同一个 .part
+            if (!ACTIVE_CUSTOM_PARTS.add(part)) {
+                throw new IOException(I18N.get("page.t0217"));
+            }
+            ownsPart = true;
+
+            long partSize = Files.exists(part) ? Files.size(part) : 0L;
+            if (partSize > 0 && remoteSize > 0 && partSize == remoteSize) {
+                // 上次其实已经下完，只是没来得及改名：直接落成正式文件
+                Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
+                dialog.progress(100);
+                dialog.logLine(I18N.get("page.p0816", target.getFileName()), true);
+                return target;
+            }
+            if (partSize > 0 && remoteSize > 0 && partSize > remoteSize) {
+                // 远端文件变小（或残片来自别的文件）：续传只会拿到 416，改为从头下
+                Files.deleteIfExists(part);
+                partSize = 0L;
+                dialog.logLine(I18N.get("page.t0218"), false);
+            }
+            if (partSize > 0 && remoteSize > 0) {
+                dialog.logLine(I18N.get("page.q0051", FormatUtils.formatFileSize(partSize)), true);
+            } else if (partSize > 0) {
+                // 服务器不支持 Range（探测不到大小）：续传没有意义，清掉残片重下
+                Files.deleteIfExists(part);
+                dialog.logLine(I18N.get("page.t0219"), true);
+            }
+
+            checkDownloadCancelled(dialog);
+            HttpDownloadEngine.downloadResumable(url, part, dialog::progress, dialog.cancelFlag());
+            checkDownloadCancelled(dialog);
+
+            // 连接被服务端提前关闭也会「正常」返回：大小对不上就不许当成完成，
+            // 残片保留，重新下载可从断点继续
+            long got = Files.exists(part) ? Files.size(part) : -1L;
+            if (remoteSize > 0 && got != remoteSize) {
+                throw new IOException(I18N.get("page.q0052",
+                        FormatUtils.formatFileSize(Math.max(0L, got)),
+                        FormatUtils.formatFileSize(remoteSize)));
+            }
+
+            Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
+            dialog.logLine(I18N.get("page.p0817", target.getFileName()), true);
+            return target;
+        } finally {
+            if (ownsPart) ACTIVE_CUSTOM_PARTS.remove(part);
+        }
+    }
+
+    /**
+     * 自定义下载的落盘文件名：同名完整文件已存在时自动加 {@code (2)(3)…}，不覆盖用户已有文件。
+     *
+     * <p>只跳过「完整文件已存在」的名字——上次中断留下的 {@code .part} 不算，
+     * 所以用同一地址再次下载时仍然命中原文件名并续传。
+     */
+    private static Path uniqueFileTarget(Path dir, String fileName) {
+        Path plain = dir.resolve(fileName);
+        if (!Files.exists(plain)) return plain;
+        int dot = fileName.lastIndexOf('.');
+        String base = dot > 0 ? fileName.substring(0, dot) : fileName;
+        String ext = dot > 0 ? fileName.substring(dot) : "";
+        for (int i = 2; i <= 999; i++) {
+            Path candidate = dir.resolve(base + " (" + i + ")" + ext);
+            if (!Files.exists(candidate)) return candidate;
+        }
+        return dir.resolve(base + "-" + System.currentTimeMillis() + ext);
+    }
+
+    /** 断点续传临时文件里的地址短哈希：同一地址 → 同一 part，不同地址互不干扰 */
+    private static String shortHash(String text) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-1");
+            byte[] digest = md.digest(text.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(8);
+            for (int i = 0; i < 4; i++) sb.append(String.format("%02x", digest[i]));
+            return sb.toString();
+        } catch (Exception e) {
+            return Integer.toHexString(text.hashCode());
+        }
     }
 
     // 下载工具 //

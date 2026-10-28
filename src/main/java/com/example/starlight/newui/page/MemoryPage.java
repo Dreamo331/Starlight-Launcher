@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.ModsApi.RemoteMod;
 import com.example.starlight.newui.LauncherContext;
@@ -60,12 +62,12 @@ public final class MemoryPage {
     // 内存管理页面 //
 
     public Node build() {
-        VBox root = PageKit.settingsPage(host, "内存管理", "home");
+        VBox root = PageKit.settingsPage(host, I18N.get("page.t0251"), "home");
 
         // 卡片1：JVM 堆内存（实时刷新） //
         VBox heapCard = new VBox(10);
         heapCard.getStyleClass().add("settings-card");
-        Label heapTitle = AppIcons.label("memory", "JVM 堆内存");
+        Label heapTitle = AppIcons.label("memory", I18N.get("page.t0252"));
         heapTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: 600; -fx-text-fill: -sl-text;");
         Label heapPctLbl = new Label("--%");
         heapPctLbl.setStyle("-fx-font-size: 26px; -fx-font-weight: 700; -fx-text-fill: #22c55e;");
@@ -89,12 +91,12 @@ public final class MemoryPage {
         HBox heapStats = new HBox(20);
         heapStats.setAlignment(Pos.CENTER);
         heapStats.getChildren().addAll(
-                createMemStatBox("最大", maxLbl),
-                createMemStatBox("已分配", committedLbl),
-                createMemStatBox("已使用", usedLbl),
-                createMemStatBox("空闲", freeLbl)
+                createMemStatBox(I18N.get("page.t0610"), maxLbl),
+                createMemStatBox(I18N.get("page.t0611"), committedLbl),
+                createMemStatBox(I18N.get("page.t0612"), usedLbl),
+                createMemStatBox(I18N.get("page.t0613"), freeLbl)
         );
-        Label heapHint = new Label("启动器自身 JVM 堆内存（游戏启动后占用会明显上升）");
+        Label heapHint = new Label(I18N.get("page.t0253"));
         heapHint.setStyle("-fx-font-size: 11px; -fx-text-fill: -sl-text-faint;");
         heapCard.getChildren().addAll(heapTitle, heapUsageRow, heapStats, heapHint);
         root.getChildren().add(heapCard);
@@ -102,7 +104,7 @@ public final class MemoryPage {
         // 卡片2：系统物理内存 //
         VBox sysCard = new VBox(10);
         sysCard.getStyleClass().add("settings-card");
-        Label sysTitle = new Label("系统物理内存");
+        Label sysTitle = new Label(I18N.get("page.t0254"));
         sysTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: 600; -fx-text-fill: -sl-text;");
         Label sysPctLbl = new Label("--%");
         sysPctLbl.setStyle("-fx-font-size: 26px; -fx-font-weight: 700; -fx-text-fill: #22c55e;");
@@ -119,7 +121,7 @@ public final class MemoryPage {
         HBox sysUsageRow = new HBox(16);
         sysUsageRow.setAlignment(Pos.CENTER_LEFT);
         sysUsageRow.getChildren().addAll(sysPctLbl, sysTrack);
-        Label sysHint = new Label("系统物理内存总占用（含其他程序），与任务管理器口径一致");
+        Label sysHint = new Label(I18N.get("page.t0255"));
         sysHint.setStyle("-fx-font-size: 11px; -fx-text-fill: -sl-text-faint;");
         sysCard.getChildren().addAll(sysTitle, sysUsageRow, sysHint);
         root.getChildren().add(sysCard);
@@ -127,17 +129,17 @@ public final class MemoryPage {
         // 卡片3：非堆内存 //
         VBox nonHeapCard = new VBox(10);
         nonHeapCard.getStyleClass().add("settings-card");
-        Label nonHeapTitle = AppIcons.label("package", "非堆内存");
+        Label nonHeapTitle = AppIcons.label("package", I18N.get("page.t0256"));
         nonHeapTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: 600; -fx-text-fill: -sl-text;");
         Label nonHeapUsedLbl = new Label("--");
         Label nonHeapCommittedLbl = new Label("--");
         HBox nonHeapStats = new HBox(20);
         nonHeapStats.setAlignment(Pos.CENTER);
         nonHeapStats.getChildren().addAll(
-                createMemStatBox("已使用", nonHeapUsedLbl),
-                createMemStatBox("已提交", nonHeapCommittedLbl)
+                createMemStatBox(I18N.get("page.t0614"), nonHeapUsedLbl),
+                createMemStatBox(I18N.get("page.t0615"), nonHeapCommittedLbl)
         );
-        Label nonHeapHint = new Label("Metaspace、代码缓存等非堆区域，一般保持稳定");
+        Label nonHeapHint = new Label(I18N.get("page.t0257"));
         nonHeapHint.setStyle("-fx-font-size: 11px; -fx-text-fill: -sl-text-faint;");
         nonHeapCard.getChildren().addAll(nonHeapTitle, nonHeapStats, nonHeapHint);
         root.getChildren().add(nonHeapCard);
@@ -145,7 +147,7 @@ public final class MemoryPage {
         // 卡片4：GC 与线程 //
         VBox gcCard = new VBox(10);
         gcCard.getStyleClass().add("settings-card");
-        Label gcTitle = AppIcons.label("refresh", "GC 与线程");
+        Label gcTitle = AppIcons.label("refresh", I18N.get("page.t0258"));
         gcTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: 600; -fx-text-fill: -sl-text;");
         Label gcCountLbl = new Label("--");
         Label gcTimeLbl = new Label("--");
@@ -153,9 +155,9 @@ public final class MemoryPage {
         HBox gcStats = new HBox(20);
         gcStats.setAlignment(Pos.CENTER);
         gcStats.getChildren().addAll(
-                createMemStatBox("GC 次数", gcCountLbl),
-                createMemStatBox("GC 累计耗时", gcTimeLbl),
-                createMemStatBox("线程数(当前/峰值)", threadLbl)
+                createMemStatBox(I18N.get("page.t0616"), gcCountLbl),
+                createMemStatBox(I18N.get("page.t0617"), gcTimeLbl),
+                createMemStatBox(I18N.get("page.t0618"), threadLbl)
         );
         gcCard.getChildren().addAll(gcTitle, gcStats);
         root.getChildren().add(gcCard);
@@ -163,7 +165,7 @@ public final class MemoryPage {
         // 操作按钮 //
         HBox btnRow = new HBox(10);
         btnRow.setAlignment(Pos.CENTER);
-        Button jvmBtn = AppIcons.button("cpu", "JVM设置");
+        Button jvmBtn = AppIcons.button("cpu", I18N.get("page.t0259"));
         jvmBtn.getStyleClass().add("btn-primary");
         jvmBtn.setStyle("-fx-min-width: 140;");
         jvmBtn.setOnAction(e -> host.switchToSettings("sidebarJvm"));
@@ -172,7 +174,7 @@ public final class MemoryPage {
 
         // 内存优化：调用 Windows EmptyWorkingSet 把各进程工作集交还系统。
         // 与「高级设置 → 内存优化」是同一个实现（MemoryOptimizer），两处入口行为一致。
-        Button memOptBtn = AppIcons.button("bolt", "内存优化");
+        Button memOptBtn = AppIcons.button("bolt", I18N.get("page.t0260"));
         memOptBtn.getStyleClass().add("btn-primary");
         memOptBtn.setStyle("-fx-min-width: 140;");
         memOptBtn.setOnAction(e -> runMemoryOptimize(memOptBtn, () -> {
@@ -180,7 +182,7 @@ public final class MemoryPage {
             SystemInfoMonitor.sample();
         }));
         btnRow.getChildren().add(memOptBtn);
-        Label lastUpdateLbl = new Label("最后刷新: --");
+        Label lastUpdateLbl = new Label(I18N.get("page.t0261"));
         lastUpdateLbl.setStyle("-fx-font-size: 11px; -fx-text-fill: -sl-text-faint; -fx-alignment: center;");
         lastUpdateLbl.setMaxWidth(Double.MAX_VALUE);
         root.getChildren().add(lastUpdateLbl);
@@ -227,15 +229,15 @@ public final class MemoryPage {
                     if (c >= 0) gcCount += c;
                     if (t >= 0) gcTime += t;
                 }
-                gcCountLbl.setText(gcCount + " 次");
+                gcCountLbl.setText(I18N.get("mp.r0001", gcCount));
                 gcTimeLbl.setText(String.format("%.1f s", gcTime / 1000.0));
 
                 // 线程统计
                 ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
                 threadLbl.setText(threadBean.getThreadCount() + " / " + threadBean.getPeakThreadCount());
 
-                lastUpdateLbl.setText("最后刷新: " + java.time.LocalTime.now()
-                        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")));
+                lastUpdateLbl.setText(I18N.get("page.p0821", java.time.LocalTime.now()
+                        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))));
             } catch (Exception ignored) {}
         };
         Timeline timer = new Timeline(new KeyFrame(Duration.seconds(2), e -> refresh.run()));
@@ -260,7 +262,7 @@ public final class MemoryPage {
     private void runMemoryOptimize(Button trigger, Runnable onDone) {
         String originalText = trigger.getText();
         trigger.setDisable(true);
-        trigger.setText("优化中...");
+        trigger.setText(I18N.get("page.t0262"));
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             long before = com.example.starlight.util.MemoryOptimizer.readStatus().usedBytes();
             int cleaned = com.example.starlight.util.MemoryOptimizer.optimize();
@@ -271,8 +273,8 @@ public final class MemoryPage {
                 if (onDone != null) onDone.run();
                 long freed = Math.max(0, before - after);
                 host.ui().toast(cleaned > 0
-                        ? "已优化 " + cleaned + " 个进程，释放约 " + FormatUtils.formatFileSize(freed)
-                        : "没有可优化的进程（仅 Windows 支持，且部分进程需要管理员权限）");
+                        ? I18N.get("mp.r0002", cleaned, FormatUtils.formatFileSize(freed))
+                        : I18N.get("page.t0619"));
             });
         });
     }
@@ -296,17 +298,15 @@ public final class MemoryPage {
         card.getStyleClass().add("settings-card");
         card.setStyle("-fx-alignment: top-left; -fx-translate-y: 0; -fx-padding: 16 18;");
 
-        Label title = new Label("内存优化");
+        Label title = new Label(I18N.get("page.t0263"));
         title.getStyleClass().add("settings-card-title");
-        Label desc = new Label("将物理内存占用降低约 1/3，不仅限于 Minecraft。"
-                + "如果使用机械硬盘，可能会导致一小段时间的卡顿。");
+        Label desc = new Label(I18N.get("page.t0555"));
         desc.getStyleClass().add("settings-card-desc");
-        desc.setWrapText(true);
-        desc.setMaxWidth(Double.MAX_VALUE);
+        PageKit.cardTooltip(desc);
         card.getChildren().addAll(title, desc);
 
         // 内存使用率 //
-        Label usageCaption = new Label("内存使用率");
+        Label usageCaption = new Label(I18N.get("page.t0264"));
         usageCaption.setStyle("-fx-font-size: 13px; -fx-text-fill: -sl-text;");
 
         ProgressBar bar = new ProgressBar(0);
@@ -319,22 +319,22 @@ public final class MemoryPage {
         percentLabel.setMinWidth(Region.USE_PREF_SIZE);
         percentLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: 600;");
 
-        Button optimizeBtn = AppIcons.button("bolt", "内存优化");
+        Button optimizeBtn = AppIcons.button("bolt", I18N.get("page.t0265"));
         optimizeBtn.getStyleClass().add("btn-primary");
         optimizeBtn.setMinWidth(Region.USE_PREF_SIZE);
 
         HBox barRow = new HBox(12, bar, percentLabel, optimizeBtn);
         barRow.setAlignment(Pos.CENTER_LEFT);
 
-        Label detailLabel = new Label("读取中...");
+        Label detailLabel = new Label(I18N.get("page.t0266"));
         detailLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
 
         Runnable refresh = () -> {
             com.example.starlight.util.MemoryOptimizer.MemoryStatus st =
                     com.example.starlight.util.MemoryOptimizer.readStatus();
             if (st.totalBytes() <= 0) {
-                percentLabel.setText("未知");
-                detailLabel.setText("无法读取内存信息");
+                percentLabel.setText(I18N.get("page.t0267"));
+                detailLabel.setText(I18N.get("page.t0268"));
                 return;
             }
             bar.setProgress(st.percent() / 100.0);
@@ -349,19 +349,19 @@ public final class MemoryPage {
 
         // 启动前自动优化（开关 + 明确标注，点标注等同于点开关） //
         CheckBox autoToggle = PageKit.toggle(PageKit.boolConfig(host, "OptimizeMemoryBeforeLaunch", false));
-        Label autoLabel = new Label("启动游戏前优化一次");
+        Label autoLabel = new Label(I18N.get("page.t0269"));
         autoLabel.getStyleClass().add("toggle-switch-label");
         autoLabel.setOnMouseClicked(e -> autoToggle.setSelected(!autoToggle.isSelected()));
         autoToggle.selectedProperty().addListener((o, ov, nv) -> {
             host.config().put("OptimizeMemoryBeforeLaunch", String.valueOf(nv));
             host.saveConfig();
-            host.ui().toast("启动前优化: " + (nv ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("page.p0822", (nv ? I18N.get("page.t0620") : I18N.get("page.t0621"))));
         });
         HBox autoRow = new HBox(10, autoToggle, autoLabel);
         autoRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox autoBox = new VBox(4, autoRow,
-                PageKit.hintLabel("每次启动游戏前自动清理系统待机内存和所有进程的工作集，释放约 1/3 物理内存"));
+                PageKit.hintLabel(I18N.get("page.t0270")));
         autoBox.setPadding(new Insets(10, 0, 0, 0));
         card.getChildren().addAll(new Separator(), autoBox);
 

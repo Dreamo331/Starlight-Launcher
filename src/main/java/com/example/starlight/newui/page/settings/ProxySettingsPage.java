@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.ui.PageKit;
@@ -42,14 +44,14 @@ public final class ProxySettingsPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(ctx, "代理");
+        VBox root = PageKit.settingsPage(ctx, I18N.get("proxy.t0001"));
         Map<String, String> cfg = ctx.config();
         ProxyConfig.ProxyType curMode = ProxyConfig.type(cfg);
 
         // 模式选择（单选） //
-        RadioButton directRadio = new RadioButton("关闭代理（直连）");
-        RadioButton systemRadio = new RadioButton("系统代理");
-        RadioButton httpRadio = new RadioButton("HTTP 代理");
+        RadioButton directRadio = new RadioButton(I18N.get("proxy.t0002"));
+        RadioButton systemRadio = new RadioButton(I18N.get("proxy.t0003"));
+        RadioButton httpRadio = new RadioButton(I18N.get("proxy.t0004"));
         ToggleGroup modeGroup = new ToggleGroup();
         for (RadioButton rb : new RadioButton[]{directRadio, systemRadio, httpRadio}) {
             rb.setToggleGroup(modeGroup);
@@ -60,31 +62,31 @@ public final class ProxySettingsPage {
         httpRadio.setSelected(curMode == ProxyConfig.ProxyType.HTTP);
 
         HBox modeRow = new HBox(32,
-                modeOption(directRadio, "不使用任何代理"),
-                modeOption(systemRadio, "跟随操作系统代理设置"),
-                modeOption(httpRadio, "手动填写主机与端口"));
+                modeOption(directRadio, I18N.get("proxy.t0005")),
+                modeOption(systemRadio, I18N.get("proxy.t0006")),
+                modeOption(httpRadio, I18N.get("proxy.t0007")));
         modeRow.setAlignment(Pos.TOP_LEFT);
 
         // HTTP 参数区（网格对齐） //
-        TextField hostField = textInput(cfg.getOrDefault(ProxyConfig.KEY_HOST, ""), "如 127.0.0.1");
-        TextField portField = textInput(cfg.getOrDefault(ProxyConfig.KEY_PORT, ""), "如 7890");
+        TextField hostField = textInput(cfg.getOrDefault(ProxyConfig.KEY_HOST, ""), I18N.get("proxy.t0008"));
+        TextField portField = textInput(cfg.getOrDefault(ProxyConfig.KEY_PORT, ""), I18N.get("proxy.t0009"));
         portField.getStyleClass().add("input-field-sm");
-        TextField userField = textInput(cfg.getOrDefault(ProxyConfig.KEY_USER, ""), "可选");
+        TextField userField = textInput(cfg.getOrDefault(ProxyConfig.KEY_USER, ""), I18N.get("proxy.t0010"));
         PasswordField passField = new PasswordField();
         passField.setText(cfg.getOrDefault(ProxyConfig.KEY_PASS, ""));
         passField.getStyleClass().add("input-field");
-        passField.setPromptText("可选");
+        passField.setPromptText(I18N.get("proxy.t0011"));
 
         GridPane httpGrid = new GridPane();
         httpGrid.setHgap(14);
         httpGrid.setVgap(10);
-        httpGrid.add(fieldLabel("主机"), 0, 0);
+        httpGrid.add(fieldLabel(I18N.get("proxy.t0012")), 0, 0);
         httpGrid.add(hostField, 1, 0);
-        httpGrid.add(fieldLabel("端口"), 2, 0);
+        httpGrid.add(fieldLabel(I18N.get("proxy.t0013")), 2, 0);
         httpGrid.add(portField, 3, 0);
-        httpGrid.add(fieldLabel("用户名"), 0, 1);
+        httpGrid.add(fieldLabel(I18N.get("proxy.t0014")), 0, 1);
         httpGrid.add(userField, 1, 1);
-        httpGrid.add(fieldLabel("密码"), 2, 1);
+        httpGrid.add(fieldLabel(I18N.get("proxy.t0015")), 2, 1);
         httpGrid.add(passField, 3, 1);
         // 未选择 HTTP 代理时整组置灰（值保留，切回来还能看到上次填的地址）
         httpGrid.setDisable(!httpRadio.isSelected());
@@ -96,7 +98,9 @@ public final class ProxySettingsPage {
         Label statusDesc = new Label();
         statusDesc.getStyleClass().add("settings-card-desc");
         statusDesc.setWrapText(true);
-        Label dirtyChip = new Label("未保存");
+        // 最小宽度：避免在 HBox 里被压缩成一列竖排文字
+        statusDesc.setMinWidth(160);
+        Label dirtyChip = new Label(I18N.get("proxy.t0016"));
         dirtyChip.setStyle("-fx-background-color: #fef3c7; -fx-text-fill: #b45309;"
                 + " -fx-padding: 4 12; -fx-background-radius: 999; -fx-font-size: 12px; -fx-font-weight: 600;");
         dirtyChip.setMinWidth(Region.USE_PREF_SIZE);
@@ -110,13 +114,13 @@ public final class ProxySettingsPage {
             ProxyConfig.ProxyType mode = ProxyConfig.type(saved);
             String bg, fg, text;
             if (mode == ProxyConfig.ProxyType.HTTP) {
-                bg = "#dbeafe"; fg = "#1d4ed8"; text = "HTTP 代理";
+                bg = "#dbeafe"; fg = "#1d4ed8"; text = I18N.get("proxy.t0017");
             } else if (mode == ProxyConfig.ProxyType.DIRECT) {
-                bg = "#e5e7eb"; fg = "#374151"; text = "已关闭";
+                bg = "#e5e7eb"; fg = "#374151"; text = I18N.get("proxy.t0018");
             } else {
-                bg = "#e0e7ff"; fg = "#4338ca"; text = "系统代理";
+                bg = "#e0e7ff"; fg = "#4338ca"; text = I18N.get("proxy.t0019");
             }
-            statusBadge.setText("当前: " + text);
+            statusBadge.setText(I18N.get("proxy.k0001", text));
             statusBadge.setStyle("-fx-background-color: " + bg + ";"
                     + " -fx-text-fill: " + fg + ";"
                     + " -fx-padding: 4 12; -fx-background-radius: 999; -fx-font-size: 12px; -fx-font-weight: 600;");
@@ -147,23 +151,23 @@ public final class ProxySettingsPage {
         }
 
         // 保存按钮 //
-        Button saveBtn = AppIcons.button("save", "保存并应用");
+        Button saveBtn = AppIcons.button("save", I18N.get("proxy.t0020"));
         saveBtn.getStyleClass().add("btn-primary");
         saveBtn.setOnAction(e -> {
             if (httpRadio.isSelected()) {
                 String host = trim(hostField.getText());
                 String port = trim(portField.getText());
                 if (host.isEmpty()) {
-                    ctx.toast("请填写 HTTP 代理的主机地址");
+                    ctx.toast(I18N.get("proxy.t0021"));
                     return;
                 }
                 if (port.isEmpty()) {
-                    ctx.toast("请填写 HTTP 代理的端口");
+                    ctx.toast(I18N.get("proxy.t0022"));
                     return;
                 }
                 int p = PageKit.parseIntSafe(port, -1);
                 if (p < 1 || p > 65535) {
-                    ctx.toast("端口需为 1-65535 之间的数字");
+                    ctx.toast(I18N.get("proxy.t0023"));
                     return;
                 }
             }
@@ -177,25 +181,25 @@ public final class ProxySettingsPage {
             ProxyConfig.applyToSystem(ctx.config());
             syncStatus.run();
             syncDirty.run();
-            ctx.toast("代理设置已保存并应用: " + modeTitle(mode));
+            ctx.toast(I18N.get("proxy.k0002", modeTitle(mode)));
         });
 
         // 组装：模式选择 / HTTP 配置 / 应用 各自独立卡片 //
         root.getChildren().add(PageKit.settingsCardStacked(
-                "代理模式", "选择代理方式：关闭代理（直连）/ 系统代理 / HTTP 代理", modeRow));
+                I18N.get("proxy.t0024"), I18N.get("proxy.t0025"), modeRow));
 
         VBox httpBody = new VBox(8, httpGrid,
-                PageKit.hintLabel("用户名与密码留空表示该代理不需要认证。"));
+                PageKit.hintLabel(I18N.get("proxy.t0026")));
         root.getChildren().add(PageKit.settingsCardStacked(
-                "HTTP 代理配置", "填写代理服务器地址与端口；未选择 HTTP 代理时不可编辑", httpBody));
+                I18N.get("proxy.t0027"), I18N.get("proxy.t0028"), httpBody));
 
         HBox actionRow = new HBox(14, saveBtn, statusBadge, dirtyChip, statusDesc);
         actionRow.setAlignment(Pos.CENTER_LEFT);
         root.getChildren().add(PageKit.settingsCardStacked(
-                "应用", "保存后立即生效；游戏启动时自动携带对应的 JVM 代理参数", actionRow));
+                I18N.get("proxy.t0029"), I18N.get("proxy.t0030"), actionRow));
 
         root.getChildren().add(PageKit.hintLabel(
-                "提示：关闭代理为直连网络；系统代理使用操作系统代理设置；HTTP 代理需填写主机与端口，认证信息可选。"));
+                I18N.get("proxy.t0031")));
 
         return root;
     }
@@ -238,9 +242,9 @@ public final class ProxySettingsPage {
 
     private static String modeTitle(ProxyConfig.ProxyType mode) {
         return switch (mode) {
-            case DIRECT -> "关闭代理（直连）";
-            case HTTP -> "HTTP 代理";
-            default -> "系统代理";
+            case DIRECT -> I18N.get("proxy.t0032");
+            case HTTP -> I18N.get("proxy.t0033");
+            default -> I18N.get("proxy.t0034");
         };
     }
 
@@ -249,10 +253,10 @@ public final class ProxySettingsPage {
         if (mode == ProxyConfig.ProxyType.HTTP) {
             return ProxyConfig.isHttpValid(cfg)
                     ? ProxyConfig.host(cfg) + ":" + ProxyConfig.port(cfg)
-                    : "尚未填写有效的主机与端口";
+                    : I18N.get("proxy.t0035");
         }
-        if (mode == ProxyConfig.ProxyType.DIRECT) return "直连网络，不使用任何代理";
-        return "使用操作系统代理设置";
+        if (mode == ProxyConfig.ProxyType.DIRECT) return I18N.get("proxy.t0036");
+        return I18N.get("proxy.t0037");
     }
 
     private static String trim(String s) {

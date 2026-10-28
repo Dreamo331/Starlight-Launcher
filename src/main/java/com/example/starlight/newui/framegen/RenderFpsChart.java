@@ -1,5 +1,7 @@
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 import javafx.application.Platform;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -154,7 +156,7 @@ public final class RenderFpsChart extends Pane {
             g.setFill(LIMIT_LINE);
             g.setFont(Font.font(10));
             g.setTextAlign(TextAlignment.RIGHT);
-            g.fillText(String.format("屏幕 %.0f Hz", displayHz),
+            g.fillText(String.format(I18N.get("framegen.t0076"), displayHz),
                     padLeft + plotW - 4, y - 3);
         }
 
@@ -171,7 +173,7 @@ public final class RenderFpsChart extends Pane {
             g.setFill(AXIS_TEXT);
             g.setFont(Font.font(12));
             g.setTextAlign(TextAlignment.CENTER);
-            g.fillText("等待数据…（启动帧插值后开始采样）",
+            g.fillText(I18N.get("framegen.t0077"),
                     padLeft + plotW / 2, padTop + plotH / 2);
         }
     }
@@ -202,7 +204,7 @@ public final class RenderFpsChart extends Pane {
             final double gx = x + w * i / 4.0;
             final double sec = spanSec * (1.0 - (double) i / 4.0);
             g.setFill(AXIS_TEXT);
-            g.fillText(sec <= 0.1 ? "现在" : String.format("-%.0fs", sec),
+            g.fillText(sec <= 0.1 ? I18N.get("framegen.t0078") : String.format("-%.0fs", sec),
                     gx, y + h + 14);
         }
     }
@@ -269,16 +271,16 @@ public final class RenderFpsChart extends Pane {
         g.setTextAlign(TextAlignment.RIGHT);
 
         g.setFill(RENDER_LINE);
-        g.fillText(String.format("渲染 %.0f fps", cur), x + w, y + 14);
+        g.fillText(String.format(I18N.get("framegen.t0079"), cur), x + w, y + 14);
 
         g.setFont(Font.font(10));
         g.setFill(CAPTURE_LINE);
-        g.fillText(String.format("捕获 %.0f fps", cap), x + w, y + 28);
+        g.fillText(String.format(I18N.get("framegen.t0080"), cap), x + w, y + 28);
 
         if (displayHz > 0.5) {
             final double over = cur / displayHz;
             g.setFill(over > 1.05 ? LIMIT_LINE : AXIS_TEXT);
-            g.fillText(String.format("%.2f× 屏幕", over), x + w, y + 42);
+            g.fillText(String.format(I18N.get("framegen.t0081"), over), x + w, y + 42);
         }
     }
 }

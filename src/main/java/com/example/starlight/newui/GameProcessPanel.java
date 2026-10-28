@@ -1,5 +1,7 @@
 package com.example.starlight.newui;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.PageKit;
@@ -116,7 +118,7 @@ public final class GameProcessPanel extends VBox {
     public void show() {
         List<Instance> alive = GameInstanceRegistry.aliveInstances();
         if (alive.isEmpty()) {
-            toast.accept("当前没有正在运行的游戏进程");
+            toast.accept(I18N.get("newui.t0055"));
             return;
         }
         if (alive.size() == 1) {
@@ -179,12 +181,12 @@ public final class GameProcessPanel extends VBox {
     private void buildMulti() {
         getChildren().addAll(
                 iconBlock("power", "danger"),
-                titleLabel("关闭游戏进程"),
+                titleLabel(I18N.get("newui.t0056")),
                 countDesc(shown.size()),
                 processArea());
 
         // 底部：全选 + 已选计数
-        checkAllBox = new CheckBox("全选");
+        checkAllBox = new CheckBox(I18N.get("newui.t0057"));
         checkAllBox.getStyleClass().addAll("process-check", "process-check-all");
         checkAllBox.setFocusTraversable(false);
         checkAllBox.setOnAction(e -> {
@@ -195,11 +197,11 @@ public final class GameProcessPanel extends VBox {
             }
             applySelectionToRows();
         });
-        Label selectedText = new Label("已选");
+        Label selectedText = new Label(I18N.get("newui.t0058"));
         selectedText.getStyleClass().add("process-selected-count");
         selectedCountValue = new Label("0");
         selectedCountValue.getStyleClass().add("process-selected-count-value");
-        Label selectedUnit = new Label("个进程");
+        Label selectedUnit = new Label(I18N.get("newui.t0059"));
         selectedUnit.getStyleClass().add("process-selected-count");
         Region footerSpacer = new Region();
         HBox.setHgrow(footerSpacer, Priority.ALWAYS);
@@ -210,10 +212,10 @@ public final class GameProcessPanel extends VBox {
         getChildren().add(footer);
 
         // 按钮区
-        Button cancel = new Button("取消");
+        Button cancel = new Button(I18N.get("newui.t0060"));
         cancel.getStyleClass().add("modal-btn-cancel");
         cancel.setOnAction(e -> doClose());
-        closeSelectedBtn = new Button("关闭选中进程");
+        closeSelectedBtn = new Button(I18N.get("newui.t0061"));
         closeSelectedBtn.getStyleClass().add("modal-btn-danger");
         closeSelectedBtn.setOnAction(e -> closeSelected());
         getChildren().add(actionRow(cancel, closeSelectedBtn));
@@ -225,24 +227,24 @@ public final class GameProcessPanel extends VBox {
     private void buildSingle(Instance inst) {
         getChildren().addAll(
                 iconBlock("close", "danger"),
-                titleLabel("关闭游戏进程"),
+                titleLabel(I18N.get("newui.t0062")),
                 singleDesc());
 
         singleMemoryLabel = valueLabel(memoryText(inst.pid));
         singleUptimeLabel = valueLabel(FormatUtils.formatDuration(inst.uptimeMillis()));
         VBox list = new VBox(7,
-                infoRow("进程名称", valueLabel(inst.displayName())),
-                infoRow("进程 PID", valueLabel(String.valueOf(inst.pid))),
-                infoRow("内存占用", singleMemoryLabel),
-                infoRow("运行时长", singleUptimeLabel));
+                infoRow(I18N.get("newui.t0129"), valueLabel(inst.displayName())),
+                infoRow(I18N.get("newui.t0130"), valueLabel(String.valueOf(inst.pid))),
+                infoRow(I18N.get("newui.t0131"), singleMemoryLabel),
+                infoRow(I18N.get("newui.t0132"), singleUptimeLabel));
         list.getStyleClass().add("modal-list");
         VBox.setMargin(list, new Insets(14, 0, 0, 0));
         getChildren().add(list);
 
-        Button cancel = new Button("取消");
+        Button cancel = new Button(I18N.get("newui.t0063"));
         cancel.getStyleClass().add("modal-btn-cancel");
         cancel.setOnAction(e -> onSingleCancel());
-        Button confirm = new Button("关闭进程");
+        Button confirm = new Button(I18N.get("newui.t0064"));
         confirm.getStyleClass().add("modal-btn-danger");
         confirm.setOnAction(e -> closeSingle(inst));
         getChildren().add(actionRow(cancel, confirm));
@@ -252,12 +254,12 @@ public final class GameProcessPanel extends VBox {
     private void buildEmpty() {
         getChildren().addAll(
                 iconBlock("power", "danger"),
-                titleLabel("关闭游戏进程"),
-                descLabel("当前没有正在运行的游戏进程"));
+                titleLabel(I18N.get("newui.t0133")),
+                descLabel(I18N.get("newui.t0134")));
 
         Region icon = AppIcons.icon("circle-check", 28, Color.web("#22c55e"));
         icon.getStyleClass().add("process-empty-icon");
-        Label text = new Label("所有游戏进程已关闭");
+        Label text = new Label(I18N.get("newui.t0065"));
         VBox empty = new VBox(10, icon, text);
         empty.setAlignment(Pos.CENTER);
         empty.setPrefHeight(LIST_HEIGHT);
@@ -265,7 +267,7 @@ public final class GameProcessPanel extends VBox {
         empty.getStyleClass().add("process-empty");
         getChildren().add(empty);
 
-        Button done = new Button("完成");
+        Button done = new Button(I18N.get("newui.t0066"));
         done.getStyleClass().add("modal-btn-danger");
         done.setOnAction(e -> doClose());
         getChildren().add(actionRow(null, done));
@@ -297,13 +299,13 @@ public final class GameProcessPanel extends VBox {
 
             collapseArrow = new Label("▶");
             collapseArrow.getStyleClass().add("collapse-arrow");
-            Label title = new Label("其他游戏进程");
+            Label title = new Label(I18N.get("newui.t0067"));
             title.getStyleClass().add("collapse-title");
             Label count = new Label(String.valueOf(others.size()));
             count.getStyleClass().add("collapse-count");
             Region spacer = new Region();
             HBox.setHgrow(spacer, Priority.ALWAYS);
-            collapseHint = new Label("点击展开");
+            collapseHint = new Label(I18N.get("newui.t0068"));
             collapseHint.getStyleClass().add("collapse-hint");
 
             HBox header = new HBox(8, collapseArrow, title, count, spacer, collapseHint);
@@ -367,7 +369,7 @@ public final class GameProcessPanel extends VBox {
         Button rowClose = new Button();
         rowClose.getStyleClass().add("row-close");
         AppIcons.apply(rowClose, "close", 11, null);
-        rowClose.setTooltip(new Tooltip("仅关闭此进程"));
+        rowClose.setTooltip(new Tooltip(I18N.get("newui.t0069")));
         rowClose.setFocusTraversable(false);
         rowClose.setOnAction(e -> openSingle(inst.pid));
         // 点 ✕ 时不要顺带触发行点击（否则会切换勾选）
@@ -428,8 +430,8 @@ public final class GameProcessPanel extends VBox {
             boolean empty = selected.isEmpty();
             closeSelectedBtn.setDisable(empty);
             closeSelectedBtn.setText(empty
-                    ? "关闭选中进程"
-                    : "关闭选中进程 (" + selected.size() + ")");
+                    ? I18N.get("newui.t0135")
+                    : I18N.get("newui.p0148", selected.size() + ")"));
         }
     }
 
@@ -494,7 +496,7 @@ public final class GameProcessPanel extends VBox {
     /** 单进程视图「关闭进程」 */
     private void closeSingle(Instance inst) {
         GameInstanceRegistry.kill(List.of(inst));
-        toast.accept("已关闭：" + inst.displayName());
+        toast.accept(I18N.get("newui.p0149", inst.displayName()));
         singlePid = null;
         // 等一拍再刷新：刚 signal 完进程不会立刻消失，马上查还会算作存活
         PauseTransition wait = new PauseTransition(Duration.millis(500));
@@ -522,7 +524,9 @@ public final class GameProcessPanel extends VBox {
         selected.clear();
 
         doClose();
-        toast.accept(all ? "已关闭全部 " + count + " 个游戏进程" : "已关闭 " + count + " 个游戏进程");
+        toast.accept(all
+                ? I18N.get("gpp.r0001", count)
+                : I18N.get("gpp.r0002", count));
     }
 
     private void doClose() {
@@ -636,20 +640,20 @@ public final class GameProcessPanel extends VBox {
     private Node countDesc(int count) {
         HBox line = new HBox(4);
         line.setAlignment(Pos.CENTER);
-        Label before = descLabel("检测到");
+        Label before = descLabel(I18N.get("newui.t0070"));
         Label number = new Label(String.valueOf(count));
         number.getStyleClass().add("modal-desc-strong");
-        Label after = descLabel("个正在运行的游戏进程");
+        Label after = descLabel(I18N.get("newui.t0071"));
         line.getChildren().addAll(before, number, after);
-        VBox box = new VBox(2, line, descLabel("最近启动的进程已默认选中"));
+        VBox box = new VBox(2, line, descLabel(I18N.get("newui.t0072")));
         box.setAlignment(Pos.CENTER);
         return box;
     }
 
     /** 单进程弹窗的描述：第二行红字警告（JavaFX 一个 Label 只能一个颜色，所以拆两行） */
     private Node singleDesc() {
-        VBox box = new VBox(2, descLabel("确定要结束该游戏进程吗？"),
-                descLabel("未保存的游戏进度将会丢失"));
+        VBox box = new VBox(2, descLabel(I18N.get("newui.t0136")),
+                descLabel(I18N.get("newui.t0137")));
         box.setAlignment(Pos.CENTER);
         ((Label) box.getChildren().get(1)).getStyleClass().add("danger-text");
         return box;

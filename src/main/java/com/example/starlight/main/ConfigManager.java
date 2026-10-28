@@ -3,6 +3,7 @@ package com.example.starlight.main;
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.auth.AccountManager.Account;
 import com.example.starlight.config.AppDirs;
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.util.CredentialStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,7 +99,8 @@ public class ConfigManager {
 
             // 定义需要写入的 Launcher 字段及其默认值
             String[] launcherKeys = {
-                "GameDir", "Version", "JavaPath",
+                // 注意：没有 Version——版本选择存在各游戏目录内的 starlight.json（见 SelectedVersion）
+                "GameDir", "JavaPath",
                 "MinMemory", "MaxMemory",
                 "WindowWidth", "WindowHeight",
                 "Fullscreen", "VersionIsolation",
@@ -149,6 +151,8 @@ public class ConfigManager {
                     int eq = line.indexOf('=');
                     if (eq > 0) {
                         String key = line.substring(0, eq).trim();
+                        // 旧版遗留的 Version 行一律丢弃：版本选择的真源是各游戏目录内的 starlight.json
+                        if ("Version".equals(key)) continue;
                         seenLauncherKeys.add(key);
                         if (config.containsKey(key)) {
                             newLines.add(key + "=" + config.get(key));
@@ -218,6 +222,10 @@ public class ConfigManager {
         // 补全的文件传输走 HttpURLConnection（HttpClient 无 socket read timeout，已实测）。
         // DownloadFirstTryStallSec：非最后候选的快速停滞判定（2026-09-30 等待池增强 B）。
         "DownloadStallTimeoutSec", "DownloadFirstTryStallSec", "DownloadConnectTimeoutSec",
+        // 下载引擎选择（2026-10-21）：Starlight=原引擎（默认）/ PCL=对标 PCL2 的新引擎，
+        // 以及 PCL 引擎的并发线程数（默认 64，对齐 PCL2 的 ToolDownloadThread+1）。
+        // 未登记的话设置页切完引擎写不进 starlight-client.ini，重启就丢。
+        "DownloadEngine", "PclDownloadThreads",
         // 开发者选项页：合并重试 / 退避 / 慢速掐线 / 镜像熔断阈值与冷却（2026-10-11 二期运行时参数）
         "DownloadMergeRetry", "DownloadMergeBackoffMs", "DownloadSlowGapSec",
         "DownloadBreakerThreshold", "DownloadBreakerCooldownSec",
@@ -237,8 +245,11 @@ public class ConfigManager {
         // 与 BackgroundImage 一样属于个性化配置；未登记的话选完颜色点保存写不进
         // starlight-client.ini，重启后自定义色静默丢失，只剩默认渐变。
         "CustomThemeColor",
-        "FrpPort", "FeedbackEmail", "SlanPassword",
+        "SakuraFrpLocalPort", "SakuraFrpTunnelId", "FeedbackEmail", "SlanPassword",
         "HomeQuickLaunchSave", "HomeQuickManageMod",
+        // GraalVM 防护：用户已选「仍用这个 GraalVM 运行时」时记录其 java 路径，
+        // 未登记的话每次启动都会重新弹一次确认框
+        "GraalVmGuardSkip",
         // 色盲辅助（外部矫正工具 ColorBlindOverlay.exe 的配置）
         "ColorBlindMode", "ColorBlindType", "ColorBlindStrength",
         "ColorBlindWindow", "ColorBlindAutoEnable", "ColorBlindRemember",
@@ -330,8 +341,11 @@ public class ConfigManager {
         log.info("--- Launch Configuration ---");
         defaults.put("GameDir",     promptInput(scanner, "Game directory (.minecraft path)",
                                     defaults.getOrDefault("GameDir", ".minecraft")));
-        defaults.put("Version",     promptInput(scanner, "Version name",
-                                    defaults.getOrDefault("Version", "")));
+        // 版本选择不进 ini：提示后直接落进该游戏目录的 starlight.json（唯一真源）
+        String promptedVersion = promptInput(scanner, "Version name",
+                                    SelectedVersion.recorded(defaults.get("GameDir")));
+        SelectedVersion.set(defaults.get("GameDir"), promptedVersion);
+        defaults.remove("Version");
         defaults.put("JavaPath",    promptInput(scanner, "Java path (leave empty for default java)",
                                     defaults.getOrDefault("JavaPath", "java")));
         defaults.put("UserName",    promptInput(scanner, "Player name",

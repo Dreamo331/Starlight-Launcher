@@ -14,14 +14,21 @@ import java.util.*;
 
 /**
  * 配置管理器，统一读写 starlight.ini
+ *
+ * <p>版本选择（{@code Version}）<b>不在</b>本文件管辖：它存在各游戏目录内的
+ * {@code starlight.json}，统一走 {@link SelectedVersion}。
  */
 public class StarlightConfig {
 
     private static final Logger log = LoggerFactory.getLogger(StarlightConfig.class);
 
-    /** Launcher 段的关键键名列表 */
+    /**
+     * Launcher 段的关键键名列表。
+     * <p>注意：这里<b>没有</b> {@code Version}——版本选择已改为各游戏目录内的
+     * {@code starlight.json}（见 {@link SelectedVersion}），ini 不再保存该键。
+     */
     public static final String[] LAUNCHER_KEYS = {
-            "GameDir", "Version", "JavaPath",
+            "GameDir", "JavaPath",
             "MinMemory", "MaxMemory", "WindowWidth", "WindowHeight",
             "Fullscreen", "VersionIsolation", "JvmArgs", "GameArgs",
             "PreLaunchCommand", "PostExitCommand",
@@ -101,6 +108,9 @@ public class StarlightConfig {
                     int eq = line.indexOf('=');
                     if (eq > 0) {
                         String key = line.substring(0, eq).trim();
+                        // 旧版遗留的 Version 行一律丢弃：版本选择的真源是各游戏目录内的 starlight.json。
+                        // 这里必须显式删行——"不在 map 里就保留原行"的分支会把它留下。
+                        if ("Version".equals(key)) continue;
                         seenKeys.add(key);
                         // 调用方 map 里没有的键（如 ConsoleMode 等隐藏字段）保留原行，
                         // 不能写成 "key=null"——否则一次保存就把隐藏开关冲掉了
@@ -143,10 +153,10 @@ public class StarlightConfig {
         saveConfig(config);
     }
 
-    /** 检查配置是否完整 */
+    /** 检查配置是否完整（当前游戏目录是否已选好版本） */
     public static boolean isConfigReady() {
-        Map<String, String> cfg = readConfig();
-        return !cfg.getOrDefault("Version", "").isEmpty();
+        // 版本选择在游戏目录内的 starlight.json，不在 ini
+        return !SelectedVersion.of(readConfig()).isEmpty();
     }
 
     // 内部 //

@@ -1,5 +1,7 @@
 package com.example.starlight.download.task;
 
+
+import com.example.starlight.util.I18N;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
@@ -115,7 +117,7 @@ public class JavaInstall {
                 printError("Unknown command: " + command);
                 printUsage();
                 if (isEmbedded()) {
-                    throw new IllegalArgumentException("未知命令: " + command);
+                    throw new IllegalArgumentException(I18N.get("task.p0104", command));
                 }
                 System.exit(1);
             }
@@ -127,39 +129,39 @@ public class JavaInstall {
      */
     private static void printUsage() {
         log("╔════════════════════════════════════════════════════════╗");
-        log("║           JDK自动下载工具 (JavaInstall v3.1)            ║");
-        log("║              使用多镜像源加速                           ║");
+        log(I18N.get("task.t0042"));
+        log(I18N.get("task.t0043"));
         log("╚════════════════════════════════════════════════════════╝");
         log("");
-        log("用法: java -jar JavaInstall.jar [选项] <命令> [下载目录]");
+        log(I18N.get("task.t0044"));
         log("");
-        log("选项:");
-        log("  --json          启用JSON格式输出（适合图形化面板）");
-        log("  --quiet, -q     静默模式，只输出关键信息");
+        log(I18N.get("task.t0045"));
+        log(I18N.get("task.t0046"));
+        log(I18N.get("task.t0047"));
         log("");
-        log("命令:");
-        log("  jdk8, 8         下载 JDK 8 (LTS)");
-        log("  jdk17, 17       下载JDK 17 (LTS)");
-        log("  jdk21, 21       下载JDK 21 (LTS)");
-        log("  list            列出所有可用版本");
-        log("  help            显示此帮助信息");
+        log(I18N.get("task.t0048"));
+        log(I18N.get("task.t0049"));
+        log(I18N.get("task.t0050"));
+        log(I18N.get("task.t0051"));
+        log(I18N.get("task.t0052"));
+        log(I18N.get("task.t0053"));
         log("");
-        log("示例:");
+        log(I18N.get("task.t0054"));
         log("  java -jar JavaInstall.jar jdk17");
         log("  java -jar JavaInstall.jar jdk8 D:\\Java\\JDK");
         log("  java -jar JavaInstall.jar --json jdk21 /opt/java");
         log("");
-        log("当前默认下载目录: " + downloadDir.getAbsolutePath());
+        log(I18N.get("task.p0105", downloadDir.getAbsolutePath()));
     }
     
     /**
      * 列出可用版本
      */
     private static void listAvailableVersions() {
-        log("可用的JDK版本:");
-        log("  • JDK 8  - Java 8 (长期支持版)");
-        log("  • JDK 17 - Java 17 (长期支持版)");
-        log("  • JDK 21 - Java 21 (长期支持版)");
+        log(I18N.get("task.t0055"));
+        log(I18N.get("task.t0056"));
+        log(I18N.get("task.t0057"));
+        log(I18N.get("task.t0058"));
     }
     
     /**
@@ -194,7 +196,7 @@ public class JavaInstall {
             if (!success) {
                 printProgress("ERROR", jdkName, "All download sources failed", 0);
                 if (isEmbedded()) {
-                    throw new IllegalStateException("JDK 下载失败（主源与备用源均不可用）: " + jdkName);
+                    throw new IllegalStateException(I18N.get("task.p0106", jdkName));
                 }
                 System.exit(1);
             }
@@ -271,7 +273,7 @@ public class JavaInstall {
                         String speedStr = formatFileSize((long) speed) + "/s";
                         String eta = calculateETA(fileSize, downloaded, startTime, currentTime);
                         
-                        String detail = String.format("已下载: %s / %s (%d%%) | 速度: %s | 预计剩余: %s",
+                        String detail = String.format(I18N.get("task.t0059"),
                             formatFileSize(downloaded), formatFileSize(fileSize), currentPercent, speedStr, eta);
                         
                         printProgress("DOWNLOAD", jdkName, detail, currentPercent);
@@ -284,7 +286,7 @@ public class JavaInstall {
                 
                 long totalTime = (System.currentTimeMillis() - startTime) / 1000;
                 printProgress("COMPLETE", jdkName, 
-                    String.format("下载完成！总大小: %s | 用时: %d秒", formatFileSize(downloaded), totalTime), 100);
+                    String.format(I18N.get("task.t0060"), formatFileSize(downloaded), totalTime), 100);
             }
             
             return true;
@@ -340,7 +342,7 @@ public class JavaInstall {
                 if (currentTime - lastPrintTime > 100) {
                     int percent = (int) ((extractedSize * 100) / (totalSize * 2));
                     printProgress("EXTRACT", jdkName, 
-                        String.format("正在解压: %s | 已处理 %d 个文件", entry.getName(), fileCount), 
+                        String.format(I18N.get("task.t0061"), entry.getName(), fileCount), 
                         Math.min(percent, 99));
                     lastPrintTime = currentTime;
                 }
@@ -392,15 +394,15 @@ public class JavaInstall {
      * 计算预计剩余时间
      */
     private static String calculateETA(long totalSize, long downloaded, long startTime, long currentTime) {
-        if (totalSize <= 0 || downloaded <= 0) return "计算中...";
+        if (totalSize <= 0 || downloaded <= 0) return I18N.get("task.t0062");
         
         long elapsed = currentTime - startTime;
         double speed = (double) downloaded / elapsed;
         long remaining = (long) ((totalSize - downloaded) / speed);
         
         if (remaining < 1000) return remaining + "ms";
-        if (remaining < 60000) return (remaining / 1000) + "秒";
-        return String.format("%d分%d秒", remaining / 60000, (remaining % 60000) / 1000);
+        if (remaining < 60000) return I18N.get("jinst.r0001", remaining / 1000);
+        return String.format(I18N.get("task.t0063"), remaining / 60000, (remaining % 60000) / 1000);
     }
     
     /**

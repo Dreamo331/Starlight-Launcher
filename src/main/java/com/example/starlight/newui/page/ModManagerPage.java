@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.ModsApi.LocalModMetadata;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.newui.LauncherContext;
@@ -83,47 +85,49 @@ public final class ModManagerPage {
         // 标题行：返回按钮 + 页面名称
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = AppIcons.button("back", "返回");
+        Button backBtn = AppIcons.button("back", I18N.get("page.t0271"));
         backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> {
             // 返回首页并同步顶部标签选中状态
             host.selectHomeTab();
             host.switchToPage("home");
         });
-        Label titleLabel = new Label("模组");
+        Label titleLabel = new Label(I18N.get("page.t0272"));
         titleLabel.getStyleClass().add("content-title");
         // 内测功能标注
-        Label betaBadge = new Label("内测");
+        Label betaBadge = new Label(I18N.get("page.t0273"));
         betaBadge.setStyle("-fx-font-size: 11px; -fx-font-weight: 700; -fx-text-fill: #f97316;"
                 + " -fx-background-color: rgba(249,115,22,0.15); -fx-background-radius: 999; -fx-padding: 2 8;");
         header.getChildren().addAll(backBtn, titleLabel, betaBadge);
         root.getChildren().add(header);
 
         // 内测提示条
-        Label betaNotice = new Label("启动器 MOD（扩展）功能当前为内测版，可能存在缺陷或行为变更，请谨慎使用。");
+        Label betaNotice = new Label(I18N.get("page.t0274"));
         betaNotice.setStyle("-fx-font-size: 12px; -fx-text-fill: #b45309;"
                 + " -fx-background-color: rgba(245,158,11,0.12); -fx-background-radius: 8; -fx-padding: 8 12;");
         betaNotice.setWrapText(true);
         root.getChildren().add(betaNotice);
 
         // 上传模组：选择 .jar 文件复制到 Starlight-Launcher\Mod //
-        Label uploadStatus = new Label("支持多选，重复上传会覆盖同名文件");
+        Label uploadStatus = new Label(I18N.get("page.t0275"));
         uploadStatus.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
         uploadStatus.setWrapText(true);
-        Button chooseBtn = AppIcons.button("folder", "选择 .jar 模组文件");
+        // 最小宽度：避免在 HBox 里被压缩成一列竖排文字
+        uploadStatus.setMinWidth(160);
+        Button chooseBtn = AppIcons.button("folder", I18N.get("page.t0276"));
         chooseBtn.getStyleClass().add("btn-primary");
         chooseBtn.setOnAction(e -> uploadModFiles(uploadStatus));
         HBox uploadRow = new HBox(10, chooseBtn, uploadStatus);
         uploadRow.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(uploadStatus, Priority.ALWAYS);
-        root.getChildren().add(PageKit.settingsCard("上传模组",
-                "选择本地的 .jar 模组文件，复制到用户数据目录的 mod 文件夹", uploadRow));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("page.t0622"),
+                I18N.get("page.t0623"), uploadRow));
 
         // 已安装模组列表 //
         VBox modArea = new VBox(8);
         // 搜索框：同时匹配文件名、modId 与中文名（如输入「机械动力」能找到 create-*.jar）
         TextField modSearchField = new TextField();
-        modSearchField.setPromptText("搜索已安装模组（文件名 / modId / 中文名，如「机械动力」）");
+        modSearchField.setPromptText(I18N.get("page.t0277"));
         modSearchField.getStyleClass().add("input-field");
         modSearchField.setMaxWidth(Double.MAX_VALUE);
         modSearchField.setText(modSearchKeyword);
@@ -136,17 +140,17 @@ public final class ModManagerPage {
         modListContainer = new VBox(6);
         modArea.getChildren().addAll(modSearchField, modCountLabel, modListContainer);
         refreshList();
-        root.getChildren().add(PageKit.settingsCard("已安装模组",
-                "用户数据目录 mod 文件夹下的模组文件；已收录于中文名字典的模组会额外显示中文名", modArea));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("page.t0624"),
+                I18N.get("page.t0625"), modArea));
         return root;
     }
 
     /** 选择 .jar 模组文件并复制到 Starlight-Launcher\Mod 目录 */
     private void uploadModFiles(Label statusLabel) {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("选择 .jar 模组文件");
+        chooser.setTitle(I18N.get("page.t0278"));
         chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Minecraft 模组 (*.jar)", "*.jar"));
+                new FileChooser.ExtensionFilter(I18N.get("page.t0279"), "*.jar"));
         List<File> files = chooser.showOpenMultipleDialog(host.stage());
         if (files == null || files.isEmpty()) return;
 
@@ -156,7 +160,7 @@ public final class ModManagerPage {
         for (File f : files) {
             try {
                 if (!modDir.exists() && !modDir.mkdirs()) {
-                    throw new IOException("无法创建目录: " + modDir.getAbsolutePath());
+                    throw new IOException(I18N.get("page.p0823", modDir.getAbsolutePath()));
                 }
                 Files.copy(f.toPath(), new File(modDir, f.getName()).toPath(),
                         StandardCopyOption.REPLACE_EXISTING);
@@ -169,15 +173,15 @@ public final class ModManagerPage {
 
         if (statusLabel != null) {
             if (ok == 0) {
-                statusLabel.setText("复制失败，请检查文件与目录权限");
+                statusLabel.setText(I18N.get("page.t0280"));
             } else if (ok < files.size()) {
-                statusLabel.setText("成功 " + ok + " 个，失败 " + (files.size() - ok) + " 个: " + String.join("、", copied));
+                statusLabel.setText(I18N.get("mod.r0001", ok, files.size() - ok, String.join("、", copied)));
             } else {
-                statusLabel.setText("已复制: " + String.join("、", copied));
+                statusLabel.setText(I18N.get("page.p0824", String.join("、", copied)));
             }
         }
         if (ok > 0) {
-            host.ui().toast("已复制 " + ok + " 个模组文件到 " + modDir.getAbsolutePath());
+            host.ui().toast(I18N.get("mod.r0002", ok, modDir.getAbsolutePath()));
         }
         // 已安装列表与数量原地刷新
         refreshList();
@@ -198,8 +202,8 @@ public final class ModManagerPage {
                 })
                 : null;
         if (jars == null || jars.length == 0) {
-            modCountLabel.setText("共 0 个模组");
-            Label empty = new Label("暂无模组，点击上方「选择 .jar 模组文件」上传");
+            modCountLabel.setText(I18N.get("page.t0281"));
+            Label empty = new Label(I18N.get("page.t0282"));
             empty.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
             modListContainer.getChildren().add(empty);
             return;
@@ -246,7 +250,7 @@ public final class ModManagerPage {
             String displayName = metadata != null
                     ? metadata.name() + " " + metadata.version()
                     : fileBase;
-            Label name = new Label("" + displayName + (disabledFile ? "（已禁用）" : ""));
+            Label name = new Label("" + displayName + (disabledFile ? I18N.get("page.t0283") : ""));
             name.setStyle("-fx-font-size: 13px;"
                     + (disabledFile ? " -fx-text-fill: -sl-text-faint;" : ""));
             // 让「模组名」独占可伸缩空间并允许省略，其余元信息保持固有宽度 ——
@@ -264,7 +268,7 @@ public final class ModManagerPage {
                 chineseName.setMinWidth(Region.USE_PREF_SIZE);
                 String mcmodUrl = ModTranslations.MOD.getMcmodUrl(translation);
                 if (!mcmodUrl.isEmpty()) {
-                    chineseName.setTooltip(new Tooltip("MC 百科：" + mcmodUrl));
+                    chineseName.setTooltip(new Tooltip(I18N.get("page.p0825", mcmodUrl)));
                     chineseName.setOnMouseClicked(ev -> host.openWebUrl(mcmodUrl));
                 }
                 row.getChildren().addAll(name, chineseName, size);
@@ -286,19 +290,19 @@ public final class ModManagerPage {
                     boolean ok = pluginManager.setEnabled(metadata.id(), toggle.isSelected());
                     updatePluginStatus(metadata, status, pluginManager);
                     if (ok) {
-                        host.ui().toast("插件 " + metadata.name() + " " + (toggle.isSelected() ? "已启用" : "已禁用"));
+                        host.ui().toast(I18N.get("page.p0826", metadata.name() + " " + (toggle.isSelected() ? I18N.get("page.t0626") : I18N.get("page.t0627"))));
                     } else {
                         // 启动失败：状态已回滚，开关回弹为禁用
                         toggle.setSelected(false);
                         updatePluginStatus(metadata, status, pluginManager);
-                        host.ui().toast("插件 " + metadata.name() + " 启动失败（请查看启动器控制台日志）");
+                        host.ui().toast(I18N.get("mod.r0003", metadata.name()));
                     }
                 });
                 updatePluginStatus(metadata, status, pluginManager);
                 row.getChildren().addAll(typeLabel, status, toggle);
             } else {
                 // 普通 jar：.disabled 重命名启停按钮
-                Label toggleBtn = new Label(disabledFile ? "启用" : "禁用");
+                Label toggleBtn = new Label(disabledFile ? I18N.get("page.t0628") : I18N.get("page.t0629"));
                 toggleBtn.setStyle("-fx-font-size: 11px; -fx-cursor: hand; -fx-padding: 2 8; -fx-background-radius: 999;"
                         + " -fx-text-fill: " + (disabledFile ? "#16a34a" : "#f59e0b") + ";"
                         + " -fx-background-color: " + (disabledFile ? "rgba(34,197,94,0.12)" : "rgba(245,158,11,0.12)") + ";");
@@ -316,21 +320,21 @@ public final class ModManagerPage {
             // 右键菜单：启用/禁用（普通 jar）/ 打开所在文件夹 / 复制路径 / 重命名（普通 jar）/ 删除
             ContextMenu menu = new ContextMenu();
             if (!isPlugin) {
-                MenuItem toggleItem = new MenuItem(disabledFile ? "启用" : "禁用");
+                MenuItem toggleItem = new MenuItem(disabledFile ? I18N.get("page.t0630") : I18N.get("page.t0631"));
                 toggleItem.setOnAction(e -> toggleModFile(jar));
                 menu.getItems().add(toggleItem);
             }
-            MenuItem openFolderItem = new MenuItem("打开所在文件夹");
+            MenuItem openFolderItem = new MenuItem(I18N.get("page.t0284"));
             openFolderItem.setOnAction(e -> host.openFile(jar.getParentFile() != null ? jar.getParentFile().getAbsolutePath() : ""));
-            MenuItem copyPathItem = new MenuItem("复制路径");
+            MenuItem copyPathItem = new MenuItem(I18N.get("page.t0285"));
             copyPathItem.setOnAction(e -> copyModPath(jar));
             menu.getItems().addAll(openFolderItem, copyPathItem);
             if (!isPlugin) {
-                MenuItem renameItem = new MenuItem("重命名");
+                MenuItem renameItem = new MenuItem(I18N.get("page.t0286"));
                 renameItem.setOnAction(e -> renameModFile(jar));
                 menu.getItems().add(renameItem);
             }
-            MenuItem deleteItem = new MenuItem("删除");
+            MenuItem deleteItem = new MenuItem(I18N.get("page.t0287"));
             deleteItem.setOnAction(e -> deleteModFile(jar));
             menu.getItems().add(deleteItem);
             row.setOnContextMenuRequested(e -> menu.show(row, e.getScreenX(), e.getScreenY()));
@@ -339,11 +343,11 @@ public final class ModManagerPage {
         }
 
         if (lowerKeyword.isEmpty()) {
-            modCountLabel.setText("共 " + jars.length + " 个模组");
+            modCountLabel.setText(I18N.get("mod.r0004", jars.length));
         } else {
-            modCountLabel.setText("匹配 " + shown + " / " + jars.length + " 个模组（关键词：" + keyword + "）");
+            modCountLabel.setText(I18N.get("mod.r0005", shown, jars.length, keyword));
             if (shown == 0) {
-                Label empty = new Label("没有匹配的模组；中文名依赖内置字典，未收录的模组只能按文件名或 modId 搜索");
+                Label empty = new Label(I18N.get("page.t0288"));
                 empty.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
                 modListContainer.getChildren().add(empty);
             }
@@ -410,13 +414,13 @@ public final class ModManagerPage {
             host.ui().toast(target.getName().endsWith(".disabled") ? "已禁用 " + target.getName() : "已启用 " + target.getName());
             refreshList();
         } catch (Exception e) {
-            host.ui().toast("操作失败: " + e.getMessage());
+            host.ui().toast(I18N.get("page.p0827", e.getMessage()));
         }
     }
 
     /** 删除模组：插件先停止并清除启用状态，再确认删除文件 */
     private void deleteModFile(File mod) {
-        host.confirmDelete("确定要删除模组 \"" + mod.getName() + "\" 吗？此操作不可恢复！", () -> {
+        host.confirmDelete(I18N.get("mod.r0006", mod.getName()), () -> {
             try {
                 // 已启用的插件：先停进程并清除启用状态，避免状态文件残留
                 PluginManager pm = PluginManager.getInstance();
@@ -425,10 +429,10 @@ public final class ModManagerPage {
                     pm.setEnabled(meta.id(), false);
                 }
                 Files.deleteIfExists(mod.toPath());
-                host.ui().toast("已删除: " + mod.getName());
+                host.ui().toast(I18N.get("page.p0828", mod.getName()));
                 refreshList();
             } catch (Exception ex) {
-                host.ui().toast("删除失败: " + ex.getMessage());
+                host.ui().toast(I18N.get("page.p0829", ex.getMessage()));
             }
         });
     }
@@ -438,7 +442,7 @@ public final class ModManagerPage {
         ClipboardContent cc = new ClipboardContent();
         cc.putString(mod.getAbsolutePath());
         Clipboard.getSystemClipboard().setContent(cc);
-        host.ui().toast("已复制路径");
+        host.ui().toast(I18N.get("page.t0289"));
     }
 
     /** 重命名普通模组文件（禁用态重命名后仍保持禁用；插件不支持重命名，避免破坏插件关联） */
@@ -446,7 +450,7 @@ public final class ModManagerPage {
         String fname = mod.getName();
         boolean disabled = fname.endsWith(".disabled");
         String oldName = disabled ? fname.substring(0, fname.length() - ".disabled".length()) : fname;
-        host.ui().input("重命名模组", "输入新的文件名（自动补全 .jar 后缀）", oldName, newName -> {
+        host.ui().input(I18N.get("page.t0632"), I18N.get("page.t0633"), oldName, newName -> {
             String trimmed = newName == null ? "" : newName.trim();
             if (trimmed.isEmpty()) return;
             if (!trimmed.toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
@@ -456,14 +460,14 @@ public final class ModManagerPage {
             try {
                 File target = new File(mod.getParentFile(), finalName);
                 if (target.exists()) {
-                    host.ui().toast("已存在同名文件: " + finalName);
+                    host.ui().toast(I18N.get("page.p0830", finalName));
                     return;
                 }
                 Files.move(mod.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                host.ui().toast("已重命名为: " + finalName);
+                host.ui().toast(I18N.get("page.p0831", finalName));
                 refreshList();
             } catch (Exception ex) {
-                host.ui().toast("重命名失败: " + ex.getMessage());
+                host.ui().toast(I18N.get("page.p0832", ex.getMessage()));
             }
         });
     }
@@ -485,14 +489,14 @@ public final class ModManagerPage {
     private void updatePluginStatus(PluginMetadata metadata, Label status, PluginManager pluginManager) {
         if (pluginManager.isEnabled(metadata.id())) {
             if (pluginManager.isRunning(metadata.id())) {
-                status.setText("运行中");
+                status.setText(I18N.get("page.t0290"));
                 status.setStyle("-fx-font-size: 11px; -fx-text-fill: #22c55e;");
             } else {
-                status.setText("已启用（未运行）");
+                status.setText(I18N.get("page.t0291"));
                 status.setStyle("-fx-font-size: 11px; -fx-text-fill: #eab308;");
             }
         } else {
-            status.setText("已禁用");
+            status.setText(I18N.get("page.t0292"));
             status.setStyle("-fx-font-size: 11px; -fx-text-fill: -sl-text-faint;");
         }
     }

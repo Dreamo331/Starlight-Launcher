@@ -36,20 +36,42 @@
       "githubRepo": "UpdateChecker.java（官方更新接口不可用时的降级来源，GitHub REST API）",
       "giteeRepo": "UpdateChecker.java（官方更新接口不可用时的降级来源，Gitee API v5）",
       "logUploadUrl": "Logshare 平台日志上传端点（sendlogs.java，默认 https://api.logshare.cn/v1/log；可覆盖为旧版 https://logshare.cn/api/upload 或自定义服务器）",
-      "frpControlHost": "FrpClient.java:14、FrpService.java:24、UIGeneralControlClass.java:1300",
-      "frpControlPort": "FrpClient.java:15",
+      "sakuraFrpApiBase": "SakuraFrpApi.java（SakuraFrp 开放 API v4，联机页 FRP 隧道管理）",
+      "sakuraFrpSiteUrl": "SakuraFrpPanel（官网注册 / 访问密钥入口）",
+      "sakuraFrpTokenUrl": "SakuraFrpPanel（「获取访问密钥」按钮打开的页面）",
       "sponsorUrl": "SponsorPage.java:30（爱发电赞助页）",
-      "colorBlindOverlayUrl": "ColorBlindOverlayManager.java:53-54（色盲辅助工具 Gitee Release 下载地址）"
+      "colorBlindOverlayUrl": "ColorBlindOverlayManager.java:53-54（色盲辅助工具 Gitee Release 下载地址）",
+      "capeAgentUrl": "CapeAgentInstaller.java（披风 URL 补丁 agent 的兜底下载地址）",
+      "thirdPartyPresets": "第三方（外置登录）皮肤站预设：{name 显示名, api Yggdrasil 地址, register 官网注册页}。仅用于账户页「第三方登录」的预设下拉框，选中只填地址、不发起请求；实际请求由用户点击登录触发。对应登记录入 docs/第三方声明-Third-Party-Notices-中文.md 第四节与 docs/隐私政策.md 3.3"
     },
     "communityApiUrl": "https://slmc.cc.cd/auth.php",
     "communitySiteUrl": "https://slmc.cc.cd",
     "githubRepo": "Dreamo331/Starlight-Launcher",
     "giteeRepo": "Horses-always-love-to-run/starlight-launcher-cn",
     "logUploadUrl": "https://api.logshare.cn/v1/log",
-    "frpControlHost": "wfrp.starlightmc.top",
-    "frpControlPort": 11400,
+    "sakuraFrpApiBase": "https://api.natfrp.com/v4",
+    "sakuraFrpSiteUrl": "https://www.natfrp.com",
+    "sakuraFrpTokenUrl": "https://www.natfrp.com/user/",
     "sponsorUrl": "https://ifdian.net/order/create?plan_id=953af8c4b33b11f0adc85254001e7c00&product_type=0&remark=&affiliate_code=&fr=afcom",
-    "colorBlindOverlayUrl": "https://gitee.com/Horses-always-love-to-run/color-blind-overlay/releases/download/v1.0.0-RC/ColorBlindOverlay.exe"
+    "colorBlindOverlayUrl": "https://gitee.com/Horses-always-love-to-run/color-blind-overlay/releases/download/v1.0.0-RC/ColorBlindOverlay.exe",
+    "capeAgentUrl": "",
+    "thirdPartyPresets": [
+      {
+        "name": "LittleSkin",
+        "api": "https://littleskin.cn/api/yggdrasil",
+        "register": "https://littleskin.cn/auth/register"
+      },
+      {
+        "name": "Blessing Skin 官方演示",
+        "api": "https://skin.prinzeugen.net/api/yggdrasil",
+        "register": "https://skin.prinzeugen.net/auth/register"
+      },
+      {
+        "name": "MUA 皮肤站",
+        "api": "https://skin.mualliance.ltd/api/yggdrasil",
+        "register": "https://skin.mualliance.ltd/auth/register"
+      }
+    ]
   },
 
   "reference": {

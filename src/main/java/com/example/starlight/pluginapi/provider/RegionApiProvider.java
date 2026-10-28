@@ -1,5 +1,7 @@
 package com.example.starlight.pluginapi.provider;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.pluginapi.ApiProvider;
 import com.example.starlight.pluginapi.ApiRequest;
 import com.example.starlight.world.RegionFileReader;
@@ -42,7 +44,7 @@ public final class RegionApiProvider implements ApiProvider {
         String xStr = request.param("x");
         String zStr = request.param("z");
         if (regionFile == null || xStr == null || zStr == null) {
-            throw new IllegalArgumentException("world/region/chunk 缺少必要参数：region / x / z");
+            throw new IllegalArgumentException(I18N.get("provider.t0002"));
         }
         int chunkX = Integer.parseInt(xStr);
         int chunkZ = Integer.parseInt(zStr);

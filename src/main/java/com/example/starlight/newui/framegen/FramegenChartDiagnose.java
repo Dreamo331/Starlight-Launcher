@@ -14,6 +14,8 @@
  */
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.service.GameInstanceRegistry;
 
 import java.nio.file.Files;
@@ -47,7 +49,7 @@ public final class FramegenChartDiagnose {
         // ---- 3. 各种「取 PID」方式的对比 ----
         System.out.println("\n[3] 取 PID 的各种方式对比");
         System.out.println("    GameInstanceRegistry.aliveInstances()[0].pid = "
-                + (alive.isEmpty() ? "无" : String.valueOf(alive.get(0).pid)));
+                + (alive.isEmpty() ? I18N.get("framegen.t0001") : String.valueOf(alive.get(0).pid)));
         System.out.println("    （DevPage.currentGamePid() 早先读配置键 GamePid/LastGamePid，"
                 + "启动器根本不写这些键 → 恒为 -1）");
 

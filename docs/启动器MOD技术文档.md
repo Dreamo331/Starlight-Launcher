@@ -149,8 +149,8 @@ MOD 主动发起：
 | | `mods/config` | 模组配置 |
 | | `mods/resourcepacks` | 资源包 |
 | | `mods/shaders` | 光影包 |
-| 网络 | `net/frp/start` | 启动 FRP 内网穿透 |
-| | `net/frp/stop` | 停止 FRP |
+| 网络 | `net/frp/start` | 启动 SakuraFrp 隧道（可传 `tunnel_id`；密钥需已在联机页保存） |
+| | `net/frp/stop` | 停止本机 SakuraFrp 隧道 |
 | | `net/lan/scan` | 局域网扫描 |
 | | `net/slan/host` | SLAN 建房 |
 | | `net/slan/join` | SLAN 加入房间 |
@@ -162,6 +162,10 @@ MOD 主动发起：
 | | `version/loader/install` | 安装加载器 |
 | 世界 | `world/saves/list` | 存档列表 |
 | | `world/region/chunk` | 区块数据 |
+
+> `net/frp/start` 只操作 SakuraFrp：可传 `tunnel_id`（省略时使用联机页最后一次启动的隧道），
+> `token` 仅在该账号尚未保存访问密钥时需要；成功响应包含 `tunnel_id`、`tunnel_name`、
+> `remote_port` 与 `public_address`。`net/frp/stop` 仅停止本机 frpc，不删除 SakuraFrp 面板里的隧道。
 
 ## 八、开发流程
 

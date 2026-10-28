@@ -1,5 +1,7 @@
 package com.example.starlight.pluginapi;
 
+
+import com.example.starlight.util.I18N;
 import java.util.Objects;
 
 /**
@@ -35,13 +37,13 @@ public final class SemVer implements Comparable<SemVer> {
      */
     public static SemVer parse(String text) {
         if (text == null || text.isBlank()) {
-            throw new IllegalArgumentException("版本号不能为空");
+            throw new IllegalArgumentException(I18N.get("pluginapi.t0003"));
         }
         // 去掉预发布 / 构建元数据部分（如 -beta.1、+build5）
         String core = text.split("[-+]", 2)[0];
         String[] parts = core.split("\\.");
         if (parts.length == 0 || parts.length > 3) {
-            throw new IllegalArgumentException("非法版本号: " + text);
+            throw new IllegalArgumentException(I18N.get("pluginapi.p0007", text));
         }
         int major = parseSegment(parts[0], text);
         int minor = parts.length > 1 ? parseSegment(parts[1], text) : 0;
@@ -51,7 +53,7 @@ public final class SemVer implements Comparable<SemVer> {
 
     private static int parseSegment(String segment, String original) {
         if (!segment.matches("\\d+")) {
-            throw new IllegalArgumentException("非法版本号（含非数字段）: " + original);
+            throw new IllegalArgumentException(I18N.get("pluginapi.p0008", original));
         }
         return Integer.parseInt(segment);
     }

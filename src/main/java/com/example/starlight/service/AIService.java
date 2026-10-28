@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.service;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.model.ActionResult;
 import com.example.starlight.model.CallbackInterfaces;
 import com.example.starlight.longcatapi.LongCatChat;
@@ -28,18 +30,18 @@ public class AIService {
                                           CallbackInterfaces.ResultCallback<AIAnalysisResult> callback) {
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             try {
-                onProgress.onProgress(10, "正在读取日志文件...");
+                onProgress.onProgress(10, I18N.get("service.t0001"));
                 File logFile = new File(logFilePath);
-                if (!logFile.exists()) { callback.onError("文件不存在 " + logFilePath); return; }
+                if (!logFile.exists()) { callback.onError(I18N.get("service.p0066", logFilePath)); return; }
 
-                onProgress.onProgress(30, "正在调用 AI 分析...");
+                onProgress.onProgress(30, I18N.get("service.t0002"));
                 String logContent = Files.readString(logFile.toPath(), StandardCharsets.UTF_8);
-                String question = "请详细阅读这个Minecraft错误日志，有什么问题，回答请以json格式，直接给我json内容，格式严格按照json文件的格式，有zh-cn字段（是中文错误原因显示），还要有英文的错误原因显示\n\n日志内容如下：\n" + logContent;
+                String question = I18N.get("service.p0067", logContent);
 
                 String response = LongCatChat.chat(question);
                 response = removeMarkdownCodeBlocks(response);
 
-                onProgress.onProgress(80, "正在解析分析结果...");
+                onProgress.onProgress(80, I18N.get("service.t0003"));
                 String chineseReason = "", englishReason = "";
                 try {
                     JsonObject json = new Gson().fromJson(response, JsonObject.class);
@@ -51,10 +53,10 @@ public class AIService {
                 String outputPath = "ai_response.json";
                 exportResponseToJson(response, outputPath, 4);
 
-                onProgress.onProgress(100, "分析完成");
+                onProgress.onProgress(100, I18N.get("service.t0004"));
                 callback.onSuccess(new AIAnalysisResult(response, chineseReason, englishReason));
             } catch (IOException e) {
-                callback.onError("AI 分析失败: " + e.getMessage());
+                callback.onError(I18N.get("service.p0068", e.getMessage()));
             }
         });
     }

@@ -1,5 +1,7 @@
 package com.example.starlight.modfile;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.ModsApi.LocalizedRemoteModRepository;
 import com.example.starlight.ModsApi.ModTranslations;
 import com.example.starlight.ModsApi.RemoteMod;
@@ -34,14 +36,54 @@ public final class ModFileFormatter {
             "[{name}] {file}-{ver}",
             "{name}-{file}"
     };
-    public static final String FILENAME_SAMPLE = "[机械动力] create-1.21.1-6.0.4.jar";
+    /**
+     * 文件名格式示例（界面展示用）。
+     *
+     * <p>不能写成 {@code static final String = I18N.get(...)}：字段在<b>类加载时</b>
+     * 求值，语言还没切过来就被固定住，切到英文后这里仍是中文。
+     */
+    public static String filenameSample() {
+        return I18N.get("modfile.t0001");
+    }
 
-    /** 模组管理样式 */
-    public static final String[] DISPLAY_STYLES = {
-            "标题显示译名，详情显示文件名",
-            "标题显示文件名，详情显示译名",
-            "只显示译名"
+    // 显示样式：配置里存的是下面的**稳定 key**，不是界面文案。
+    // 旧实现把中文文案直接当配置值和 switch 分派依据——界面语言一变，
+    // switch 全部落到 default，用户的样式设置静默失效。
+
+    /** 详情显示译名、列表显示文件名 */
+    public static final String STYLE_DETAIL_LOCALIZED = "detailLocalized";
+    /** 详情显示文件名、列表显示译名 */
+    public static final String STYLE_DETAIL_RAW = "detailRaw";
+    /** 只显示译名 */
+    public static final String STYLE_LOCALIZED_ONLY = "localizedOnly";
+
+    /** 全部样式 key（顺序即下拉顺序） */
+    public static final String[] DISPLAY_STYLE_KEYS = {
+            STYLE_DETAIL_LOCALIZED, STYLE_DETAIL_RAW, STYLE_LOCALIZED_ONLY
     };
+
+    /** style key -> i18n 键（显示名） */
+    public static String styleLabelKey(String styleKey) {
+        if (STYLE_DETAIL_RAW.equals(styleKey)) return "modfile.styleDetailRaw";
+        if (STYLE_LOCALIZED_ONLY.equals(styleKey)) return "modfile.styleLocalizedOnly";
+        return "modfile.styleDetailLocalized";
+    }
+
+    /** 把旧的（中文文案）或新的配置值统一收敛成 style key */
+    public static String normalizeStyle(String rawStyle) {
+        if (rawStyle == null || rawStyle.isBlank()) return DISPLAY_STYLE_KEYS[0];
+        for (String k : DISPLAY_STYLE_KEYS) {
+            if (k.equalsIgnoreCase(rawStyle)) return k;
+        }
+        // 兼容历史配置：旧值就是中文文案
+        String zh1 = I18N.get("modfile.styleDetailLocalized");
+        String zh2 = I18N.get("modfile.styleDetailRaw");
+        String zh3 = I18N.get("modfile.styleLocalizedOnly");
+        if (zh2.equals(rawStyle)) return STYLE_DETAIL_RAW;
+        if (zh3.equals(rawStyle)) return STYLE_LOCALIZED_ONLY;
+        if (zh1.equals(rawStyle)) return STYLE_DETAIL_LOCALIZED;
+        return DISPLAY_STYLE_KEYS[0];
+    }
 
     /**
      * 判断模组文件是否匹配搜索关键词：文件名 / modId / 中文名 / 英文名 / 缩写 任一命中即可。
@@ -130,14 +172,12 @@ public final class ModFileFormatter {
      * @param forDetail true=详情页标题，false=列表行标题
      */
     public static String titleByStyle(String style, RemoteMod mod, RemoteModRepository.Type type, boolean forDetail) {
-        if (style == null) style = DISPLAY_STYLES[0];
+        style = normalizeStyle(style);
         String localized = LocalizedRemoteModRepository.localizedTitle(mod, type);
         String raw = mod.getTitle() == null ? mod.getSlug() : mod.getTitle();
         return switch (style) {
-            // 标题显示译名，详情显示文件名
-            case "标题显示文件名，详情显示译名" -> forDetail ? localized : raw;
-            // 只显示译名（列表与详情都用译名）
-            case "只显示译名" -> localized;
+            case STYLE_DETAIL_LOCALIZED -> forDetail ? localized : raw;
+            case STYLE_LOCALIZED_ONLY -> localized;
             default -> forDetail ? raw : localized;
         };
     }

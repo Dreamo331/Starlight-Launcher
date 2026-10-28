@@ -17,6 +17,8 @@
  */
 package com.example.starlight.gamebat;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.AppConfig;
 import com.example.starlight.util.VersionUtils;
 import java.io.File;
@@ -61,8 +63,8 @@ public class MinecraftLauncherBuilder {
         try (java.io.PrintWriter writer = new java.io.PrintWriter(batchPath, StandardCharsets.UTF_8)) {
             writer.println("chcp 65001>nul");
             writer.println("@echo off");
-            writer.println("title 启动 - " + version);
-            writer.println("echo 游戏正在启动，请稍候。");
+            writer.println(I18N.get("gamebat.p0002", version));
+            writer.println(I18N.get("gamebat.t0001"));
             writer.println("cd /D \"" + gameDir + "\"");
             writer.println();
             writer.println(command);

@@ -1,5 +1,7 @@
 package com.example.starlight.auth;
 
+
+import com.example.starlight.util.I18N;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -109,9 +111,9 @@ public class AccountManager {
         // 账号类型中文显示标签（用于界面展示）
         public String getTypeLabel() {
             return switch (type) {
-                case OFFLINE -> "离线";
-                case MICROSOFT -> "微软";
-                case THIRD_PARTY -> "第三方";
+                case OFFLINE -> I18N.get("auth.t0001");
+                case MICROSOFT -> I18N.get("auth.t0002");
+                case THIRD_PARTY -> I18N.get("auth.t0003");
             };
         }
 

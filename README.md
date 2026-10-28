@@ -44,7 +44,8 @@
 | `检查更新PHP/latest_version.json` → `version` | `1.0.0-RELEASE` | 服务端声明的最新版，写法必须与 `APP_VERSION` 完全一致 |
 | GitHub / Gitee 的 tag / Release | `v1.0.0-RELEASE` | 官方接口不可用时的降级来源（带不带 `v` 都能识别） |
 
-`lib/` 里那个核心库 jar 的 `2.0.0` 是**另一个 artifact 的版本**，与启动器版本无关，不要一起改。
+`lib/cape-url-patch-agent.jar` 是披风补丁 agent，**不参与版本号规则**：它的文件名固定（`LocalCapeProxy`
+按名字找它），内容随 agent 源码变化。重建后需要同步 `CapeAgentInstaller.EXPECTED_SHA256`。
 
 版本比对规则见 `UpdateChecker.compareVersions`：先比数字段，数字相同再比阶段后缀，
 后缀里的数字不算版本号（`2.0.0-rc1` 的 `1` 是第 1 个候选版）。
@@ -97,7 +98,7 @@ flowchart TB
         ModS["ModService 模组"]
         Save["SaveService 存档"]
         Auth["MicrosoftAuthService 登录"]
-        FrpS["FrpService 中继"]
+        FrpS["SakuraFrpService 隧道"]
         JavaM["JavaEnvironmentManager"]
     end
 
@@ -107,7 +108,7 @@ flowchart TB
         ModsApi["ModsApi<br/>Modrinth + CurseForge + 中文词典"]
         Modpack["整合包解析 modpack/"]
         Plugin["插件系统 plugin/ pluginapi/"]
-        Net["联机 SLan / Terracotta / FRP / LAN 监听"]
+        Net["联机 SLan / Terracotta / SakuraFrp / LAN 监听"]
         Crash["崩溃诊断 crash/ log/"]
     end
 
@@ -139,6 +140,7 @@ flowchart TB
 - 加载器一键安装：**Forge · NeoForge · Fabric · Quilt · OptiFine**（含 Fabric API / QSL）
 - **整合包安装**：解析 CurseForge / MCBBS 清单并递归安装，自动处理继承链（`inheritsFrom`）
 - 多线程分块下载、断点续传、下载任务管理面板（暂停/取消/重试/限速）
+- **自定义下载**：填入一个或多个直链、可自定义保存文件名，下到自选文件夹（默认系统「下载」目录），断点续传、同名文件自动改名
 - 下载源可切换：**Mojang 官方 / BMCLAPI / MCBBS 镜像**，含镜像熔断与自动回退
 - 并发下载数、CurseForge 数据源、Mod 中文搜索字典等细粒度设置
 
@@ -153,7 +155,7 @@ flowchart TB
 
 - **SLan** 局域网联机（房间创建/加入、邀请码、联机密码）
 - **Terracotta** 联机（基于 ice4j 的 NAT 穿透，节点列表自动获取）
-- **FRP 中继** 自建服务器联机
+- **FRP 联机（SakuraFrp）**：在启动器内登录樱花 SakuraFrp，管理隧道并托管官方 frpc
 - Minecraft 局域网组播监听（自动发现同网段房间）
 
 ### 🎨 个性化与无障碍
@@ -210,15 +212,12 @@ cd starlight-launcher-cn
 # git clone https://github.com/Dreamo331/Starlight-Launcher.git
 ```
 
-### 2. 安装本地核心库
+### 2. 检查本地 jar（无需安装到仓库）
 
-项目依赖一个未发布到中央仓库的本地核心库 `lib/StarlightLauncher-2.0.0.jar`，先装进本地仓库：
-
-```bash
-mvn install:install-file -Dfile=lib/StarlightLauncher-2.0.0.jar \
-  -DgroupId=com.starlight -DartifactId=starlight-launcher-core \
-  -Dversion=2.0.0 -Dpackaging=jar
-```
+`lib/cape-url-patch-agent.jar` 是披风补丁 agent，**不通过 Maven 依赖引入**：pom 把整个 `lib/` 目录
+以 `assets/agent` 为前缀打进 classpath，构建时无额外步骤。若你改动了
+[tools/agent/CapeUrlPatchAgent.java](tools/agent/CapeUrlPatchAgent.java)，请按该文件头部的说明重新打包，
+并同步 `CapeAgentInstaller.EXPECTED_SHA256`（仅联网兜底路径会用到）。
 
 ### 3. 填入端点与密钥配置
 
@@ -237,8 +236,9 @@ mvn install:install-file -Dfile=lib/StarlightLauncher-2.0.0.jar \
     "communityApiUrl": "",
     "communitySiteUrl": "",
     "logUploadUrl": "",
-    "frpControlHost": "",
-    "frpControlPort": 0,
+    "sakuraFrpApiBase": "",
+    "sakuraFrpSiteUrl": "",
+    "sakuraFrpTokenUrl": "",
     "sponsorUrl": "",
     "colorBlindOverlayUrl": ""
   }
@@ -353,8 +353,10 @@ flowchart LR
 |---|---|---|
 | **SLan** | 局域网房间（邀请码 / 联机密码） | 同网段快速联机 |
 | **Terracotta** | ice4j 的 ICE / NAT 穿透，节点列表自动获取 | 跨网络直连 |
-| **FRP 中继** | 自建 FRP 服务器中继 | 需要稳定公网中继 |
+| **SakuraFrp** | 第三方 FRP 隧道（TCP 内网穿透）；启动器管理隧道并托管官方 frpc | 需要公网地址的联机 |
 | **LAN 组播监听** | Minecraft 局域网组播协议自动发现同网段房间 | 一键发现房间 |
+
+> FRP 联机使用第三方 **樱花 SakuraFrp**：需自备 SakuraFrp 账号与访问密钥；访问密钥只保存在本机（`~/.starlight/.sakura.dat`），首次启动隧道会自动下载并校验官方 `frpc`。公开游戏服务器须遵守 SakuraFrp 的节点规则。
 
 ## 启动器 MOD 扩展
 
@@ -406,7 +408,7 @@ sequenceDiagram
 ```
 starlight-launcher/
 ├── pom.xml                       # Maven 构建配置
-├── lib/                          # 本地依赖：StarlightLauncher 核心库
+├── lib/                          # 披风补丁 agent：cape-url-patch-agent.jar（唯一真源，打入 EXE 内置资源）
 ├── docs/                         # 项目文档（MOD 技术文档、下载重构、修复说明等）
 ├── tools/                        # 工具脚本（check_env.ps1 等）
 ├── temp/                         # 临时产物与依赖（jar-inspect、deps 等）
@@ -425,7 +427,7 @@ starlight-launcher/
 │   │   ├── modpack/              # 整合包清单解析
 │   │   ├── plugin/ pluginapi/    # 启动器 MOD 插件系统与本地 HTTP API
 │   │   ├── auth/ loginmicrosoft/ # 账号管理与微软登录
-│   │   ├── slan/ frp/            # 联机（SLan / FRP）
+│   │   ├── slan/ frp/            # 联机（SLan / SakuraFrp）
 │   │   ├── colorblind/           # 色盲辅助
 │   │   ├── crash/ log/ service/  # 崩溃诊断、日志上传、后台服务
 │   │   ├── config/ main/ util/   # 配置、公共工具

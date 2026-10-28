@@ -1,5 +1,7 @@
 package com.example.starlight.ModsApi;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.AppConfig;
 
 import java.io.BufferedReader;
@@ -153,8 +155,8 @@ public final class ModDictionaryManager {
     public record DictionaryStatus(boolean fromCache, int entryCount, Instant updatedAt, Path path) {
         /** 人类可读的来源描述 */
         public String describeSource() {
-            if (fromCache) return "已更新（本地缓存）";
-            return entryCount > 0 ? "随包内置" : "不可用";
+            if (fromCache) return I18N.get("modsapi.t0069");
+            return entryCount > 0 ? I18N.get("modsapi.t0077") : I18N.get("modsapi.t0078");
         }
     }
 
@@ -205,7 +207,7 @@ public final class ModDictionaryManager {
      */
     public static UpdateResult updateFromRemote(String url, String cacheFileName) {
         if (url == null || url.trim().isEmpty()) {
-            return new UpdateResult(false, 0, "更新地址为空");
+            return new UpdateResult(false, 0, I18N.get("modsapi.t0070"));
         }
         String target = url.trim();
         Path cache = cacheFile(cacheFileName);
@@ -219,7 +221,7 @@ public final class ModDictionaryManager {
             int entries = countEntries(lines);
             if (entries < MIN_VALID_ENTRIES) {
                 return new UpdateResult(false, entries,
-                        "下载内容校验失败：有效条目仅 " + entries + " 条（可能是镜像返回了错误页面或被拦截）");
+                        I18N.get("mdm.r0001", entries));
             }
 
             Files.writeString(temp, text, StandardCharsets.UTF_8);
@@ -230,13 +232,13 @@ public final class ModDictionaryManager {
             }
 
             reloadAll();
-            return new UpdateResult(true, entries, "更新成功：" + entries + " 条");
+            return new UpdateResult(true, entries, I18N.get("mdm.r0002", entries));
         } catch (Exception e) {
             try {
                 Files.deleteIfExists(temp);
             } catch (IOException ignored) {
             }
-            return new UpdateResult(false, 0, "更新失败：" + e.getMessage());
+            return new UpdateResult(false, 0, I18N.get("modsapi.p0083", e.getMessage()));
         } finally {
             removeStaleTempFiles();
         }
@@ -287,7 +289,7 @@ public final class ModDictionaryManager {
         }
         byte[] body = response.body();
         if (body == null || body.length == 0) {
-            throw new IOException("响应内容为空");
+            throw new IOException(I18N.get("modsapi.t0071"));
         }
         return new String(body, StandardCharsets.UTF_8);
     }

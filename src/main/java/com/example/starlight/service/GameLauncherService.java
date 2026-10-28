@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.service;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.model.CallbackInterfaces.ProgressCallback;
 import com.example.starlight.model.CallbackInterfaces.ResultCallback;
 import com.example.starlight.model.LaunchConfig;
@@ -15,6 +17,7 @@ import com.example.starlight.auth.offline.Skin;
 import com.example.starlight.colorblind.ColorBlindOverlayManager;
 import com.example.starlight.config.StarlightConfig;
 import com.example.starlight.config.VersionConfigManager;
+import com.example.starlight.download.DownloadEngineRouter;
 import com.example.starlight.download.task.GameResourceCompleter;
 import com.example.starlight.gamebat.MinecraftLauncherBuilder;
 import com.example.starlight.lang.GameLanguage;
@@ -157,13 +160,13 @@ public class GameLauncherService {
                             String extra = String.join(" ", injectArgs);
                             config.jvmArgs = (config.jvmArgs == null || config.jvmArgs.isBlank())
                                     ? extra : config.jvmArgs.trim() + " " + extra;
-                            LaunchLog.info("已启用本地披风服务器：" + capeServer.getApiBase());
+                            LaunchLog.info(I18N.get("service.p0077", capeServer.getApiBase()));
                         }
                     } catch (Exception e) {
                         log.warn("Failed to start local cape server: {}", e.getMessage());
                     }
                 }
-                if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
+                if (launchCancelled.get()) { onResult.onError(I18N.get("service.t0018")); return; }
 
                 // 启动流程日志（PCL 标准）：预检测 / 登录方式 //
                 if (config.userName != null && !config.userName.isEmpty()) {
@@ -177,25 +180,25 @@ public class GameLauncherService {
                 boolean autoJavaOn = VersionConfigManager.effectiveAutoJava(
                         StarlightConfig.readConfig(), config.gameDir, config.version);
                 if (autoJavaOn) {
-                    onProgress.onProgress(5, "正在自动选择 Java...");
+                    onProgress.onProgress(5, I18N.get("service.t0019"));
                     String autoJava = com.example.starlight.gui.UIGeneralControlClass
                             .autoSelectJavaPath(config.version, config.gameDir);
                     if (autoJava != null) {
                         config.javaPath = autoJava;
-                        LaunchLog.info("选择的 Java：" + autoJava);
+                        LaunchLog.info(I18N.get("service.p0078", autoJava));
                     } else {
-                        LaunchLog.warn("未找到合适的 Java，使用当前配置");
+                        LaunchLog.warn(I18N.get("service.t0020"));
                     }
                 }
                 com.example.starlight.gui.UIGeneralControlClass
                         .recordLaunchJavaPath(config.version, config.javaPath);
 
-                onProgress.onProgress(5, "正在读取版本信息...");
-                LaunchLog.info("正在读取版本信息...");
+                onProgress.onProgress(5, I18N.get("service.t0021"));
+                LaunchLog.info(I18N.get("service.t0022"));
                 LaunchInfo info = buildLaunchInfo(config);
                 Path jsonPath = info.resolveVersionDir().resolve(config.version + ".json");
                 if (!Files.exists(jsonPath)) {
-                    onResult.onError("版本 JSON 文件不存在: " + jsonPath);
+                    onResult.onError(I18N.get("service.p0079", jsonPath));
                     return;
                 }
                 String jsonString = Files.readString(jsonPath);
@@ -237,39 +240,42 @@ public class GameLauncherService {
                         log.info("Injected --profileProperties for local player textures");
                     }
                 }
-                onProgress.onProgress(20, "检测到加载器: " + loader);
-                LaunchLog.info("检测到加载器：" + loader);
-                if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
+                onProgress.onProgress(20, I18N.get("service.p0080", loader));
+                LaunchLog.info(I18N.get("service.p0081", loader));
+                if (launchCancelled.get()) { onResult.onError(I18N.get("service.t0023")); return; }
 
                 // 资源准备（并行加速开启时：原生库检查与资源补全同时进行，占 25~60 区间）
                 // 关闭时保持原串行流程：先补全资源（资产+库），再检查原生库
-                onProgress.onProgress(25, "正在准备游戏资源...");
-                LaunchLog.info("正在准备游戏资源...");
+                onProgress.onProgress(25, I18N.get("service.t0024"));
+                LaunchLog.info(I18N.get("service.t0025"));
                 if (ParallelLaunchManager.isEnabled()) {
                     boolean prepOk = ParallelLaunchManager.prepare(config.gameDir, config.version, jsonString,
                             (pct, msg) -> onProgress.onProgress(Math.min(25 + (int) (pct * 0.35), 60), msg),
                             launchCancelled);
                     if (!prepOk) {
-                        if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
-                        onResult.onError("原生库准备失败，请检查网络连接或重新安装该版本");
+                        if (launchCancelled.get()) { onResult.onError(I18N.get("service.t0026")); return; }
+                        onResult.onError(I18N.get("service.t0027"));
                         return;
                     }
                 } else {
-                    onProgress.onProgress(25, "正在补全资源文件...");
-                    GameResourceCompleter.completeAll(config.gameDir, config.version,
+                    onProgress.onProgress(25, I18N.get("service.t0028"));
+                    DownloadEngineRouter.completeAll(config.gameDir, config.version,
                             (pct, msg) -> onProgress.onProgress(Math.min(25 + (int) (pct * 0.25), 50), msg),
                             launchCancelled);
                 }
-                if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
+                if (launchCancelled.get()) { onResult.onError(I18N.get("service.t0029")); return; }
 
                 BaseLauncher launcher = createLauncher(loader, info);
                 if (launcher == null) {
-                    onResult.onError("未知加载器类型: " + loader);
+                    onResult.onError(I18N.get("service.p0082", loader));
                     return;
                 }
+                // 取消判定器：把「取消启动」标志位交给基类，由它补杀窗口期起来的进程，
+                // 并让退出日志不把强制结束误报成「游戏异常退出 (代码: 1)」
+                launcher.setCancelChecker(launchCancelled::get);
 
-                onProgress.onProgress(50, "正在初始化路径...");
-                LaunchLog.info("正在初始化路径...");
+                onProgress.onProgress(50, I18N.get("service.t0030"));
+                LaunchLog.info(I18N.get("service.t0031"));
                 // 方案一：在 initLogging() 之前采集已有日志文件 //
                 // 确保 initLogging() 创建的新日志文件不会被过滤掉
                 final java.nio.file.Path logDir = java.nio.file.Paths.get(LOG_DIR);
@@ -291,22 +297,22 @@ public class GameLauncherService {
                 launcher.initLogging(Paths.get(LOG_DIR));
                 launcher.setVersionJson(versionJson);
 
-                onProgress.onProgress(60, "正在处理原生库...");
-                LaunchLog.info("正在解压 Natives 文件");
+                onProgress.onProgress(60, I18N.get("service.t0032"));
+                LaunchLog.info(I18N.get("service.t0033"));
                 boolean nativesOk = FileService.checkAndCompleteNatives(config.gameDir, config.version, jsonString);
                 if (!nativesOk) {
-                    onResult.onError("原生库准备失败，请检查网络连接或重新安装该版本");
+                    onResult.onError(I18N.get("service.t0034"));
                     return;
                 }
                 boolean processOk = launcher.processNatives();
                 if (!processOk) {
-                    onResult.onError("原生库处理失败，无法启动游戏");
+                    onResult.onError(I18N.get("service.t0035"));
                     return;
                 }
 
                 // 应用游戏内设置（语言 / 全屏 → options.txt；取该版本合并后的有效值）
-                onProgress.onProgress(70, "正在应用版本设置（语言 / 全屏）...");
-                LaunchLog.info("正在应用版本设置（语言 / 全屏）...");
+                onProgress.onProgress(70, I18N.get("service.t0036"));
+                LaunchLog.info(I18N.get("service.t0037"));
                 Map<String, String> launchEffective = VersionConfigManager.buildEffectiveIni(
                         StarlightConfig.readConfig(), config.gameDir, config.version);
                 String langCode = launchEffective.getOrDefault("GameLanguage", "");
@@ -323,7 +329,7 @@ public class GameLauncherService {
                 // 离线皮肤资源包（PCL2 风格：自定义皮肤以资源包覆盖默认贴图，
                 // 无需本地皮肤服务器 / authlib-injector）
                 if (currentAccount != null && currentAccount.type == AccountManager.AccountType.OFFLINE) {
-                    onProgress.onProgress(75, "正在应用离线皮肤...");
+                    onProgress.onProgress(75, I18N.get("service.t0038"));
                     try {
                         Skin skin = currentAccount.getSkin();
                         VanillaVersion vanilla = VanillaVersion.resolve(Path.of(config.gameDir), config.version);
@@ -334,45 +340,45 @@ public class GameLauncherService {
                     }
                 }
                 if (launchCancelled.get()) {
-                    onResult.onError("启动已取消");
+                    onResult.onError(I18N.get("service.t0039"));
                     return;
                 }
 
-                onProgress.onProgress(80, "正在启动 Minecraft " + config.version + " ...");
+                onProgress.onProgress(80, I18N.get("service.p0083", config.version + " ..."));
 
                 // 启动参数区块（PCL 标准：参数获取开始 / 分隔线 / 每行一个参数） //
-                LaunchLog.info("=================== 启动参数开始 ===================");
+                LaunchLog.info(I18N.get("service.t0040"));
                 if (versionJson != null && versionJson.has("mainClass")) {
                     LaunchLog.info(versionJson.get("mainClass").getAsString());
                 }
                 LaunchLog.info("Java：" + config.javaPath);
-                LaunchLog.info("最小内存：" + config.minMemory + " MB");
-                LaunchLog.info("最大内存：" + config.maxMemory + " MB");
-                LaunchLog.info("游戏版本：" + config.version);
-                LaunchLog.info("游戏目录：" + config.gameDir);
-                LaunchLog.info("版本隔离：" + (config.versionIsolation ? "是" : "否"));
+                LaunchLog.info(I18N.get("service.p0084", config.minMemory + " MB"));
+                LaunchLog.info(I18N.get("service.p0085", config.maxMemory + " MB"));
+                LaunchLog.info(I18N.get("service.p0086", config.version));
+                LaunchLog.info(I18N.get("service.p0087", config.gameDir));
+                LaunchLog.info(I18N.get("service.p0088", (config.versionIsolation ? I18N.get("service.t0061") : I18N.get("service.t0062"))));
                 if (config.windowWidth > 0 && config.windowHeight > 0) {
-                    LaunchLog.info("窗口大小：" + config.windowWidth + " x " + config.windowHeight);
+                    LaunchLog.info(I18N.get("service.p0089", config.windowWidth + " x " + config.windowHeight));
                 }
                 // 进程微调（高级设置）：只有真的设置了才占日志行，默认值不打扰
                 if (config.windowTitle != null && !config.windowTitle.isBlank()) {
-                    LaunchLog.info("窗口标题：" + config.windowTitle);
+                    LaunchLog.info(I18N.get("service.p0090", config.windowTitle));
                 }
                 if (config.processPriority != null && !"normal".equalsIgnoreCase(config.processPriority)) {
-                    LaunchLog.info("进程优先级：" + com.example.starlight.util.GameProcessTweaks
-                            .priorityLabel(config.processPriority));
+                    LaunchLog.info(I18N.get("service.p0091", com.example.starlight.util.GameProcessTweaks
+                            .priorityLabel(config.processPriority)));
                 }
                 if (config.jvmArgs != null && !config.jvmArgs.isEmpty()) {
-                    LaunchLog.info("JVM 参数：" + config.jvmArgs);
+                    LaunchLog.info(I18N.get("service.p0092", config.jvmArgs));
                 }
                 if (config.gameArgs != null && !config.gameArgs.isEmpty()) {
-                    LaunchLog.info("游戏参数：" + config.gameArgs);
+                    LaunchLog.info(I18N.get("service.p0093", config.gameArgs));
                 }
-                LaunchLog.info("=================== 启动参数结束 ===================");
+                LaunchLog.info(I18N.get("service.t0041"));
 
                 // 最终检查：launcher.launch() 前再次确认未被取消
                 if (launchCancelled.get()) {
-                    onResult.onError("启动已取消");
+                    onResult.onError(I18N.get("service.t0042"));
                     return;
                 }
 
@@ -385,7 +391,7 @@ public class GameLauncherService {
                             process.pid(), config.version, config.gameDir, config.userName,
                             loader, System.currentTimeMillis()));
                     log.info("Game process captured, PID: {}", process.pid());
-                    LaunchLog.info("已启动游戏进程：" + config.javaPath + "（PID " + process.pid() + "）");
+                    LaunchLog.info(I18N.get("service.p0094", config.javaPath + "（PID " + process.pid() + "）"));
                 });
 
                 // 游戏窗口检测（混合 PCL + HMCL 方案，两个阶段独立并行） //
@@ -399,6 +405,9 @@ public class GameLauncherService {
                     final long launcherPid = ProcessHandle.current().pid();
                     // 就绪信号统一入口：帧生成器/色盲辅助等伴生工具与界面回调共用同一时刻
                     final Runnable gameStartedSignal = () -> {
+                        // 已取消就不再上报「游戏已启动」：检测线程原来不响应取消，会在 25~60 秒后
+                        // 补报一次，把一次取消误当成启动成功（伴生工具误拉起、界面补对勾等）
+                        if (launchCancelled.get()) return;
                         try {
                             ColorBlindOverlayManager.notifyGameStarted();
                         } catch (Throwable t) {
@@ -430,6 +439,8 @@ public class GameLauncherService {
                             int lastContentLen = 0;
 
                             while (System.currentTimeMillis() < deadline) {
+                                // 用户已取消：不必再轮询到 25~60 秒超时，直接收工
+                                if (launchCancelled.get()) return;
                                 // Phase 1: 等待新 Java 进程出现（HMCL 方式）
                                 if (!processFound) {
                                     processFound = ProcessHandle.allProcesses().anyMatch(p -> {
@@ -480,11 +491,15 @@ public class GameLauncherService {
                                                     || (newContent.contains("Created")
                                                             && newContent.contains("textures")
                                                             && newContent.contains("atlas"))) {
+                                                // i18n-lock: 不要翻译此行中文——识别启动日志关键字，翻译即功能失效
                                                 String reason = newContent.contains("Setting user:") ? "用户已设置"
+                                                        // i18n-lock: 不要翻译此行中文——识别启动日志关键字，翻译即功能失效
                                                         : newContent.toLowerCase().contains("lwjgl version") ? "LWJGL 版本已确认"
+                                                        // i18n-lock: 不要翻译此行中文——识别启动日志关键字，翻译即功能失效
                                                         : newContent.contains("OpenAL initialized") ? "OpenAL 已初始化"
+                                                        // i18n-lock: 不要翻译此行中文——识别启动日志关键字，翻译即功能失效
                                                         : newContent.contains("Starting up SoundSystem") ? "SoundSystem 已启动"
-                                                        : "材质已加载";
+                                                        : I18N.get("service.t0063");
                                                 log.info("Game ready signal detected ({}), closing launch animation", reason);
                                                 gameStartedSignal.run();
                                                 return;
@@ -531,23 +546,24 @@ public class GameLauncherService {
                 LocalCapeProxy capeProxyDone = capeProxyRef.getAndSet(null);
                 if (capeProxyDone != null) capeProxyDone.stop();
                 long elapsed = (System.currentTimeMillis() - startTime) / 1000;
-                onProgress.onProgress(100, "游戏已退出，运行时长: " + elapsed + "秒");
+                onProgress.onProgress(100, I18N.get("gls.r0001", elapsed));
 
                 // 启动结束日志（PCL 标准：~ 基础参数 ~ / ~ 登录参数 ~ / 开始启动结束处理） //
-                LaunchLog.info("~ 基础参数 ~");
-                LaunchLog.info("游戏版本：" + config.version);
-                LaunchLog.info("分配的内存：" + config.maxMemory + " MB");
-                LaunchLog.info("MC 文件夹：" + config.gameDir);
-                LaunchLog.info("版本隔离：" + (config.versionIsolation ? "是" : "否"));
-                LaunchLog.info("Java 信息：" + config.javaPath);
+                LaunchLog.info(I18N.get("service.t0043"));
+                LaunchLog.info(I18N.get("service.p0095", config.version));
+                LaunchLog.info(I18N.get("service.p0096", config.maxMemory + " MB"));
+                LaunchLog.info(I18N.get("service.p0097", config.gameDir));
+                LaunchLog.info(I18N.get("service.p0098", (config.versionIsolation ? I18N.get("service.t0064") : I18N.get("service.t0065"))));
+                LaunchLog.info(I18N.get("service.p0099", config.javaPath));
                 LaunchLog.info("");
-                LaunchLog.info("~ 登录参数 ~");
-                LaunchLog.info("玩家用户名：" + (config.userName == null ? "" : config.userName));
+                LaunchLog.info(I18N.get("service.t0044"));
+                LaunchLog.info(I18N.get("service.p0100", (config.userName == null ? "" : config.userName)));
                 LaunchLog.info("AccessToken：" + LaunchLog.mask(config.accessToken));
                 LaunchLog.info("UUID：" + LaunchLog.mask(config.uuid));
+                // i18n-lock: 不要翻译此行中文——识别启动日志关键字，翻译即功能失效
                 LaunchLog.info("登录方式：" + ("msa".equalsIgnoreCase(config.userType) ? "正版" : "离线"));
                 LaunchLog.info("");
-                LaunchLog.info("开始启动结束处理");
+                LaunchLog.info(I18N.get("service.t0045"));
                 LaunchLog.info("游戏已退出，运行时长：" + elapsed + "秒");
 
                 // 清除进程引用，避免 stopGame() 误操作后续无关进程；同时从实例表注销
@@ -562,7 +578,9 @@ public class GameLauncherService {
                 }
 
                 String errorLog = null;
-                if (exitCode != 0) {
+                // 取消启动（用户主动结束）不算崩溃：不去收集错误日志，避免把无关的 stderr
+                // 挂到这次结果上（与 UIGeneralControlClass 那条启动路径保持一致）
+                if (exitCode != 0 && !launcher.isCancelledByUser()) {
                     // 类似 PCL2/HMCL：优先使用 JVM 实时 stderr 输出
                     String stderr = launcher.getStderrOutput();
                     if (stderr != null && !stderr.trim().isEmpty()) {
@@ -586,8 +604,8 @@ public class GameLauncherService {
                 if (capeProxyErr != null) capeProxyErr.stop();
                 // 启动失败也要注销：原先这里漏了注销，实例会一直挂在表里
                 GameInstanceRegistry.unregister(gamePidRef[0]);
-                LaunchLog.error("错误：" + e.getMessage());
-                onResult.onError("启动失败: " + e.getMessage());
+                LaunchLog.error(I18N.get("service.p0101", e.getMessage()));
+                onResult.onError(I18N.get("service.p0102", e.getMessage()));
             }
         });
     }
@@ -614,8 +632,8 @@ public class GameLauncherService {
         try (PrintWriter writer = new PrintWriter(batchPath, "UTF-8")) {
             writer.println("chcp 65001>nul");
             writer.println("@echo off");
-            writer.println("title 启动 - " + config.version);
-            writer.println("echo 游戏正在启动，请稍候...");
+            writer.println(I18N.get("service.p0103", config.version));
+            writer.println(I18N.get("service.t0046"));
             writer.println("cd /D \"" + config.gameDir + "\"");
             writer.println();
             writer.println(cmd);
@@ -628,7 +646,7 @@ public class GameLauncherService {
     /** 强制停止游戏（本启动器拉起的实例全部关闭） */
     public static void stopGame() {
         launchCancelled.set(true);
-        LaunchLog.info("已取消启动");
+        LaunchLog.info(I18N.get("service.t0047"));
         if (runningGameProcess != null && runningGameProcess.isAlive()) {
             runningGameProcess.destroyForcibly();
         }
@@ -654,7 +672,8 @@ public class GameLauncherService {
         // 固定传 false，确保核心启动器不再向游戏命令追加 --fullscreen，保持纯 options.txt 行为
         info.setFullscreen(false);
         info.setVersionIsolation(c.versionIsolation);
-        if (!c.jvmArgs.isEmpty()) info.setJvmArgs(java.util.Arrays.asList(c.jvmArgs.split("\\s+")));
+        // 按引号分组切分：-javaagent/-D 里可能含带空格的 Windows 用户目录路径
+        if (!c.jvmArgs.isEmpty()) info.setJvmArgs(com.example.starlight.startmc.LaunchInfo.splitCommandLine(c.jvmArgs));
         if (!c.gameArgs.isEmpty()) info.setGameArgs(java.util.Arrays.asList(c.gameArgs.split("\\s+")));
         if (!c.preLaunchCommand.isEmpty()) info.setPreLaunchCommand(c.preLaunchCommand);
         if (!c.postExitCommand.isEmpty()) info.setPostExitCommand(c.postExitCommand);

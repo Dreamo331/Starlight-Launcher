@@ -1,9 +1,12 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.ModsApi.CurseForgeAPI;
 import com.example.starlight.ModsApi.ModDictionaryManager;
 import com.example.starlight.download.DownloadSettings;
 import com.example.starlight.download.mod.DownloadCoordinator;
+import com.example.starlight.download.pcl.PclDownloadManager;
 import com.example.starlight.download.source.DownloadProvider;
 import com.example.starlight.download.task.GameResourceCompleter;
 import com.example.starlight.gui.UIGeneralControlClass;
@@ -52,13 +55,18 @@ public final class DownloadSettingsPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(ctx, "下载");
+        VBox root = PageKit.settingsPage(ctx, I18N.get("dlsettings.t0001"));
 
-        // 下载源
+        // 下载源（MCBBS 镜像 2023 年已停服，从选项中移除；存量配置为 MCBBS 的会回退 BMCLAPI）
         ComboBox<String> sourceCombo = new ComboBox<>();
-        sourceCombo.getItems().addAll("BMCLAPI", "Mojang", "MCBBS");
+        sourceCombo.getItems().addAll("BMCLAPI", "Mojang");
         String curSource = ctx.config().getOrDefault("DownloadSource", "BMCLAPI");
-        sourceCombo.setValue(sourceCombo.getItems().contains(curSource) ? curSource : "BMCLAPI");
+        if (!sourceCombo.getItems().contains(curSource)) {
+            ctx.config().put("DownloadSource", "BMCLAPI");
+            ctx.saveConfig();
+            curSource = "BMCLAPI";
+        }
+        sourceCombo.setValue(curSource);
         sourceCombo.getStyleClass().add("select-field");
         sourceCombo.setOnAction(e -> {
             String source = sourceCombo.getValue();
@@ -70,16 +78,66 @@ public final class DownloadSettingsPage {
             GameResourceCompleter.setDownloadProvider(provider);
             LoaderInstallEngine.setDownloadProvider(provider);
             VersionManifest.setDownloadProvider(provider);
-            ctx.toast("下载源已切换: " + source);
+            ctx.toast(I18N.get("dlsettings.k0001", source));
         });
-        root.getChildren().add(PageKit.settingsCard("下载源", "游戏文件与资源下载的来源服务器（MCBBS 镜像已停止服务，选择后自动回退）", sourceCombo));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("dlsettings.t0002"), I18N.get("dlsettings.t0003"), sourceCombo));
+
+        // 下载引擎选择（2026-10-21）：原引擎 / PCL 引擎，下一次补全即生效
+        ComboBox<String> engineCombo = new ComboBox<>();
+        engineCombo.getItems().addAll(DownloadSettings.ENGINE_STARLIGHT, DownloadSettings.ENGINE_PCL);
+        String curEngine = ctx.config().getOrDefault(DownloadSettings.KEY_ENGINE,
+                DownloadSettings.DEFAULT_ENGINE);
+        engineCombo.setValue(engineCombo.getItems().contains(curEngine) ? curEngine
+                : DownloadSettings.DEFAULT_ENGINE);
+        engineCombo.getStyleClass().add("select-field");
+        engineCombo.setPrefWidth(120);
+
+        int curPclThreads = Math.max(DownloadSettings.MIN_PCL_THREADS,
+                Math.min(DownloadSettings.SETTINGS_PCL_THREADS_MAX,
+                        PageKit.parseIntSafe(ctx.config().getOrDefault(DownloadSettings.KEY_PCL_THREADS,
+                                String.valueOf(DownloadSettings.DEFAULT_PCL_THREADS)),
+                                DownloadSettings.DEFAULT_PCL_THREADS)));
+        Label pclThreadsLabel = new Label(I18N.get("dlsettings.k0002", curPclThreads));
+        pclThreadsLabel.getStyleClass().add("black-value-label");
+        pclThreadsLabel.setMinWidth(Region.USE_PREF_SIZE);
+        Slider pclThreadsSlider = new Slider(DownloadSettings.MIN_PCL_THREADS,
+                DownloadSettings.SETTINGS_PCL_THREADS_MAX, curPclThreads);
+        pclThreadsSlider.getStyleClass().add("black-ticks");
+        pclThreadsSlider.setShowTickLabels(true);
+        pclThreadsSlider.setMajorTickUnit(16);
+        pclThreadsSlider.setBlockIncrement(1);
+        pclThreadsSlider.setPrefWidth(200);
+        pclThreadsSlider.valueProperty().addListener((obs, old, val) ->
+                pclThreadsLabel.setText(I18N.get("dlsettings.k0003", val.intValue())));
+
+        Button saveEngine = AppIcons.button("save", I18N.get("dlsettings.t0004"));
+        saveEngine.getStyleClass().add("btn-primary");
+        saveEngine.setOnAction(e -> {
+            String engine = engineCombo.getValue() == null
+                    ? DownloadSettings.DEFAULT_ENGINE : engineCombo.getValue();
+            int threads = (int) pclThreadsSlider.getValue();
+            ctx.config().put(DownloadSettings.KEY_ENGINE, engine);
+            ctx.config().put(DownloadSettings.KEY_PCL_THREADS, String.valueOf(threads));
+            ctx.saveConfig();
+            // 立即生效：两套引擎各自的并发都按新值铺开，下一次补全即采用所选引擎
+            DownloadSettings.setEngine(engine);
+            DownloadSettings.setPclThreads(threads);
+            PclDownloadManager.get().applyConcurrency();
+            ctx.toast(DownloadSettings.ENGINE_PCL.equalsIgnoreCase(engine)
+                    ? (I18N.get("dlsettings.k0023", threads + "）"))
+                    : I18N.get("dlsettings.t0005"));
+        });
+        HBox engineRow = new HBox(10, engineCombo, pclThreadsSlider, pclThreadsLabel, saveEngine);
+        engineRow.setAlignment(Pos.CENTER_LEFT);
+        root.getChildren().add(PageKit.settingsCard(I18N.get("dlsettings.t0006"),
+                I18N.get("dlsettings.t0048"), engineRow));
 
         // 并发下载线程数（全局配额上限：调大/调小会就地重建 download.mod 线程池）
         int curThreads = Math.max(DownloadSettings.MIN_THREADS,
                 Math.min(DownloadSettings.SETTINGS_THREADS_MAX,
                         PageKit.parseIntSafe(ctx.config().getOrDefault(DownloadSettings.KEY_THREADS,
                                 String.valueOf(DownloadSettings.DEFAULT_THREADS)), DownloadSettings.DEFAULT_THREADS)));
-        Label threadsLabel = new Label("当前: " + curThreads);
+        Label threadsLabel = new Label(I18N.get("dlsettings.k0004", curThreads));
         threadsLabel.getStyleClass().add("black-value-label");
         // 锁固有宽度：卡片挤压时数值不许变成「当前…」
         threadsLabel.setMinWidth(Region.USE_PREF_SIZE);
@@ -89,8 +147,8 @@ public final class DownloadSettingsPage {
         threadsSlider.setMajorTickUnit(4);
         threadsSlider.setBlockIncrement(1);
         threadsSlider.setPrefWidth(200);
-        threadsSlider.valueProperty().addListener((obs, old, val) -> threadsLabel.setText("当前: " + val.intValue()));
-        Button saveThreads = AppIcons.button("save", "保存");
+        threadsSlider.valueProperty().addListener((obs, old, val) -> threadsLabel.setText(I18N.get("dlsettings.k0005", val.intValue())));
+        Button saveThreads = AppIcons.button("save", I18N.get("dlsettings.t0007"));
         saveThreads.getStyleClass().add("btn-primary");
         saveThreads.setOnAction(e -> {
             int val = (int) threadsSlider.getValue();
@@ -99,27 +157,29 @@ public final class DownloadSettingsPage {
             // 立即生效：全局线程池配额（DownloadCoordinator）+ 未接入 mod 的旧链路
             DownloadSettings.setDownloadThreads(val);
             DownloadSettings.applyAll();
+            // 2026-10-20：资源补全（资产/库/版本JAR）三阶段并行后共用一份全局文件并发配额，
+            // 这里同步调整，改完立即生效
+            com.example.starlight.download.task.GameResourceCompleter.applyGlobalConcurrency();
             boolean resized = DownloadCoordinator.getInstance().setThreadLimit(val);
-            ctx.toast(resized ? ("并发下载数已保存: " + val + "（线程池已调整）")
-                    : ("并发下载数已保存: " + val));
+            ctx.toast(resized ? (I18N.get("dlsettings.p0049", val))
+                    : I18N.get("dlsettings.r0001", val));
         });
         HBox threadsRow = new HBox(10, threadsSlider, threadsLabel, saveThreads);
         threadsRow.setAlignment(Pos.CENTER_LEFT);
-        root.getChildren().add(PageKit.settingsCard("并发下载数",
-                "全局同时下载的分块数量（数值越大越快，占用带宽越高；上限 32，默认 "
-                        + DownloadSettings.DEFAULT_THREADS + "）", threadsRow));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("dlsettings.t0008"),
+                I18N.get("dlsettings.k0024", DownloadSettings.DEFAULT_THREADS + "）"), threadsRow));
 
         // 高级下载设置（折叠）
         root.getChildren().add(buildAdvancedCard());
 
         // CurseForge 数据源连通性自检（API Key 硬编码在 CurseForgeAPI，此处仅验证能否取到数据）
-        Button cfTestBtn = AppIcons.button("signal", "测试连接");
+        Button cfTestBtn = AppIcons.button("signal", I18N.get("dlsettings.t0009"));
         cfTestBtn.getStyleClass().add("btn-primary");
-        Label cfStatus = new Label("未测试");
+        Label cfStatus = new Label(I18N.get("dlsettings.t0010"));
         cfStatus.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
         cfTestBtn.setOnAction(e -> {
             cfTestBtn.setDisable(true);
-            cfStatus.setText("测试中...");
+            cfStatus.setText(I18N.get("dlsettings.t0011"));
             UIGeneralControlClass.ASYNC_POOL.submit(() -> {
                 String result = CurseForgeAPI.testConnection();
                 Platform.runLater(() -> {
@@ -130,10 +190,10 @@ public final class DownloadSettingsPage {
         });
         HBox cfRow = new HBox(12, cfTestBtn, cfStatus);
         cfRow.setAlignment(Pos.CENTER_LEFT);
-        root.getChildren().add(PageKit.settingsCard("CurseForge 数据源", "", cfRow));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("dlsettings.t0012"), "", cfRow));
 
         // Mod 中文名字典（中文搜索的数据基础） //
-        Label dictStatus = new Label("正在读取字典...");
+        Label dictStatus = new Label(I18N.get("dlsettings.t0013"));
         dictStatus.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
         dictStatus.setWrapText(true);
         refreshDictionaryStatus(dictStatus);
@@ -157,24 +217,26 @@ public final class DownloadSettingsPage {
             UIGeneralControlClass.saveConfig(ctx.config());
         });
 
-        Label modUrlLabel = new Label("模组字典地址");
+        Label modUrlLabel = new Label(I18N.get("dlsettings.t0014"));
         modUrlLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
-        Label packUrlLabel = new Label("整合包字典地址");
+        Label packUrlLabel = new Label(I18N.get("dlsettings.t0015"));
         packUrlLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
 
-        Button dictUpdateBtn = AppIcons.button("refresh", "更新字典");
+        Button dictUpdateBtn = AppIcons.button("refresh", I18N.get("dlsettings.t0016"));
         dictUpdateBtn.getStyleClass().add("btn-primary");
-        Button dictClearBtn = AppIcons.button("trash", "清除更新缓存");
-        Button dictOpenDirBtn = AppIcons.button("folder", "打开缓存目录");
+        Button dictClearBtn = AppIcons.button("trash", I18N.get("dlsettings.t0017"));
+        Button dictOpenDirBtn = AppIcons.button("folder", I18N.get("dlsettings.t0018"));
         dictClearBtn.getStyleClass().add("btn-primary");
         dictOpenDirBtn.getStyleClass().add("btn-primary");
         Label dictResult = new Label();
         dictResult.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
         dictResult.setWrapText(true);
 
+        // 最小宽度：避免在 HBox 里被压缩成一列竖排文字
+        dictResult.setMinWidth(160);
         dictUpdateBtn.setOnAction(e -> {
             dictUpdateBtn.setDisable(true);
-            dictResult.setText("更新中...（模组字典约 1.7 MB，请稍候）");
+            dictResult.setText(I18N.get("dlsettings.t0019"));
             String modUrl = modDictUrlField.getText() == null || modDictUrlField.getText().trim().isEmpty()
                     ? ModDictionaryManager.DEFAULT_MOD_URL : modDictUrlField.getText().trim();
             String packUrl = packDictUrlField.getText() == null || packDictUrlField.getText().trim().isEmpty()
@@ -186,7 +248,7 @@ public final class DownloadSettingsPage {
                         ModDictionaryManager.updateFromRemote(packUrl, ModDictionaryManager.MODPACK_CACHE_FILE);
                 Platform.runLater(() -> {
                     dictUpdateBtn.setDisable(false);
-                    dictResult.setText("模组：" + modResult.message() + "　整合包：" + packResult.message());
+                    dictResult.setText(I18N.get("dlsettings.p0050", modResult.message(), packResult.message()));
                     refreshDictionaryStatus(dictStatus);
                     // 字典变了：已安装模组的中文名缓存整体失效，重新识别
                     ctx.clearLocalModCache();
@@ -201,14 +263,14 @@ public final class DownloadSettingsPage {
             ctx.clearLocalModCache();
             ctx.refreshModList();
             refreshDictionaryStatus(dictStatus);
-            dictResult.setText(cleared ? "已清除运行时更新缓存，回退为随包内置字典"
-                    : "没有可清除的运行时缓存（当前即随包内置字典）");
+            dictResult.setText(cleared ? I18N.get("dlsettings.t0020")
+                    : I18N.get("dlsettings.t0021"));
         });
 
         dictOpenDirBtn.setOnAction(e -> {
             File dir = ModDictionaryManager.DICTIONARY_DIR.toFile();
             if (!dir.exists() && !dir.mkdirs()) {
-                ctx.toast("无法创建目录: " + dir.getAbsolutePath());
+                ctx.toast(I18N.get("dlsettings.k0006", dir.getAbsolutePath()));
                 return;
             }
             ctx.openFile(dir.getAbsolutePath());
@@ -226,7 +288,7 @@ public final class DownloadSettingsPage {
         HBox.setHgrow(dictBox, Priority.ALWAYS);
         dictBox.getChildren().addAll(dictStatus, modUrlLabel, modDictUrlField,
                 packUrlLabel, packDictUrlField, dictButtonRow);
-        root.getChildren().add(PageKit.settingsCard("Mod 中文搜索字典",
+        root.getChildren().add(PageKit.settingsCard(I18N.get("dlsettings.t0022"),
                 "",
                 dictBox));
 
@@ -256,25 +318,21 @@ public final class DownloadSettingsPage {
         NumberField split = numberField(DownloadSettings.KEY_SPLIT_PERCENT,
                 DownloadSettings.DEFAULT_SPLIT_PERCENT, DownloadSettings.MIN_SPLIT_PERCENT, DownloadSettings.MAX_SPLIT_PERCENT, "%");
         content.getChildren().addAll(
-                fieldRow("分块阈值", threshold.node(),
-                        "小于该大小的文件不开多线程，单连接下完（省掉合并开销），默认 "
-                                + DownloadSettings.DEFAULT_THRESHOLD_MB + " MB"),
-                fieldRow("最小碎片", piece.node(),
-                        "剩余量小于该值的分块不再切分，越小分块越细但连接更多，默认 "
-                                + DownloadSettings.DEFAULT_PIECE_LIMIT_KB + " KB"),
-                fieldRow("分裂点", split.node(),
-                        "在剩余量的该比例处切出新分块，值越小新线程越早接管尾部，默认 "
-                                + DownloadSettings.DEFAULT_SPLIT_PERCENT + "%"));
+                fieldRow(I18N.get("dlsettings.t0023"), threshold.node(),
+                        I18N.get("dlsettings.p0051", DownloadSettings.DEFAULT_THRESHOLD_MB)),
+                fieldRow(I18N.get("dlsettings.t0024"), piece.node(),
+                        I18N.get("dlsettings.r0002", DownloadSettings.DEFAULT_PIECE_LIMIT_KB)),
+                fieldRow(I18N.get("dlsettings.t0025"), split.node(),
+                        I18N.get("dlsettings.r0003", DownloadSettings.DEFAULT_SPLIT_PERCENT)));
 
-        content.getChildren().add(sectionDivider("速度"));
+        content.getChildren().add(sectionDivider(I18N.get("dlsettings.t0026")));
 
         // —— 速度 ——
         NumberField lowSpeed = numberField(DownloadSettings.KEY_LOW_SPEED_KBPS,
                 DownloadSettings.DEFAULT_LOW_SPEED_KBPS, DownloadSettings.MIN_LOW_SPEED_KBPS,
                 DownloadSettings.MAX_LOW_SPEED_KBPS, "KB/s");
-        content.getChildren().add(fieldRow("慢速触发线", lowSpeed.node(),
-                "全局实测速度低于该值时才为慢文件追加分块线程（文档建议 512~1024 KB/s），默认 "
-                        + DownloadSettings.DEFAULT_LOW_SPEED_KBPS + " KB/s"));
+        content.getChildren().add(fieldRow(I18N.get("dlsettings.t0027"), lowSpeed.node(),
+                I18N.get("dlsettings.k0025", DownloadSettings.DEFAULT_LOW_SPEED_KBPS + " KB/s")));
 
         // 限速：开关 + 数值（关闭时数值框禁用，避免「填了没生效」的困惑）。
         // 这一行不单独放「保存」——本区块统一由底部「保存高级设置」提交，避免同一页两个保存语义。
@@ -292,10 +350,10 @@ public final class DownloadSettingsPage {
         limitField.setDisable(!DownloadSettings.isSpeedLimitEnabled());
         HBox limitRow = new HBox(10, limitToggle, limit.node());
         limitRow.setAlignment(Pos.CENTER_LEFT);
-        content.getChildren().add(fieldRow("下载限速", limitRow,
-                "默认不限速。开启后只做全局令牌桶（所有分块共享一个额度），不做线程级限速"));
+        content.getChildren().add(fieldRow(I18N.get("dlsettings.t0028"), limitRow,
+                I18N.get("dlsettings.t0029")));
 
-        content.getChildren().add(sectionDivider("超时与换源"));
+        content.getChildren().add(sectionDivider(I18N.get("dlsettings.t0030")));
 
         // —— 停滞看门狗 ——
         // 这是补全链路上最关键的存活参数：单个 read 超过该时长没有拿到任何字节，
@@ -305,29 +363,26 @@ public final class DownloadSettingsPage {
         // DownloadFirstTryStallSec（默认 5s，可手动改 starlight-client.ini）。
         NumberField stall = numberField(DownloadSettings.KEY_STALL_TIMEOUT_SEC,
                 DownloadSettings.DEFAULT_STALL_TIMEOUT_SEC, DownloadSettings.MIN_STALL_TIMEOUT_SEC,
-                DownloadSettings.MAX_STALL_TIMEOUT_SEC, "秒");
-        content.getChildren().add(fieldRow("停滞判定", stall.node(),
-                "单个数据块超过该时长没到就判该源卡死并换源。太小会误杀慢速大文件，默认 "
-                        + DownloadSettings.DEFAULT_STALL_TIMEOUT_SEC + " 秒"
-                        + "（找到最后一条可用源时会自动放宽 2 倍，避免反复掐断唯一能用的路；"
-                        + "前面的候选用更快的 5 秒快速判定，坏源代价降到 1/3）"));
+                DownloadSettings.MAX_STALL_TIMEOUT_SEC, I18N.get("dlsettings.t0031"));
+        content.getChildren().add(fieldRow(I18N.get("dlsettings.t0032"), stall.node(),
+                I18N.get("dlsettings.p0052", DownloadSettings.DEFAULT_STALL_TIMEOUT_SEC)));
 
         NumberField connect = numberField(DownloadSettings.KEY_CONNECT_TIMEOUT_SEC,
                 DownloadSettings.DEFAULT_CONNECT_TIMEOUT_SEC, DownloadSettings.MIN_CONNECT_TIMEOUT_SEC,
-                DownloadSettings.MAX_CONNECT_TIMEOUT_SEC, "秒");
-        content.getChildren().add(fieldRow("建连超时", connect.node(),
-                "与源建立连接的最长等待，默认 " + DownloadSettings.DEFAULT_CONNECT_TIMEOUT_SEC + " 秒"));
+                DownloadSettings.MAX_CONNECT_TIMEOUT_SEC, I18N.get("dlsettings.t0033"));
+        content.getChildren().add(fieldRow(I18N.get("dlsettings.t0034"), connect.node(),
+                I18N.get("dlsettings.p0053", DownloadSettings.DEFAULT_CONNECT_TIMEOUT_SEC)));
 
-        content.getChildren().add(sectionDivider("操作"));
+        content.getChildren().add(sectionDivider(I18N.get("dlsettings.t0035")));
 
         // —— 保存 / 恢复默认 ——
-        Label hint = new Label("保存后立即生效，无需重启（并发下载数会就地调整线程池）");
+        Label hint = new Label(I18N.get("dlsettings.t0036"));
         hint.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
         hint.setWrapText(true);
         HBox.setHgrow(hint, Priority.ALWAYS);
         hint.setMinWidth(0);
 
-        Button saveAll = AppIcons.button("save", "保存高级设置");
+        Button saveAll = AppIcons.button("save", I18N.get("dlsettings.t0037"));
         saveAll.getStyleClass().add("btn-primary");
         saveAll.setMinWidth(Region.USE_PREF_SIZE);
         saveAll.setOnAction(e -> {
@@ -347,10 +402,10 @@ public final class DownloadSettingsPage {
                     clampField(connect.field(), DownloadSettings.MIN_CONNECT_TIMEOUT_SEC, DownloadSettings.MAX_CONNECT_TIMEOUT_SEC)));
             // 统一从配置表整体加载，避免「只改了字段没改 DownloadSettings」的分叉
             DownloadSettings.applyAll(ctx.config());
-            ctx.toast("高级下载设置已保存");
+            ctx.toast(I18N.get("dlsettings.t0038"));
         });
 
-        Button resetAll = AppIcons.button("refresh", "恢复默认");
+        Button resetAll = AppIcons.button("refresh", I18N.get("dlsettings.t0039"));
         resetAll.setMinWidth(Region.USE_PREF_SIZE);
         resetAll.setOnAction(e -> {
             DownloadSettings.resetToDefaults();
@@ -369,15 +424,15 @@ public final class DownloadSettingsPage {
             ctx.config().put(DownloadSettings.KEY_CONNECT_TIMEOUT_SEC, String.valueOf(DownloadSettings.getConnectTimeoutSec()));
             // saveConfig 顺带重建设置页 → 各控件回显默认值
             ctx.saveConfig();
-            ctx.toast("下载设置已恢复默认（含并发下载数）");
+            ctx.toast(I18N.get("dlsettings.t0040"));
         });
 
         HBox actionRow = new HBox(10, hint, resetAll, saveAll);
         actionRow.setAlignment(Pos.CENTER_LEFT);
         content.getChildren().add(actionRow);
 
-        return collapsibleCard("高级下载设置",
-                "分块、分裂与限速参数；调错可能更慢，不确定就保持默认", content);
+        return collapsibleCard(I18N.get("dlsettings.t0041"),
+                I18N.get("dlsettings.t0042"), content);
     }
 
     /**
@@ -391,12 +446,12 @@ public final class DownloadSettingsPage {
         titleLabel.getStyleClass().add("settings-card-title");
         Label descLabel = new Label(desc);
         descLabel.getStyleClass().add("settings-card-desc");
-        descLabel.setWrapText(true);
+        PageKit.cardTooltip(descLabel);
         VBox info = new VBox(3, titleLabel, descLabel);
         info.setMinWidth(0);
         HBox.setHgrow(info, Priority.ALWAYS);
 
-        Label chevron = new Label("▾  展开");
+        Label chevron = new Label(I18N.get("dlsettings.t0043"));
         chevron.getStyleClass().add("settings-card-desc");
         chevron.setMinWidth(Region.USE_PREF_SIZE);
 
@@ -411,7 +466,7 @@ public final class DownloadSettingsPage {
             boolean open = !content.isVisible();
             content.setVisible(open);
             content.setManaged(open);
-            chevron.setText(open ? "▴  收起" : "▾  展开");
+            chevron.setText(open ? I18N.get("dlsettings.t0044") : I18N.get("dlsettings.t0045"));
         });
 
         VBox card = new VBox(12, header, content);
@@ -498,14 +553,13 @@ public final class DownloadSettingsPage {
 
     /** 在后台统计并展示两本字典的条目数与来源（设置页打开时调用） */
     private void refreshDictionaryStatus(Label statusLabel) {
-        statusLabel.setText("正在读取字典...");
+        statusLabel.setText(I18N.get("dlsettings.t0046"));
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             ModDictionaryManager.DictionaryStatus modStatus = ModDictionaryManager.status(
                     ModDictionaryManager.MOD_RESOURCE, ModDictionaryManager.MOD_CACHE_FILE);
             ModDictionaryManager.DictionaryStatus packStatus = ModDictionaryManager.status(
                     ModDictionaryManager.MODPACK_RESOURCE, ModDictionaryManager.MODPACK_CACHE_FILE);
-            String text = "模组字典：" + describeDictionary(modStatus)
-                    + "　整合包字典：" + describeDictionary(packStatus);
+            String text = I18N.get("dlsettings.p0054", describeDictionary(modStatus), describeDictionary(packStatus));
             Platform.runLater(() -> statusLabel.setText(text));
         });
     }
@@ -513,7 +567,7 @@ public final class DownloadSettingsPage {
     /** 字典状态的可读描述：条目数 + 来源 + 更新时间 */
     private static String describeDictionary(ModDictionaryManager.DictionaryStatus status) {
         StringBuilder builder = new StringBuilder();
-        builder.append(status.entryCount()).append(" 条（").append(status.describeSource()).append('）');
+        builder.append(status.entryCount()).append(I18N.get("dlsettings.t0047")).append(status.describeSource()).append('）');
         if (status.updatedAt() != null) {
             builder.append('，').append(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
                     .format(java.time.LocalDateTime.ofInstant(status.updatedAt(), java.time.ZoneId.systemDefault())));

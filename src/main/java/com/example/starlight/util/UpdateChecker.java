@@ -1,5 +1,7 @@
 package com.example.starlight.util;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.Endpoints;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -101,7 +103,7 @@ public final class UpdateChecker {
     /** 版本检查来源 */
     public enum Source {
         /** 星光MC社区官方服务器（优先） */
-        OFFICIAL("星光MC社区官方服务器"),
+        OFFICIAL(I18N.get("util.t0030")),
         /** GitHub 仓库发行版 API（官方不可用时的降级来源） */
         GITHUB("GitHub"),
         /** Gitee 仓库发行版 API（官方不可用时的降级来源） */
@@ -234,7 +236,7 @@ public final class UpdateChecker {
             try {
                 result = checkBlocking(currentVersion);
             } catch (Throwable t) {
-                result = failure("检查更新失败：" + describe(t));
+                result = failure(I18N.get("util.p0056", describe(t)));
             }
             final UpdateResult r = result;
             Platform.runLater(() -> callback.accept(r));
@@ -279,15 +281,15 @@ public final class UpdateChecker {
             }
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            failures.add("检查更新被中断");
+            failures.add(I18N.get("util.t0031"));
         } catch (Exception ex) {
             // 竞速线程池本身出问题（理论上不会）：照样给出失败结果，不把异常抛给调用方
-            failures.add("降级检查异常：" + describe(ex));
+            failures.add(I18N.get("util.p0057", describe(ex)));
         } finally {
             race.shutdownNow();   // 中断落败的一方（其对结果已无影响）
         }
-        return failure("官方服务器不可用（" + officialError + "）；"
-                + String.join("；", failures));
+        return failure(I18N.get("util.p0058", officialError + "）；"
+                + String.join("；", failures)));
     }
 
     /** 竞速任务体：把结果或失败原因投进同一个队列，供主线程「先到先取」 */
@@ -306,19 +308,18 @@ public final class UpdateChecker {
         String url = RELEASES_API_URL;
         HttpResponse<String> resp = send(client, url, currentVersion);
         if (resp.statusCode() != 200) {
-            throw new IOException("官方服务器响应异常 (HTTP " + resp.statusCode() + ")"
-                    + statusDetail(resp));
+            throw new IOException(I18N.get("util.p0059", resp.statusCode() + ")"
+                    + statusDetail(resp)));
         }
-        JsonObject obj = asObject(resp.body(), "官方服务器");
+        JsonObject obj = asObject(resp.body(), I18N.get("util.t0032"));
         // ok=false 表示服务端认为更新服务不可用，按失败处理并降级
         if (obj.has("ok") && !obj.get("ok").isJsonNull() && !obj.get("ok").getAsBoolean()) {
             String detail = string(obj, "error");
-            throw new IOException("官方服务器返回 ok=false（更新服务暂不可用）"
-                    + (isBlank(detail) ? "" : "：" + detail));
+            throw new IOException(I18N.get("util.p0060", (isBlank(detail) ? "" : "：" + detail)));
         }
         String version = string(obj, "version");
         if (isBlank(version)) {
-            throw new IOException("官方服务器响应缺少 version 字段");
+            throw new IOException(I18N.get("util.t0033"));
         }
         return new Candidate(
                 stripV(version),
@@ -409,31 +410,31 @@ public final class UpdateChecker {
             if (c != null) return c;
         } else if (latest.statusCode() != 404) {
             // 404 = 仓库还没有发行版，属于正常情况，继续往下试；其它状态码视为该来源失败
-            throw new IOException(Source.GITHUB.label() + " 响应异常 (HTTP " + latest.statusCode() + ")"
-                    + statusDetail(latest));
+            throw new IOException(I18N.get("update.r0001", Source.GITHUB.label(),
+                    latest.statusCode(), statusDetail(latest)));
         }
 
         // ② 发行版列表（latest 为 404 时的兜底）
         HttpResponse<String> releases = send(client, base + "/releases", appUa);
         if (releases.statusCode() == 200) {
             Candidate c = bestGitHubRelease(Source.GITHUB, repo,
-                    asArray(releases.body(), Source.GITHUB.label() + " 发行版列表"));
+                    asArray(releases.body(), I18N.get("update.r0002", Source.GITHUB.label())));
             if (c != null) return c;
         } else if (releases.statusCode() != 404) {
-            throw new IOException(Source.GITHUB.label() + " 发行版列表响应异常 (HTTP "
-                    + releases.statusCode() + ")" + statusDetail(releases));
+            throw new IOException(I18N.get("update.r0003", Source.GITHUB.label(),
+                    releases.statusCode(), statusDetail(releases)));
         }
 
         // ③ 标签列表（仓库只有 tag、没有 Release 时的兜底）
         HttpResponse<String> tags = send(client, base + "/tags", appUa);
         if (tags.statusCode() != 200) {
-            throw new IOException(Source.GITHUB.label() + " 标签列表响应异常 (HTTP "
-                    + tags.statusCode() + ")" + statusDetail(tags));
+            throw new IOException(I18N.get("update.r0004", Source.GITHUB.label(),
+                    tags.statusCode(), statusDetail(tags)));
         }
         Candidate c = bestTag(Source.GITHUB, repo,
-                asArray(tags.body(), Source.GITHUB.label() + " 标签列表"));
+                asArray(tags.body(), I18N.get("update.r0005", Source.GITHUB.label())));
         if (c == null) {
-            throw new IOException(Source.GITHUB.label() + " 仓库没有任何版本号形式的发行版或标签");
+            throw new IOException(I18N.get("update.r0006", Source.GITHUB.label()));
         }
         return c;
     }
@@ -467,17 +468,17 @@ public final class UpdateChecker {
         String url = Source.GITEE.webBase(repo) + "/releases?per_page=100";
         HttpResponse<String> resp = send(client, url, GITEE_BROWSER_UA, "application/json");
         if (resp.statusCode() != 200) {
-            throw new IOException(Source.GITEE.label() + " 响应异常 (HTTP " + resp.statusCode() + ")"
-                    + statusDetail(resp));
+            throw new IOException(I18N.get("update.r0007", Source.GITEE.label(),
+                    resp.statusCode(), statusDetail(resp)));
         }
         JsonObject root = asObject(resp.body(), Source.GITEE.label());
         if (!root.has("releases") || !root.get("releases").isJsonArray()) {
             // 常见的失败形态：Accept 没写对，拿回整页 HTML（asObject 会先报「不是 JSON 对象」）
-            throw new IOException(Source.GITEE.label() + " 响应缺少 releases 数组");
+            throw new IOException(I18N.get("update.r0008", Source.GITEE.label()));
         }
         Candidate c = bestGiteeRelease(repo, root.getAsJsonArray("releases"));
         if (c == null) {
-            throw new IOException(Source.GITEE.label() + " 仓库没有任何版本号形式的发行版");
+            throw new IOException(I18N.get("update.r0009", Source.GITEE.label()));
         }
         return c;
     }
@@ -675,27 +676,27 @@ public final class UpdateChecker {
 
     private static JsonObject asObject(String body, String who) throws IOException {
         JsonElement el = parse(body, who);
-        if (!el.isJsonObject()) throw new IOException(who + " 返回的不是 JSON 对象");
+        if (!el.isJsonObject()) throw new IOException(I18N.get("update.r0010", who));
         return el.getAsJsonObject();
     }
 
     private static JsonArray asArray(String body, String who) throws IOException {
         JsonElement el = parse(body, who);
-        if (!el.isJsonArray()) throw new IOException(who + " 返回的不是 JSON 数组");
+        if (!el.isJsonArray()) throw new IOException(I18N.get("update.r0011", who));
         return el.getAsJsonArray();
     }
 
     private static JsonElement parse(String body, String who) throws IOException {
-        if (isBlank(body)) throw new IOException(who + " 返回内容为空");
+        if (isBlank(body)) throw new IOException(I18N.get("update.r0012", who));
         // 站点防护（WAF / JS 跳转挑战）拦截时会以 200 返回一个 HTML 页面，
         // 明确点出这种情况，免得排查时只看到「无法解析为 JSON」而不知道是被拦了
         if (body.stripLeading().startsWith("<")) {
-            throw new IOException(who + " 返回的是网页（HTML）而不是 JSON，疑似被站点防护 / WAF 拦截");
+            throw new IOException(I18N.get("update.r0013", who));
         }
         try {
             return JsonParser.parseString(body);
         } catch (Exception ex) {
-            throw new IOException(who + " 返回的数据无法解析为 JSON", ex);
+            throw new IOException(I18N.get("update.r0014", who), ex);
         }
     }
 
@@ -745,7 +746,7 @@ public final class UpdateChecker {
 
     private static String describe(Throwable t) {
         String msg = t == null ? null : t.getMessage();
-        return isBlank(msg) ? (t == null ? "未知错误" : t.getClass().getSimpleName()) : msg;
+        return isBlank(msg) ? (t == null ? I18N.get("util.t0034") : t.getClass().getSimpleName()) : msg;
     }
 
     private static UpdateResult toResult(Candidate c) {

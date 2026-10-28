@@ -1,5 +1,7 @@
 package com.example.starlight.newui.download;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.ui.FabMenu;
@@ -133,19 +135,19 @@ public final class DownloadTaskManager {
         root.setPadding(new Insets(0, 4, 0, 0));
         VBox.setVgrow(root, Priority.ALWAYS);
 
-        Button backBtn = AppIcons.button("back", "返回");
+        Button backBtn = AppIcons.button("back", I18N.get("download.t0032"));
         backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> goBack());
-        Label titleLabel = new Label("下载管理");
+        Label titleLabel = new Label(I18N.get("download.t0033"));
         // 页面级标题统一用 content-title（19px）；home-card-title 是卡片内小节标题（12px）
         titleLabel.getStyleClass().add("content-title");
         Region headerSpacer = new Region();
         HBox.setHgrow(headerSpacer, Priority.ALWAYS);
         long running = tasks.stream().filter(t -> t.status() == DownloadTaskStatus.RUNNING).count();
-        Label summary = new Label(tasks.isEmpty() ? "暂无下载任务"
-                : ("共 " + tasks.size() + " 个任务" + (running > 0 ? "，进行中 " + running + " 个" : "")));
+        Label summary = new Label(tasks.isEmpty() ? I18N.get("download.t0060")
+                : I18N.get("dtm.r0001", tasks.size(), running > 0 ? I18N.get("dtm.r0002", running) : ""));
         summary.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
-        Button clearBtn = AppIcons.button("trash", "清空已完成");
+        Button clearBtn = AppIcons.button("trash", I18N.get("download.t0034"));
         clearBtn.getStyleClass().add("back-btn");
         clearBtn.setDisable(tasks.stream().noneMatch(t -> t.status() != DownloadTaskStatus.RUNNING));
         clearBtn.setOnAction(e -> {
@@ -159,7 +161,7 @@ public final class DownloadTaskManager {
 
         VBox list = new VBox(10);
         if (tasks.isEmpty()) {
-            Label empty = new Label("还没有下载任务。在下载中心安装模组或游戏版本后，任务会出现在这里。");
+            Label empty = new Label(I18N.get("download.t0035"));
             empty.setWrapText(true);
             empty.setStyle("-fx-text-fill: -sl-text-dim; -fx-padding: 20;");
             list.getChildren().add(empty);
@@ -193,7 +195,7 @@ public final class DownloadTaskManager {
      */
     public void buildFab(FabMenu fabMenu) {
         this.fabMenu = fabMenu;
-        fabMenu.setItem(FAB_SLOT, "download", "下载管理", () -> {
+        fabMenu.setItem(FAB_SLOT, "download", I18N.get("download.t0036"), () -> {
             backKey = (host.currentPageKey() == null || "downloadManager".equals(host.currentPageKey()))
                     ? "download" : host.currentPageKey();
             host.switchToPage("downloadManager");

@@ -1,6 +1,7 @@
 package com.example.starlight.newui.ui;
 
 import com.example.starlight.newui.LauncherContext;
+import com.example.starlight.util.I18N;
 
 import javafx.animation.PauseTransition;
 import javafx.geometry.Insets;
@@ -13,8 +14,10 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
@@ -38,42 +41,64 @@ public final class PageKit {
     private PageKit() {
     }
 
-    // 导航数据源（新 IA · 6 组 16 项） //
+    // 导航数据源（新 IA · 6 组 15 项；「游戏账户档案」已并入「账户」） //
+    //
+    // 这里存的是 **i18n 键**，不是译文。数组是 static final、在类初始化时就固定，
+    // 若直接放 I18N.get(...) 的返回值，语言会被冻结在类加载那一刻；
+    // 想让界面跟随配置切换，必须在每次渲染时用 navLabel() / sectionLabel() 现取。
 
-    /** 分组标题数组：与 {@link #SETTINGS_NAV_ITEMS} 的顺序一一对应（重构 §5.1） */
+    /** 分组标题键：与 {@link #SETTINGS_NAV_ITEMS} 的顺序一一对应（重构 §5.1） */
     public static final String[] SETTINGS_NAV_SECTIONS = {
-            "通用", "游戏", "个性化", "网络", "联机", "其他"
+            "navsec.general", "navsec.game", "navsec.personalize", "navsec.network",
+            "navsec.online", "navsec.other"
     };
 
-    /** 每个分组包含的导航项数（用于把扁平数组切回分组渲染；总和必须等于 SETTINGS_NAV_ITEMS.length = 16） */
-    public static final int[] SETTINGS_NAV_SECTION_SIZES = {2, 5, 3, 2, 1, 3};
+    /** 每个分组包含的导航项数（用于把扁平数组切回分组渲染；总和必须等于 SETTINGS_NAV_ITEMS.length = 15） */
+    public static final int[] SETTINGS_NAV_SECTION_SIZES = {2, 4, 3, 2, 1, 3};
 
     /**
      * 设置页导航项（新 IA 单一数据源，重构 §7 导航数据源约定）：
      * 侧边栏（LauncherView.buildSidebar）与顶部下拉导航都从这里渲染，禁止各写一份。
+     *
+     * <p>每项是 {@code {稳定 id, i18n 键}}。id 参与路由与 CSS 查找，<b>永不翻译</b>；
+     * 显示名一律经 {@link #navLabel(String)} 现取。
      *
      * <p>已移除的旧 id（sidebarLicense / sidebarMod / sidebarLanguage / sidebarColorBlind）
      * 不在清单中——深链重定向见 {@code NavRouter.resolve}，内部页间跳转也必须走
      * {@code LauncherContext.switchToSettings}（其内部同样过 NavRouter）。
      */
     public static final String[][] SETTINGS_NAV_ITEMS = {
-            {"sidebarAccount", "账户"},
-            {"sidebarAbout", "关于"},
-            {"sidebarGameAccount", "游戏账户档案"},
-            {"sidebarJvm", "Java 与内存"},
-            {"sidebarGameDir", "游戏目录"},
-            {"sidebarVersionSettings", "版本独立设置"},
-            {"sidebarAdvanced", "高级设置"},
-            {"sidebarTheme", "主题与背景"},
-            {"sidebarMainUi", "主界面"},
-            {"sidebarAccessibility", "辅助功能"},
-            {"sidebarDownload", "下载"},
-            {"sidebarProxy", "代理"},
-            {"sidebarMultiplayer", "联机设置"},
-            {"sidebarFeedback", "服务与反馈"},
-            {"sidebarSponsor", "赞助我们"},
-            {"sidebarDev", "开发者选项"}
+            {"sidebarAccount", "nav.account"},
+            {"sidebarAbout", "nav.about"},
+            {"sidebarJvm", "nav.jvm"},
+            {"sidebarGameDir", "nav.gameDir"},
+            {"sidebarVersionSettings", "nav.versionSettings"},
+            {"sidebarAdvanced", "nav.advanced"},
+            {"sidebarTheme", "nav.theme"},
+            {"sidebarMainUi", "nav.mainUi"},
+            {"sidebarAccessibility", "nav.accessibility"},
+            {"sidebarDownload", "nav.download"},
+            {"sidebarProxy", "nav.proxy"},
+            {"sidebarMultiplayer", "nav.multiplayer"},
+            {"sidebarFeedback", "nav.feedback"},
+            {"sidebarSponsor", "nav.sponsor"},
+            {"sidebarDev", "nav.dev"}
     };
+
+    /** 导航 id → 当前语言下的显示名（查不到回退 id 本身，便于发现漏配） */
+    public static String navLabel(String id) {
+        if (id == null) return "";
+        for (String[] item : SETTINGS_NAV_ITEMS) {
+            if (item[0].equals(id)) return I18N.get(item[1]);
+        }
+        return id;
+    }
+
+    /** 分组下标 → 当前语言下的分组标题 */
+    public static String sectionLabel(int index) {
+        if (index < 0 || index >= SETTINGS_NAV_SECTIONS.length) return "";
+        return I18N.get(SETTINGS_NAV_SECTIONS[index]);
+    }
 
     public static VBox settingsPage(LauncherContext ctx, String title) {
         return settingsPage(ctx, title, null);
@@ -90,7 +115,7 @@ public final class PageKit {
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
         if (backTarget != null && !backTarget.isEmpty()) {
-            Button backBtn = AppIcons.button("back", "返回");
+            Button backBtn = AppIcons.button("back", I18N.get("pagekit.t0001"));
             backBtn.getStyleClass().add("back-btn");
             backBtn.setOnAction(e -> ctx.switchToPage(backTarget));
             header.getChildren().add(backBtn);
@@ -100,22 +125,24 @@ public final class PageKit {
         header.getChildren().add(titleLabel);
         root.getChildren().add(header);
         // 侧边栏隐藏时提供下拉导航，避免设置页内无法切换页面。
-        // 数据源与侧边栏同一份（SETTINGS_NAV_ITEMS），分组顺序命名天然一致（重构 §5.3）
+        // 数据源与侧边栏同一份（SETTINGS_NAV_ITEMS），分组顺序命名天然一致（重构 §5.3）。
+        // 下拉里显示的是译文，但回查用的是「解析后的显示名 == 本页标题」，
+        // 不依赖 item[1] 的字面内容——item[1] 现在是 i18n 键，不是文案。
         if ("false".equalsIgnoreCase(ctx.config().getOrDefault("ShowSidebar", "true"))) {
             ComboBox<String> nav = new ComboBox<>();
             nav.getStyleClass().add("select-field");
             nav.setMaxWidth(240);
-            for (String[] item : SETTINGS_NAV_ITEMS) nav.getItems().add(item[1]);
+            for (String[] item : SETTINGS_NAV_ITEMS) nav.getItems().add(navLabel(item[0]));
             for (String[] item : SETTINGS_NAV_ITEMS) {
-                if (item[1].equals(title)) {
-                    nav.setValue(item[1]);
+                if (navLabel(item[0]).equals(title)) {
+                    nav.setValue(navLabel(item[0]));
                     break;
                 }
             }
             nav.setOnAction(e -> {
                 if (nav.getValue() == null) return;
                 for (String[] item : SETTINGS_NAV_ITEMS) {
-                    if (item[1].equals(nav.getValue())) {
+                    if (navLabel(item[0]).equals(nav.getValue())) {
                         ctx.switchToSettings(item[0]);
                         break;
                     }
@@ -127,23 +154,95 @@ public final class PageKit {
     }
 
 
+    /**
+     * 卡片说明文字：单行显示（超出用省略号），完整内容放进 Tooltip。
+     *
+     * <p>用于「文字过多、原本要换行」的卡片：不再靠换行把卡片撑高，鼠标悬停即可看全文。
+     * 动态更新的文字请对已有 Label 调用 {@link #cardTooltip(Label)}（Tooltip 与文本保持同步）。
+     */
+    public static Label cardDesc(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("settings-card-desc");
+        cardTooltip(label);
+        return label;
+    }
+
+    /**
+     * 给卡片里的文字挂上「单行 + 省略号 + Tooltip 全文」。
+     *
+     * <p>Tooltip 文本与 Label 的文本属性绑定，状态/路径这类会在运行中更新的文字，
+     * 悬停时看到的也是最新内容；文字为空时不挂 Tooltip（避免弹出一个空白气泡）。
+     * 重复调用不会重复挂。
+     */
+    public static void cardTooltip(Label label) {
+        if (label == null || label.getProperties().containsKey(CARD_TOOLTIP_KEY)) return;
+        label.setWrapText(false);
+        label.setTextOverrun(OverrunStyle.ELLIPSIS);
+        // minWidth=0 才能被压窄并显示省略号；否则 Label 的最小宽度会反过来把卡片撑宽
+        label.setMinWidth(0);
+        label.setMaxWidth(Double.MAX_VALUE);
+        Tooltip tip = new Tooltip();
+        tip.textProperty().bind(label.textProperty());
+        // 长说明在 Tooltip 里换行显示，避免一条几百像素的横条
+        tip.setWrapText(true);
+        tip.setMaxWidth(420);
+        label.getProperties().put(CARD_TOOLTIP_KEY, tip);
+        applyCardTooltip(label, tip);
+        label.textProperty().addListener((o, a, b) -> applyCardTooltip(label, tip));
+    }
+
+    /** {@link #cardTooltip(Label)} 的标记键：同一个 Label 只挂一次 */
+    private static final String CARD_TOOLTIP_KEY = "sl.cardTooltip";
+
+    /** 按当前文本挂上/摘下 Tooltip（文本为空时不显示空白气泡） */
+    private static void applyCardTooltip(Label label, Tooltip tip) {
+        String text = label.getText();
+        boolean hasText = text != null && !text.isBlank();
+        if (hasText) {
+            if (label.getTooltip() != tip) label.setTooltip(tip);
+        } else if (label.getTooltip() == tip) {
+            label.setTooltip(null);
+        }
+    }
+
+    /**
+     * 移除设置页外壳的标题行。
+     *
+     * <p>用于「页面自带标题」的场景（例如账户页把「账户」换成卡片正上方的问候语）：
+     * 只摘掉 content-title 那枚文字，返回按钮等其它内容保留；整行被摘空时才连行移除。
+     * 传进来的 title 仍要照常提供给 {@link #settingsPage}——侧边栏隐藏时的下拉导航靠标题名回显当前页。
+     */
+    public static void removePageTitle(VBox page) {
+        if (page == null) return;
+        for (Node node : new java.util.ArrayList<>(page.getChildren())) {
+            if (!(node instanceof HBox header)) continue;
+            Node titleNode = null;
+            for (Node child : header.getChildren()) {
+                if (child instanceof Label label && label.getStyleClass().contains("content-title")) {
+                    titleNode = child;
+                    break;
+                }
+            }
+            if (titleNode == null) continue;
+            header.getChildren().remove(titleNode);
+            if (header.getChildren().isEmpty()) page.getChildren().remove(header);
+            return;
+        }
+    }
+
     public static HBox settingsCard(String title, String desc, Node control) {
         HBox card = new HBox(20);
         card.setAlignment(Pos.CENTER_LEFT);
         card.getStyleClass().add("settings-card");
         VBox info = new VBox(3);
         info.getStyleClass().add("settings-card-info");
-        // 说明区可以被压窄（desc 已开自动换行），把剩余宽度让给右侧控件
+        // 说明区可以被压窄（超长文字单行省略 + 悬停看全文），把剩余宽度让给右侧控件
         info.setMinWidth(0);
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("settings-card-title");
         info.getChildren().add(titleLabel);
         if (desc != null && !desc.isEmpty()) {
-            Label descLabel = new Label(desc);
-            descLabel.getStyleClass().add("settings-card-desc");
-            // 允许换行：长描述在窄空间自动换行收缩，避免撑大卡片/页面宽度
-            descLabel.setWrapText(true);
-            info.getChildren().add(descLabel);
+            info.getChildren().add(cardDesc(desc));
         }
         HBox.setHgrow(info, Priority.ALWAYS);
         if (control != null) {
@@ -155,6 +254,21 @@ public final class PageKit {
             card.getChildren().add(info);
         }
         return card;
+    }
+
+    /**
+     * 判断右侧控件里的提示文字是否与卡片说明重复。
+     *
+     * <p>历史写法在卡片里既给了 {@code desc}（卡片说明），又在右侧 VBox 里塞一个
+     * {@code hintLabel} 讲同一件事。中文短、挤得下；英文变长后这个 hint 被压成
+     * 一列几个字符宽（表现为右侧一条竖排文字）。这类重复提示直接去掉，
+     * 说明统一由卡片 desc 承担。
+     */
+    private static void stripRedundantHints(Node control, String desc) {
+        if (desc == null || desc.isBlank()) return;
+        if (!(control instanceof VBox v)) return;
+        v.getChildren().removeIf(child -> child instanceof Label lb
+                && lb.getStyleClass().contains("settings-hint"));
     }
 
     /**
@@ -174,10 +288,7 @@ public final class PageKit {
         titleLabel.getStyleClass().add("settings-card-title");
         info.getChildren().add(titleLabel);
         if (desc != null && !desc.isEmpty()) {
-            Label descLabel = new Label(desc);
-            descLabel.getStyleClass().add("settings-card-desc");
-            descLabel.setWrapText(true);
-            info.getChildren().add(descLabel);
+            info.getChildren().add(cardDesc(desc));
         }
         card.getChildren().add(info);
         if (control != null) {
@@ -223,9 +334,7 @@ public final class PageKit {
 
         Label summaryLabel;
         if (summary != null && !summary.isEmpty()) {
-            summaryLabel = new Label(summary);
-            summaryLabel.getStyleClass().add("settings-card-desc");
-            summaryLabel.setWrapText(true);
+            summaryLabel = cardDesc(summary);
             summaryLabel.setVisible(!open);
             summaryLabel.setManaged(!open);
         } else {
@@ -426,7 +535,7 @@ public final class PageKit {
         iconWrap.getStyleClass().add("error-state-icon");
         box.getChildren().add(iconWrap);
 
-        Label titleLabel = new Label(title == null || title.isBlank() ? "加载失败" : title);
+        Label titleLabel = new Label(title == null || title.isBlank() ? I18N.get("pagekit.t0002") : title);
         titleLabel.getStyleClass().add("error-state-title");
         titleLabel.setWrapText(true);
         titleLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
@@ -444,11 +553,11 @@ public final class PageKit {
         if (onReload != null) {
             HBox actions = new HBox(10);
             actions.setAlignment(Pos.CENTER);
-            Button reloadBtn = new Button("重新加载");
+            Button reloadBtn = new Button(I18N.get("pagekit.t0003"));
             reloadBtn.getStyleClass().addAll("btn-primary", "error-state-btn");
             reloadBtn.setGraphic(AppIcons.icon("refresh", 13, null));
             reloadBtn.setOnAction(e -> onReload.run());
-            Button copyBtn = new Button("复制错误代码");
+            Button copyBtn = new Button(I18N.get("pagekit.t0004"));
             copyBtn.getStyleClass().addAll("error-state-btn", "error-state-btn-secondary");
             copyBtn.setGraphic(AppIcons.icon("copy", 13, null));
             copyBtn.setOnAction(e -> {
@@ -457,9 +566,9 @@ public final class PageKit {
                 content.putString(text);
                 Clipboard.getSystemClipboard().setContent(content);
                 // 复制反馈：按钮文字短暂切到「已复制」再还原
-                copyBtn.setText("已复制");
+                copyBtn.setText(I18N.get("pagekit.t0005"));
                 PauseTransition restore = new PauseTransition(Duration.millis(1200));
-                restore.setOnFinished(ev -> copyBtn.setText("复制错误代码"));
+                restore.setOnFinished(ev -> copyBtn.setText(I18N.get("pagekit.t0006")));
                 restore.play();
             });
             actions.getChildren().addAll(reloadBtn, copyBtn);
@@ -507,12 +616,28 @@ public final class PageKit {
     }
 
     /** 灰色小字提示 */
+        /**
+     * 卡片内的浅色小字提示。
+     *
+     * <p>宽度约束为何是「最小 + 最大」而不是只设 minWidth(0)：
+     * Label 默认最小宽度等于整段文本宽度，放进 HBox 右侧、空间不足时会被压到
+     * 只剩几个字符一列（表现为一条竖排文字）。英文文案比中文长，这个问题会立刻暴露。
+     *
+     * <p>但单纯设 {@code minWidth(0)} 只是允许它被压得更狠（实测宽度从 115 掉到 47，
+     * 变成更高的竖条）。真正的解法是给一个**最小可用宽度**：空间不够时宁可压缩
+     * 左侧说明，也不把提示压成竖排。实测 minWidth=180 时提示稳定显示为两行。
+     */
     public static Label hintLabel(String text) {
         Label l = new Label(text);
         l.setWrapText(true);
+        l.setMinWidth(HINT_MIN_WIDTH);
+        l.setMaxWidth(SETTINGS_CONTROL_WIDTH);
         l.setStyle("-fx-font-size: 11px; -fx-text-fill: -sl-text-dim;");
         return l;
     }
+
+    /** 卡片内提示文字的最小可用宽度（低于此宽度会变成竖排一条，实测 180 起可正常换行） */
+    private static final double HINT_MIN_WIDTH = 180;
 
 
     // 多行输入：右下角三角把手拖拽调节高度 //
@@ -567,7 +692,7 @@ public final class PageKit {
         handle.setPrefSize(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
         handle.setMaxSize(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
         javafx.scene.control.Tooltip.install(handle,
-                new javafx.scene.control.Tooltip("上下拖动调节高度，双击恢复默认"));
+                new javafx.scene.control.Tooltip(I18N.get("pagekit.t0007")));
 
         StackPane wrap = new StackPane(area, handle);
         StackPane.setAlignment(handle, Pos.BOTTOM_RIGHT);
@@ -686,7 +811,7 @@ public static <T> void resetBatch(VBox stack, Pane itemHost, List<T> items,
     removeMoreRow(stack);
     itemHost.getChildren().clear();
     if (items == null || items.isEmpty()) {
-        Label none = new Label("没有匹配的内容");
+        Label none = new Label(I18N.get("pagekit.t0008"));
         none.setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20;");
         itemHost.getChildren().add(none);
         return;
@@ -711,7 +836,7 @@ public static <T> void renderBatch(VBox stack, Pane itemHost, List<T> items, int
     if (to >= items.size()) return;
 
     final int next = to;
-    Button more = new Button("向下加载更多（已显示 " + to + " / " + items.size() + "）");
+    Button more = new Button(I18N.get("pagekit.k0002", to + " / " + items.size() + "）"));
     more.getStyleClass().add("btn-primary");
     more.setStyle("-fx-padding: 6 20; -fx-font-size: 12px; -fx-background-radius: 18;");
     more.setMinWidth(Region.USE_PREF_SIZE);

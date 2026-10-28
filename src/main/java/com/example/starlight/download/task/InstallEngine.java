@@ -1,5 +1,7 @@
 package com.example.starlight.download.task;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.download.DownloadSettings;
 import com.example.starlight.download.mod.DownloadCoordinator;
 import com.example.starlight.download.mod.DownloadFileTask;
@@ -20,6 +22,7 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
 /**
@@ -29,6 +32,10 @@ import java.util.function.BiConsumer;
 public class InstallEngine {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(InstallEngine.class);
+
+    /** 取消文案统一取下载引擎常量：上层按 message 判断「是取消还是失败」 */
+    private static final String CANCELLED_MESSAGE =
+            com.example.starlight.download.engine.HttpDownloadEngine.CANCELLED_MESSAGE;
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -62,13 +69,30 @@ public class InstallEngine {
     public static boolean installVanilla(VersionDownloadService.VersionInfo versionEntry,
                                           String gameDir, DownloadProvider downloadProvider,
                                           ProgressCallback cb, String folderName) {
+        return installVanilla(versionEntry, gameDir, downloadProvider, cb, folderName, null);
+    }
+
+    /**
+     * 带取消支持的原版安装。
+     *
+     * <p>{@code cancel} 会一路传进分块下载器：置位后每个分块在下一次读缓冲（64KB）时就停下，
+     * <b>不需要等当前分块跑完</b>；方法随即抛出取消异常，由调用方决定怎么收尾（例如删除未完成的版本目录）。
+     *
+     * @param folderName 自定义版本文件夹名（null/空则使用版本号）
+     * @param cancel     取消标志（可为 null 表示不可取消）
+     * @throws IllegalStateException 用户取消，message 为 {@link HttpDownloadEngine#CANCELLED_MESSAGE}
+     */
+    public static boolean installVanilla(VersionDownloadService.VersionInfo versionEntry,
+                                          String gameDir, DownloadProvider downloadProvider,
+                                          ProgressCallback cb, String folderName, AtomicBoolean cancel) {
         String vId = versionEntry.getId();
         String dirName = (folderName == null || folderName.isBlank()) ? vId : folderName.trim();
         Path verDir = Path.of(gameDir, "versions", dirName);
+        throwIfCancelled(cancel);
         try { Files.createDirectories(verDir); } catch (IOException e) { return fail(cb, "Failed to create directory: "+e); }
 
         // 1. 获取版本JSON（通过 DownloadProvider 注入 URL）
-        report(cb, 5, "获取版本元数据...");
+        report(cb, 5, I18N.get("task.t0030"));
         String versionUrl = versionEntry.getUrl();
         String injectedUrl = downloadProvider.injectURL(versionUrl);
         String json = fetchString(injectedUrl);
@@ -77,6 +101,8 @@ public class InstallEngine {
             json = fetchString(versionUrl);
         }
         if (json == null) return fail(cb, "Failed to fetch version JSON");
+        throwIfCancelled(cancel);
+
         // 自定义目录名时改写 json 的 id，保证启动器按文件夹名识别；
         // 同时保留一份原版到标准版本目录，作为加载器（Fabric）的继承基底
         if (!dirName.equals(vId)) {
@@ -101,7 +127,7 @@ public class InstallEngine {
         //    调用方的进度回调在用户取消时会抛 CANCELLED_MESSAGE，从下载循环里穿透出来。
         //    sha1/size 传给下载引擎做落盘后校验与大小校验：BMCLAPI 实测会对大文件「吐出
         //    前 329B 后断流」，不校验的话残片会被当成功安装（2026-10-11 用户日志实证）
-        report(cb, 15, "下载客户端JAR...");
+        report(cb, 15, I18N.get("task.t0031"));
         JsonObject downloads = root.getAsJsonObject("downloads");
         if (downloads == null) return fail(cb, "No downloads field");
         JsonObject clientObj = downloads.getAsJsonObject("client");
@@ -112,7 +138,8 @@ public class InstallEngine {
         long jarSize = optLong(clientObj, "size", -1L);
         Path jarPath = verDir.resolve(dirName + ".jar");
         if (!downloadFileWithProvider(jarUrl, jarPath, downloadProvider, jarSha1, jarSize,
-                (pct, msg) -> report(cb, mapRange(pct, 0, 100, 15, 70), "下载客户端JAR " + pct + "%")))
+                (pct, msg) -> report(cb, mapRange(pct, 0, 100, 15, 70), I18N.get("task.p0099", pct + "%")),
+                cancel))
             return fail(cb, "Client JAR download failed");
         // 自定义目录时同步标准版本目录的基底 jar（供 Fabric 等加载器继承）
         if (!dirName.equals(vId)) {
@@ -124,12 +151,14 @@ public class InstallEngine {
 
         // 3. 下载 libraries（70→95）：每个文件都回报一次进度（此前每 5 个才报一次，
         //    首次安装几十个库文件时状态栏长时间不动）
-        report(cb, 70, "下载依赖库...");
+        report(cb, 70, I18N.get("task.t0032"));
         var libs = root.getAsJsonArray("libraries");
         if (libs != null && libs.size() > 0) {
             Path libDir = Path.of(gameDir, "libraries");
             int total = libs.size(), done = 0;
             for (int i = 0; i < total; i++) {
+                // 每个库文件之间也检查一次取消：库很多时不必等当前库下完才发现用户点了取消
+                throwIfCancelled(cancel);
                 JsonObject lib = libs.get(i).getAsJsonObject();
                 if (!shouldDownloadLib(lib)) continue;
                 JsonObject libDownloads = lib.getAsJsonObject("downloads");
@@ -144,22 +173,24 @@ public class InstallEngine {
                 if (!Files.exists(dest)) {
                     try { Files.createDirectories(dest.getParent()); } catch (IOException e) { continue; }
                     downloadFileWithProvider(libUrl, dest, downloadProvider,
-                            jsonStr(artifact, "sha1"), optLong(artifact, "size", -1L), null);
+                            jsonStr(artifact, "sha1"), optLong(artifact, "size", -1L), null, cancel);
                 }
                 done++;
-                report(cb, mapRange(done, 0, Math.max(total, 1), 70, 95), "库文件: " + done + "/" + total);
+                report(cb, mapRange(done, 0, Math.max(total, 1), 70, 95), I18N.get("task.p0100", done + "/" + total));
             }
         }
 
+        throwIfCancelled(cancel);
+
         // 4. SHA1 校验客户端JAR（致命：残片 jar 装出去只会在启动游戏时报难查的加密错误）
-        report(cb, 96, "校验文件完整性...");
+        report(cb, 96, I18N.get("task.t0033"));
         String sha1 = jsonStr(clientObj, "sha1");
         if (sha1 != null && !verifySha1(jarPath, sha1)) {
             try { Files.deleteIfExists(jarPath); } catch (IOException ignored) {}
-            return fail(cb, "客户端JAR校验失败（下载不完整），请重试安装");
+            return fail(cb, I18N.get("task.t0034"));
         }
 
-        report(cb, 100, "安装完成: " + dirName);
+        report(cb, 100, I18N.get("task.p0101", dirName));
         return true;
     }
 
@@ -177,7 +208,7 @@ public class InstallEngine {
         try { Files.createDirectories(verDir); } catch (IOException e) { return fail(cb, "Failed to create directory: "+e); }
 
         // 1. 获取版本JSON
-        report(cb, 5, "获取版本元数据...");
+        report(cb, 5, I18N.get("task.t0035"));
         String json = fetchWithMirrors(versionEntry.getUrl(), mirrorChain);
         if (json == null) return fail(cb, "Failed to fetch version JSON");
         try { Files.writeString(verDir.resolve(vId + ".json"), json); } catch (IOException e) {}
@@ -185,7 +216,7 @@ public class InstallEngine {
         JsonObject root = GSON.fromJson(json, JsonObject.class);
 
         // 2. 下载 client.jar
-        report(cb, 15, "下载客户端JAR...");
+        report(cb, 15, I18N.get("task.t0036"));
         JsonObject downloads = root.getAsJsonObject("downloads");
         if (downloads == null) return fail(cb, "No downloads field");
         String jarUrl = jsonStr(downloads.getAsJsonObject("client"), "url");
@@ -195,7 +226,7 @@ public class InstallEngine {
             return fail(cb, "Client JAR download failed");
 
         // 3. 下载 libraries
-        report(cb, 40, "下载依赖库...");
+        report(cb, 40, I18N.get("task.t0037"));
         var libs = root.getAsJsonArray("libraries");
         if (libs != null && libs.size() > 0) {
             Path libDir = Path.of(gameDir, "libraries");
@@ -217,17 +248,17 @@ public class InstallEngine {
                 }
                 done++;
                 if (done % 5 == 0)
-                    report(cb, 40 + (done * 50 / total), "库文件: " + done + "/" + total);
+                    report(cb, 40 + (done * 50 / total), I18N.get("task.p0102", done + "/" + total));
             }
         }
 
         // 4. SHA1 校验客户端JAR
-        report(cb, 95, "校验文件完整性...");
+        report(cb, 95, I18N.get("task.t0038"));
         String sha1 = jsonStr(downloads.getAsJsonObject("client"), "sha1");
         if (sha1 != null && !verifySha1(jarPath, sha1))
             System.err.println("[InstallEngine] SHA1 verification failed: " + jarPath);
 
-        report(cb, 100, "安装完成: " + vId);
+        report(cb, 100, I18N.get("task.p0103", vId));
         return true;
     }
 
@@ -278,31 +309,50 @@ public class InstallEngine {
     /** 下载文件(带SHA1校验)，使用 DownloadProvider 注入 URL */
     public static boolean downloadFileWithProvider(String url, Path dest,
                                                     DownloadProvider provider, String expectedSha1) {
-        return downloadFileWithProvider(url, dest, provider, expectedSha1, -1L, null);
+        return downloadFileWithProvider(url, dest, provider, expectedSha1, -1L, null, null);
     }
 
     public static boolean downloadFileWithProvider(String url, Path dest, DownloadProvider provider,
                                                     String expectedSha1, long expectedSize,
                                                     ProgressCallback progress) {
+        return downloadFileWithProvider(url, dest, provider, expectedSha1, expectedSize, progress, null);
+    }
+
+    /**
+     * 下载文件（带取消支持）。
+     *
+     * @param cancel 取消标志（可为 null）；置位后协调器侧任务立即取消，不再启动兜底下载，
+     *               并抛出取消异常让上层停止整条安装流程
+     */
+    public static boolean downloadFileWithProvider(String url, Path dest, DownloadProvider provider,
+                                                    String expectedSha1, long expectedSize,
+                                                    ProgressCallback progress, AtomicBoolean cancel) {
+        throwIfCancelled(cancel);
         try {
             DownloadSourceChain chain = DownloadSourceChain.fromProvider(url, provider);
             if (chain != null && !chain.getSources().isEmpty()) {
-                if (downloadViaCoordinator(dest, chain, expectedSha1, expectedSize, progress)) {
+                if (downloadViaCoordinator(dest, chain, expectedSha1, expectedSize, progress, cancel)) {
                     return true;
                 }
-                LOG.warn("协调器未完成，回退单流兜底: {}", url);
+                LOG.warn(I18N.get("task.t0039"), url);
+                // 协调器返回 false 也可能是被取消（用户点取消）——回退前再确认一次，
+                // 否则兜底链路会重新建连，看起来像「取消没生效」
+                throwIfCancelled(cancel);
             }
         } catch (RuntimeException e) {
             if (isCancellation(e)) throw e;
-            LOG.warn("协调器链路异常，回退单流兜底: {} -> {}", url, e.getMessage());
+            LOG.warn(I18N.get("task.t0040"), url, e.getMessage());
         } catch (Exception e) {
-            LOG.warn("协调器链路异常，回退单流兜底: {} -> {}", url, e.getMessage());
+            LOG.warn(I18N.get("task.t0041"), url, e.getMessage());
         }
         // 旧单流链路兜底：先注入镜像再回退官方原始 URL，downloadSingle 已带读超时与换候选
         String injected = provider.injectURL(url);
-        boolean ok = downloadSingle(dest, injected, expectedSha1, progress);
-        if (!ok && !injected.equals(url)) {
-            ok = downloadSingle(dest, url, expectedSha1, progress);
+        boolean ok = downloadSingle(dest, injected, expectedSha1, progress, cancel);
+        if (!ok) {
+            throwIfCancelled(cancel);
+            if (!injected.equals(url)) {
+                ok = downloadSingle(dest, url, expectedSha1, progress, cancel);
+            }
         }
         return ok;
     }
@@ -313,10 +363,13 @@ public class InstallEngine {
      * <p>分块缓存目录 = 目标父目录 {@code .download-cache/<sha1>}；expectedSha1 同时作为
      * 文件标识与校验值，expectedSize &gt; 0 时协调器会做 Content-Length 大小校验
      * （不符即切源——「200 但截断」的响应在这里就被拦下）。
+     *
+     * <p>{@code cancel} 置位后：轮询立即结束并 {@link DownloadFileTask#cancel()}，
+     * 各分块线程在下一次读缓冲时就停下——不会等整个分块下完。
      */
     private static boolean downloadViaCoordinator(Path dest, DownloadSourceChain chain,
                                                   String expectedSha1, long expectedSize,
-                                                  ProgressCallback progress) throws Exception {
+                                                  ProgressCallback progress, AtomicBoolean cancel) throws Exception {
         Path cacheRoot = dest.getParent() == null ? Path.of(".") : dest.getParent();
         DownloadFileTask task = new DownloadFileTask(
                 dest, cacheRoot, expectedSha1,
@@ -328,6 +381,11 @@ public class InstallEngine {
         int lastPct = -1;
         try {
             while (System.currentTimeMillis() < deadline) {
+                // 每 200ms 轮询一次取消：分块线程各自按 64KB 检查 task.isCancelled()，
+                // 所以这里一旦 cancel 置位，整条下载在毫秒级停下
+                if (cancel != null && cancel.get()) {
+                    throw new IllegalStateException(CANCELLED_MESSAGE);
+                }
                 DownloadFileTask.State s = task.getState();
                 if (s == DownloadFileTask.State.SUCCESS) {
                     if (progress != null) progress.onProgress(100, null);
@@ -335,8 +393,9 @@ public class InstallEngine {
                 }
                 if (s == DownloadFileTask.State.FAILED || s == DownloadFileTask.State.CANCELLED) {
                     Throwable err = task.getLastError();
-                    LOG.warn("协调器下载未完成: {} -> {}", dest,
-                            err == null ? "未知原因" : err.getMessage());
+                    LOG.warn(I18N.get("task.t0073"), dest,
+                            err == null ? I18N.get("task.t0074") : err.getMessage());
+                    throwIfCancelled(cancel);
                     return false;
                 }
                 if (progress != null) {
@@ -360,11 +419,12 @@ public class InstallEngine {
     }
 
     private static boolean downloadSingle(Path dest, String url, String expectedSha1,
-                                          ProgressCallback progress) {
+                                          ProgressCallback progress, AtomicBoolean cancel) {
+        throwIfCancelled(cancel);
         try {
             for (int attempt = 0; attempt < 3; attempt++) {
                 try {
-                    return downloadOnce(dest, url, expectedSha1, progress);
+                    return downloadOnce(dest, url, expectedSha1, progress, cancel);
                 } catch (Exception e) {
                     // 用户取消（回调抛出的 CANCELLED_MESSAGE）：清掉半截文件并立刻穿透，
                     // 不能被下面的重试逻辑吞掉，否则「取消」要等到下载完才生效
@@ -396,7 +456,7 @@ public class InstallEngine {
      * 卡死立刻断开换源；慢但在动（包间隔 < 15s）不受影响。
      */
     private static boolean downloadOnce(Path dest, String url, String expectedSha1,
-                                        ProgressCallback progress) throws IOException {
+                                        ProgressCallback progress, AtomicBoolean cancel) throws IOException {
         java.net.HttpURLConnection conn =
                 (java.net.HttpURLConnection) URI.create(url).toURL().openConnection();
         conn.setConnectTimeout(DownloadSettings.getConnectTimeoutMs());
@@ -417,6 +477,10 @@ public class InstallEngine {
                 int lastPct = -1;
                 int n;
                 while ((n = in.read(buffer)) != -1) {
+                    // 单流兜底也要立即响应取消：每读一块（64KB）检查一次标志
+                    if (cancel != null && cancel.get()) {
+                        throw new IllegalStateException(CANCELLED_MESSAGE);
+                    }
                     out.write(buffer, 0, n);
                     GlobalSpeedLimiter.getInstance().acquire(n); // 与其他引擎同一限速口径
                     com.example.starlight.util.NetTrafficStats.recordBytes(n); // 全局流量统计
@@ -455,10 +519,17 @@ public class InstallEngine {
         return false;
     }
 
-    /** 是否为调用方取消（进度回调抛出的统一文案） */
+    /** 是否为调用方取消（统一文案，见 {@link HttpDownloadEngine#CANCELLED_MESSAGE}） */
     private static boolean isCancellation(Throwable e) {
         return e instanceof RuntimeException
-                && com.example.starlight.download.engine.HttpDownloadEngine.CANCELLED_MESSAGE.equals(e.getMessage());
+                && CANCELLED_MESSAGE.equals(e.getMessage());
+    }
+
+    /** 取消时抛出让整条安装链路立刻退出；文案与下载引擎统一，供上层识别 */
+    private static void throwIfCancelled(AtomicBoolean cancel) {
+        if (cancel != null && cancel.get()) {
+            throw new IllegalStateException(CANCELLED_MESSAGE);
+        }
     }
 
     /** 将 [inMin,inMax] 区间的值线性映射到 [outMin,outMax]（inMax <= inMin 时返回 outMin） */

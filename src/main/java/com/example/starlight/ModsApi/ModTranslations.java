@@ -1,5 +1,7 @@
 package com.example.starlight.ModsApi;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.util.TextUtils;
 
 import java.util.ArrayList;
@@ -457,7 +459,7 @@ public enum ModTranslations {
         public Mod(String line) {
             String[] items = line.split(";", -1);
             if (items.length != 6) {
-                throw new IllegalArgumentException("非法字典行，期望 6 个字段: " + line);
+                throw new IllegalArgumentException(I18N.get("modsapi.p0084", line));
             }
             this.curseforge = items[0].trim();
             this.mcmod = items[1].trim();

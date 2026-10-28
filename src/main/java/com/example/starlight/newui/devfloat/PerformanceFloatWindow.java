@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.newui.devfloat;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.util.SystemInfoMonitor;
 
 import javafx.scene.control.Label;
@@ -21,7 +23,7 @@ public final class PerformanceFloatWindow extends DevFloatWindow {
     private Label summary;
 
     private PerformanceFloatWindow() {
-        super("性能监控", 344, 226);
+        super(I18N.get("devfloat.t0017"), 344, 226);
     }
 
     @Override
@@ -30,10 +32,10 @@ public final class PerformanceFloatWindow extends DevFloatWindow {
         chart = new FloatLineChart(320, 160);
         summary = new Label();
         chart.addSeries("CPU", Color.web("#4f8ef7"), v -> String.format("%.0f%%", v));
-        chart.addSeries("内存", Color.web("#22c55e"), v -> String.format("%.0f%%", v));
-        chart.addSeries("磁盘", Color.web("#f59e0b"), v -> String.format("%.1fMB/s", v));
+        chart.addSeries(I18N.get("devfloat.t0018"), Color.web("#22c55e"), v -> String.format("%.0f%%", v));
+        chart.addSeries(I18N.get("devfloat.t0019"), Color.web("#f59e0b"), v -> String.format("%.1fMB/s", v));
         summary.setStyle("-fx-text-fill: #d1d5db; -fx-font-size: 11px; -fx-font-family: 'Consolas', monospace;");
-        root.getChildren().addAll(chart, summary, dimLabel("采样自 SystemInfoMonitor 后台线程，1s 一点"));
+        root.getChildren().addAll(chart, summary, dimLabel(I18N.get("devfloat.t0020")));
     }
 
     @Override
@@ -44,7 +46,7 @@ public final class PerformanceFloatWindow extends DevFloatWindow {
         double write = SystemInfoMonitor.getDiskWriteMBps();
         double disk = (read < 0 ? 0 : read) + (write < 0 ? 0 : write);
         chart.push(cpu < 0 ? 0 : cpu, mem < 0 ? 0 : mem, disk);
-        summary.setText(String.format("CPU %.0f%%  ·  内存 %.0f%%  ·  磁盘 读%.1f 写%.1f MB/s",
+        summary.setText(String.format(I18N.get("devfloat.t0021"),
                 cpu < 0 ? 0 : cpu, mem < 0 ? 0 : mem,
                 read < 0 ? 0 : read, write < 0 ? 0 : write));
     }

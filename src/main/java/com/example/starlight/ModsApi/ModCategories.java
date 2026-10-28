@@ -1,5 +1,7 @@
 package com.example.starlight.ModsApi;
 
+
+import com.example.starlight.util.I18N;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,51 +22,51 @@ public final class ModCategories {
     private static final Map<String, String> MODRINTH_CATEGORY_ZH = new LinkedHashMap<>();
 
     static {
-        MODRINTH_CATEGORY_ZH.put("adventure", "冒险");
-        MODRINTH_CATEGORY_ZH.put("cursed", "诅咒");
-        MODRINTH_CATEGORY_ZH.put("decoration", "装饰");
-        MODRINTH_CATEGORY_ZH.put("equipment", "装备");
-        MODRINTH_CATEGORY_ZH.put("food", "食物");
-        MODRINTH_CATEGORY_ZH.put("library", "前置库");
-        MODRINTH_CATEGORY_ZH.put("magic", "魔法");
-        MODRINTH_CATEGORY_ZH.put("optimization", "优化");
-        MODRINTH_CATEGORY_ZH.put("storage", "存储");
-        MODRINTH_CATEGORY_ZH.put("technology", "科技");
-        MODRINTH_CATEGORY_ZH.put("transportation", "交通");
-        MODRINTH_CATEGORY_ZH.put("utility", "实用");
-        MODRINTH_CATEGORY_ZH.put("world-gen", "世界生成");
-        MODRINTH_CATEGORY_ZH.put("game-mechanics", "游戏机制");
-        MODRINTH_CATEGORY_ZH.put("social", "社交");
-        MODRINTH_CATEGORY_ZH.put("automation", "自动化");
-        MODRINTH_CATEGORY_ZH.put("biomes", "生物群系");
-        MODRINTH_CATEGORY_ZH.put("blocks", "方块");
+        MODRINTH_CATEGORY_ZH.put("adventure", I18N.get("modsapi.t0007"));
+        MODRINTH_CATEGORY_ZH.put("cursed", I18N.get("modsapi.t0008"));
+        MODRINTH_CATEGORY_ZH.put("decoration", I18N.get("modsapi.t0009"));
+        MODRINTH_CATEGORY_ZH.put("equipment", I18N.get("modsapi.t0010"));
+        MODRINTH_CATEGORY_ZH.put("food", I18N.get("modsapi.t0011"));
+        MODRINTH_CATEGORY_ZH.put("library", I18N.get("modsapi.t0012"));
+        MODRINTH_CATEGORY_ZH.put("magic", I18N.get("modsapi.t0013"));
+        MODRINTH_CATEGORY_ZH.put("optimization", I18N.get("modsapi.t0014"));
+        MODRINTH_CATEGORY_ZH.put("storage", I18N.get("modsapi.t0015"));
+        MODRINTH_CATEGORY_ZH.put("technology", I18N.get("modsapi.t0016"));
+        MODRINTH_CATEGORY_ZH.put("transportation", I18N.get("modsapi.t0017"));
+        MODRINTH_CATEGORY_ZH.put("utility", I18N.get("modsapi.t0018"));
+        MODRINTH_CATEGORY_ZH.put("world-gen", I18N.get("modsapi.t0019"));
+        MODRINTH_CATEGORY_ZH.put("game-mechanics", I18N.get("modsapi.t0020"));
+        MODRINTH_CATEGORY_ZH.put("social", I18N.get("modsapi.t0021"));
+        MODRINTH_CATEGORY_ZH.put("automation", I18N.get("modsapi.t0022"));
+        MODRINTH_CATEGORY_ZH.put("biomes", I18N.get("modsapi.t0023"));
+        MODRINTH_CATEGORY_ZH.put("blocks", I18N.get("modsapi.t0024"));
         MODRINTH_CATEGORY_ZH.put("bosses", "Boss");
-        MODRINTH_CATEGORY_ZH.put("building", "建筑");
-        MODRINTH_CATEGORY_ZH.put("chat", "聊天");
-        MODRINTH_CATEGORY_ZH.put("combat", "战斗");
-        MODRINTH_CATEGORY_ZH.put("dimensions", "维度");
-        MODRINTH_CATEGORY_ZH.put("economy", "经济");
-        MODRINTH_CATEGORY_ZH.put("entities", "实体");
-        MODRINTH_CATEGORY_ZH.put("environment", "环境");
-        MODRINTH_CATEGORY_ZH.put("farming", "农业");
+        MODRINTH_CATEGORY_ZH.put("building", I18N.get("modsapi.t0025"));
+        MODRINTH_CATEGORY_ZH.put("chat", I18N.get("modsapi.t0026"));
+        MODRINTH_CATEGORY_ZH.put("combat", I18N.get("modsapi.t0027"));
+        MODRINTH_CATEGORY_ZH.put("dimensions", I18N.get("modsapi.t0028"));
+        MODRINTH_CATEGORY_ZH.put("economy", I18N.get("modsapi.t0029"));
+        MODRINTH_CATEGORY_ZH.put("entities", I18N.get("modsapi.t0030"));
+        MODRINTH_CATEGORY_ZH.put("environment", I18N.get("modsapi.t0031"));
+        MODRINTH_CATEGORY_ZH.put("farming", I18N.get("modsapi.t0032"));
         MODRINTH_CATEGORY_ZH.put("hud", "HUD");
-        MODRINTH_CATEGORY_ZH.put("items", "物品");
-        MODRINTH_CATEGORY_ZH.put("management", "管理");
-        MODRINTH_CATEGORY_ZH.put("map", "地图");
-        MODRINTH_CATEGORY_ZH.put("minigame", "小游戏");
-        MODRINTH_CATEGORY_ZH.put("mobs", "生物");
-        MODRINTH_CATEGORY_ZH.put("modded", "模组化");
-        MODRINTH_CATEGORY_ZH.put("models", "模型");
-        MODRINTH_CATEGORY_ZH.put("multimedia", "多媒体");
-        MODRINTH_CATEGORY_ZH.put("performance", "性能");
-        MODRINTH_CATEGORY_ZH.put("quests", "任务");
-        MODRINTH_CATEGORY_ZH.put("redstone", "红石");
-        MODRINTH_CATEGORY_ZH.put("server", "服务器");
-        MODRINTH_CATEGORY_ZH.put("skin", "皮肤");
-        MODRINTH_CATEGORY_ZH.put("sound", "声音");
-        MODRINTH_CATEGORY_ZH.put("structures", "结构");
-        MODRINTH_CATEGORY_ZH.put("tweaks", "调整");
-        MODRINTH_CATEGORY_ZH.put("vanilla-like", "原版风格");
+        MODRINTH_CATEGORY_ZH.put("items", I18N.get("modsapi.t0033"));
+        MODRINTH_CATEGORY_ZH.put("management", I18N.get("modsapi.t0034"));
+        MODRINTH_CATEGORY_ZH.put("map", I18N.get("modsapi.t0035"));
+        MODRINTH_CATEGORY_ZH.put("minigame", I18N.get("modsapi.t0036"));
+        MODRINTH_CATEGORY_ZH.put("mobs", I18N.get("modsapi.t0037"));
+        MODRINTH_CATEGORY_ZH.put("modded", I18N.get("modsapi.t0038"));
+        MODRINTH_CATEGORY_ZH.put("models", I18N.get("modsapi.t0039"));
+        MODRINTH_CATEGORY_ZH.put("multimedia", I18N.get("modsapi.t0040"));
+        MODRINTH_CATEGORY_ZH.put("performance", I18N.get("modsapi.t0041"));
+        MODRINTH_CATEGORY_ZH.put("quests", I18N.get("modsapi.t0042"));
+        MODRINTH_CATEGORY_ZH.put("redstone", I18N.get("modsapi.t0043"));
+        MODRINTH_CATEGORY_ZH.put("server", I18N.get("modsapi.t0044"));
+        MODRINTH_CATEGORY_ZH.put("skin", I18N.get("modsapi.t0045"));
+        MODRINTH_CATEGORY_ZH.put("sound", I18N.get("modsapi.t0046"));
+        MODRINTH_CATEGORY_ZH.put("structures", I18N.get("modsapi.t0047"));
+        MODRINTH_CATEGORY_ZH.put("tweaks", I18N.get("modsapi.t0048"));
+        MODRINTH_CATEGORY_ZH.put("vanilla-like", I18N.get("modsapi.t0049"));
         MODRINTH_CATEGORY_ZH.put("8x-", "8x-");
         MODRINTH_CATEGORY_ZH.put("16x", "16x");
         MODRINTH_CATEGORY_ZH.put("32x", "32x");
@@ -72,24 +74,24 @@ public final class ModCategories {
         MODRINTH_CATEGORY_ZH.put("128x", "128x");
         MODRINTH_CATEGORY_ZH.put("256x", "256x");
         MODRINTH_CATEGORY_ZH.put("512x+", "512x+");
-        MODRINTH_CATEGORY_ZH.put("animation", "动画");
-        MODRINTH_CATEGORY_ZH.put("core-shaders", "核心着色器");
-        MODRINTH_CATEGORY_ZH.put("compatibility", "兼容性");
-        MODRINTH_CATEGORY_ZH.put("cartoon", "卡通");
-        MODRINTH_CATEGORY_ZH.put("fantasy", "奇幻");
-        MODRINTH_CATEGORY_ZH.put("medieval", "中世纪");
-        MODRINTH_CATEGORY_ZH.put("modern", "现代");
-        MODRINTH_CATEGORY_ZH.put("photo-realistic", "写实");
-        MODRINTH_CATEGORY_ZH.put("semi-realistic", "半写实");
-        MODRINTH_CATEGORY_ZH.put("simplistic", "简约");
-        MODRINTH_CATEGORY_ZH.put("traditional", "传统");
+        MODRINTH_CATEGORY_ZH.put("animation", I18N.get("modsapi.t0050"));
+        MODRINTH_CATEGORY_ZH.put("core-shaders", I18N.get("modsapi.t0051"));
+        MODRINTH_CATEGORY_ZH.put("compatibility", I18N.get("modsapi.t0052"));
+        MODRINTH_CATEGORY_ZH.put("cartoon", I18N.get("modsapi.t0053"));
+        MODRINTH_CATEGORY_ZH.put("fantasy", I18N.get("modsapi.t0054"));
+        MODRINTH_CATEGORY_ZH.put("medieval", I18N.get("modsapi.t0055"));
+        MODRINTH_CATEGORY_ZH.put("modern", I18N.get("modsapi.t0056"));
+        MODRINTH_CATEGORY_ZH.put("photo-realistic", I18N.get("modsapi.t0057"));
+        MODRINTH_CATEGORY_ZH.put("semi-realistic", I18N.get("modsapi.t0058"));
+        MODRINTH_CATEGORY_ZH.put("simplistic", I18N.get("modsapi.t0059"));
+        MODRINTH_CATEGORY_ZH.put("traditional", I18N.get("modsapi.t0060"));
         MODRINTH_CATEGORY_ZH.put("pbr", "PBR");
-        MODRINTH_CATEGORY_ZH.put("colored-lighting", "彩色光照");
-        MODRINTH_CATEGORY_ZH.put("path-tracing", "光线追踪");
-        MODRINTH_CATEGORY_ZH.put("reflections", "反射");
-        MODRINTH_CATEGORY_ZH.put("shadows", "阴影");
-        MODRINTH_CATEGORY_ZH.put("volumetric-light", "体积光");
-        MODRINTH_CATEGORY_ZH.put("datapack", "数据包");
+        MODRINTH_CATEGORY_ZH.put("colored-lighting", I18N.get("modsapi.t0061"));
+        MODRINTH_CATEGORY_ZH.put("path-tracing", I18N.get("modsapi.t0062"));
+        MODRINTH_CATEGORY_ZH.put("reflections", I18N.get("modsapi.t0063"));
+        MODRINTH_CATEGORY_ZH.put("shadows", I18N.get("modsapi.t0064"));
+        MODRINTH_CATEGORY_ZH.put("volumetric-light", I18N.get("modsapi.t0065"));
+        MODRINTH_CATEGORY_ZH.put("datapack", I18N.get("modsapi.t0066"));
     }
 
     /** Modrinth 分类名 → 中文显示名；未收录时原样返回 */
@@ -114,7 +116,7 @@ public final class ModCategories {
     }
 
     private static final List<LoaderOption> LOADER_OPTIONS = List.of(
-            new LoaderOption("", "全部"),
+            new LoaderOption("", I18N.get("modsapi.t0067")),
             new LoaderOption("fabric", "Fabric"),
             new LoaderOption("forge", "Forge"),
             new LoaderOption("neoforge", "NeoForge"),
@@ -127,7 +129,7 @@ public final class ModCategories {
 
     /** 加载器键 → 显示名（{@code ""} → 「全部」） */
     public static String loaderLabel(String key) {
-        if (key == null || key.isBlank()) return "全部";
+        if (key == null || key.isBlank()) return I18N.get("modsapi.t0068");
         for (LoaderOption o : LOADER_OPTIONS) {
             if (o.key().equalsIgnoreCase(key)) return o.label();
         }

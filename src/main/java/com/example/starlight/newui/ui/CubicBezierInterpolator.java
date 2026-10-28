@@ -1,5 +1,7 @@
 package com.example.starlight.newui.ui;
 
+
+import com.example.starlight.util.I18N;
 import javafx.animation.Interpolator;
 
 /**
@@ -32,7 +34,7 @@ public final class CubicBezierInterpolator extends Interpolator {
     public CubicBezierInterpolator(double x1, double y1, double x2, double y2) {
         if (x1 < 0 || x1 > 1 || x2 < 0 || x2 > 1) {
             throw new IllegalArgumentException(
-                    "贝塞尔控制点的 x 必须在 [0,1]：x1=" + x1 + ", x2=" + x2);
+                    I18N.get("ui.p0029", x1 + ", x2=" + x2));
         }
         // 起点 (0,0) 与终点 (1,1) 是隐含的，只存两个控制点，展开成多项式系数
         cx = 3 * x1;

@@ -1,6 +1,9 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.GameDirManager;
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.lang.GameLanguage;
@@ -83,25 +86,36 @@ public final class VersionSettingsPage {
     private static final Map<String, String> JVM_ARG_MODES = new LinkedHashMap<>();
 
     static {
-        JVM_ARG_MODES.put("替换全局参数", "replace");
-        JVM_ARG_MODES.put("追加到全局参数（末尾）", "append");
-        JVM_ARG_MODES.put("前置于全局参数", "prepend");
-        JVM_ARG_MODES.put("从全局参数中移除", "remove");
+        JVM_ARG_MODES.put(I18N.get("versionsettings.t0001"), "replace");
+        JVM_ARG_MODES.put(I18N.get("versionsettings.t0002"), "append");
+        JVM_ARG_MODES.put(I18N.get("versionsettings.t0003"), "prepend");
+        JVM_ARG_MODES.put(I18N.get("versionsettings.t0004"), "remove");
     }
 
     /** 各模式的动词，用于提示文案（append → 追加） */
     private static final Map<String, String> MODE_VERBS = Map.of(
-            "replace", "替换", "append", "追加", "prepend", "前置", "remove", "移除");
+            "replace", I18N.get("versionsettings.t0005"), "append", I18N.get("versionsettings.t0006"), "prepend", I18N.get("versionsettings.t0007"), "remove", I18N.get("versionsettings.t0008"));
 
     /** 各模式下输入框的输入提示：增量模式只填增量，不是合并后的完整参数 */
     private static final Map<String, String> MODE_PROMPTS = Map.of(
-            "replace", "直接替换全局 JVM 参数，例如 -Xmx4G -XX:+UseG1GC",
-            "append", "只填要追加到全局参数末尾的项，例如 -XX:+UseZGC",
-            "prepend", "只填要加到全局参数前面的项，例如 -Dfile.encoding=UTF-8",
-            "remove", "只填要从全局参数里移除的项，例如 -XX:+UseG1GC");
+            "replace", I18N.get("versionsettings.t0009"),
+            "append", I18N.get("versionsettings.t0010"),
+            "prepend", I18N.get("versionsettings.t0011"),
+            "remove", I18N.get("versionsettings.t0012"));
 
-    /** 游戏语言下拉的「不修改」选项（对应空覆盖值：跟随全局与游戏内设置） */
-    private static final String LANGUAGE_FOLLOW = "不修改（跟随游戏内设置）";
+    /**
+     * 游戏语言下拉的「不修改」哨兵值。
+     *
+     * <p>这是<b>下拉项承载的值</b>，不是显示文案：{@code static final} 若直接存
+     * {@code I18N.get(...)}，会在类加载时冻结语言，切到英文后回查不到该选项、
+     * 「跟随全局」会被误判成具体语言。显示名由 {@link #languageFollowLabel()} 现取。
+     */
+    private static final String LANGUAGE_FOLLOW = "__follow__";
+
+    /** 「不修改」在当前语言下的显示名 */
+    private static String languageFollowLabel() {
+        return I18N.get("versionsettings.t0013");
+    }
 
     /** 内存快捷档位（MB），对齐参考稿的 chips */
     private static final int[] MEMORY_CHIPS = {2048, 4096, 6144, 8192, 12288};
@@ -201,10 +215,11 @@ public final class VersionSettingsPage {
         loading = true;
         dirty = false;
 
-        VBox root = PageKit.settingsPage(host, "版本独立设置");
+        VBox root = PageKit.settingsPage(host, I18N.get("versionsettings.t0014"));
 
         gameDir = GameDirManager.activePath(host.config());
-        activeVersion = host.config().getOrDefault("Version", "");
+        // 活动版本取真源：该游戏目录自己的 starlight.json
+        activeVersion = SelectedVersion.of(gameDir);
         version = activeVersion;
 
         if (version.isEmpty()) {
@@ -237,11 +252,11 @@ public final class VersionSettingsPage {
 
     /** 页头副标题：当前编辑：<版本> —— 以下配置仅对该版本生效 */
     private TextFlow buildSubtitle() {
-        Text prefix = new Text("当前编辑：");
+        Text prefix = new Text(I18N.get("versionsettings.t0015"));
         prefix.getStyleClass().add("vset-sub-text");
         versionText = new Text(version);
         versionText.getStyleClass().add("vset-sub-ver");
-        Text suffix = new Text(" —— 以下配置仅对该版本生效");
+        Text suffix = new Text(I18N.get("versionsettings.t0016"));
         suffix.getStyleClass().add("vset-sub-text");
         TextFlow flow = new TextFlow(prefix, versionText, suffix);
         flow.getStyleClass().add("vset-subtitle");
@@ -270,13 +285,13 @@ public final class VersionSettingsPage {
 
     /** 尚未选择版本时的占位卡片（保持旧版行为） */
     private Node buildNoVersionCard() {
-        Button goBtn = PageKit.actionButton("前往版本选择");
+        Button goBtn = PageKit.actionButton(I18N.get("versionsettings.t0017"));
         goBtn.setOnAction(e -> host.switchToPage("versionSelect"));
         HBox row = new HBox(goBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         VBox body = new VBox(10, PageKit.hintLabel(
-                "还没有选择游戏版本。版本独立设置按版本保存，请先在「版本选择」页选好要配置的版本。"), row);
-        return PageKit.settingsCardStacked("版本独立设置", "", body);
+                I18N.get("versionsettings.t0018")), row);
+        return PageKit.settingsCardStacked(I18N.get("versionsettings.t0019"), "", body);
     }
 
     // 卡片脚手架 //
@@ -313,7 +328,7 @@ public final class VersionSettingsPage {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Label restore = new Label("恢复继承");
+        Label restore = new Label(I18N.get("versionsettings.t0020"));
         restore.getStyleClass().add("vset-mini-link");
         restore.setCursor(Cursor.HAND);
         restore.setVisible(false);
@@ -321,7 +336,7 @@ public final class VersionSettingsPage {
         restore.setOnMouseClicked(e -> {
             if (paths == null) return;
             for (String p : paths) VersionConfigManager.clearOverride(gameDir, version, p);
-            host.ui().toast("已恢复继承全局设置", "info");
+            host.ui().toast(I18N.get("versionsettings.t0021"), "info");
             if (reloader != null) reloader.run();
             recomputeDirty();
             refreshCardStatuses();
@@ -440,15 +455,15 @@ public final class VersionSettingsPage {
     private String versionMeta(VersionIconKit.Info info, boolean active) {
         StringBuilder sb = new StringBuilder(loaderDisplay(info.loader()));
         if (info.base() != null && !info.base().isBlank() && !info.base().equals("null")) {
-            sb.append(" · 基于 ").append(info.base());
+            sb.append(I18N.get("versionsettings.t0022")).append(info.base());
         }
-        if (active) sb.append(" · 当前启动版本");
+        if (active) sb.append(I18N.get("versionsettings.t0023"));
         return sb.toString();
     }
 
     /** 加载器显示名：Vanilla/Forge Modern 收短，其余原样（整合包单独标注） */
     private static String loaderDisplay(String loader) {
-        if (loader == null || loader.isBlank()) return "未识别";
+        if (loader == null || loader.isBlank()) return I18N.get("versionsettings.t0024");
         if ("Vanilla".equals(loader)) return "原版";
         if ("Forge (Modern)".equals(loader)) return "Forge";
         return loader;
@@ -480,7 +495,7 @@ public final class VersionSettingsPage {
             retry.play();
         });
 
-        Button copyBtn = new Button("复制配置文件到其他版本");
+        Button copyBtn = new Button(I18N.get("versionsettings.t0025"));
         copyBtn.getStyleClass().add("vset-copy-btn");
         copyBtn.setMaxWidth(Double.MAX_VALUE);
         AppIcons.apply(copyBtn, "copy", 14, null);
@@ -490,12 +505,12 @@ public final class VersionSettingsPage {
         versionSummary.getStyleClass().add("vset-summary");
         versionSummary.setWrapText(true);
 
-        versionPathNote = new Label("覆盖数据保存在 versions/" + version + "/config.overrides.json");
+        versionPathNote = new Label(I18N.get("versionsettings.k0041", version + "/config.overrides.json"));
         versionPathNote.getStyleClass().add("vset-path-note");
 
         VBox body = new VBox(10, versionCombo, copyBtn, versionSummary, versionPathNote);
         body.setMinWidth(0);
-        VBox card = cardShell("version", "version-select", "版本选择", null, "未覆盖", body, null);
+        VBox card = cardShell("version", "version-select", I18N.get("versionsettings.t0026"), null, I18N.get("versionsettings.t0027"), body, null);
         refreshVersionSummary();
         return card;
     }
@@ -548,9 +563,9 @@ public final class VersionSettingsPage {
         if (newItem.dirName().equals(version)) return;
         if (dirty) {
             // 有未保存修改：先确认，取消则把选择拨回当前版本
-            host.ui().confirm("未保存的修改",
-                    "切换版本将丢弃当前未保存的修改（已保存的独立设置不受影响）。",
-                    "丢弃并切换", false,
+            host.ui().confirm(I18N.get("versionsettings.t0028"),
+                    I18N.get("versionsettings.t0029"),
+                    I18N.get("versionsettings.t0030"), false,
                     () -> applyVersionSwitch(newItem));
             comboGuard = true;
             versionCombo.setValue(oldItem);
@@ -568,7 +583,7 @@ public final class VersionSettingsPage {
         if (versionText != null) versionText.setText(version);
         loading = false;
         refreshFooterHint();
-        host.ui().toast("已切换到版本 " + version, "info");
+        host.ui().toast(I18N.get("versionsettings.k0001", version), "info");
     }
 
     /** 版本卡底部统计：已覆盖 N 项 + 字段名，或「全部继承全局设置」；标签同步变成状态（未覆盖 / 已覆盖 N 项） */
@@ -578,14 +593,13 @@ public final class VersionSettingsPage {
         versionSummary.getStyleClass().remove("warn");
         if (versionTag != null) versionTag.getStyleClass().remove("on");
         if (overridden.isEmpty()) {
-            versionSummary.setText("当前未覆盖任何字段，全部继承全局设置");
-            if (versionTag != null) versionTag.setText("未覆盖");
+            versionSummary.setText(I18N.get("versionsettings.t0031"));
+            if (versionTag != null) versionTag.setText(I18N.get("versionsettings.t0032"));
         } else {
-            versionSummary.setText("已覆盖 " + overridden.size() + " 项："
-                    + String.join("、", displayNames(overridden)));
+            versionSummary.setText(I18N.get("versionsettings.p0100", overridden.size(), String.join("、", displayNames(overridden))));
             versionSummary.getStyleClass().add("warn");
             if (versionTag != null) {
-                versionTag.setText("已覆盖 " + overridden.size() + " 项");
+                versionTag.setText(I18N.get("versionsettings.p0101", overridden.size()));
                 versionTag.getStyleClass().add("on");
             }
         }
@@ -702,8 +716,8 @@ public final class VersionSettingsPage {
             refreshJavaControlsDisabled();
             markDirty();
         });
-        HBox autoRow = settingRow("自动选择 Java",
-                "开启时按游戏版本自动匹配本机 Java；关闭时使用下方手动路径", new HBox(autoJavaBox), false);
+        HBox autoRow = settingRow(I18N.get("versionsettings.t0033"),
+                I18N.get("versionsettings.t0034"), new HBox(autoJavaBox), false);
 
         javaField = new TextField(effective(path));
         javaField.getStyleClass().addAll("input-field", "vset-mono");
@@ -714,7 +728,7 @@ public final class VersionSettingsPage {
         Region folderIcon = AppIcons.icon("folder", 15, Color.web("#3b82f6"));
         folderIcon.getStyleClass().add("vset-path-icon");
 
-        Button browse = new Button("浏览…");
+        Button browse = new Button(I18N.get("versionsettings.t0035"));
         browse.getStyleClass().add("vset-browse-btn");
         browse.setOnAction(e -> browseJavaExe());
 
@@ -743,7 +757,7 @@ public final class VersionSettingsPage {
 
         VBox body = new VBox(10, autoRow, pathField, note);
         body.setMinWidth(0);
-        return cardShell("java", "cpu", "Java 路径", List.of(path, autoPath), null, body, () -> {
+        return cardShell("java", "cpu", I18N.get("versionsettings.t0036"), List.of(path, autoPath), null, body, () -> {
             autoJavaBox.setSelected(VersionConfigManager.effectiveAutoJava(globalIni, gameDir, version));
             javaField.setText(effective(path));
             refreshJavaNote();
@@ -760,7 +774,7 @@ public final class VersionSettingsPage {
 
     private void browseJavaExe() {
         FileChooser fc = new FileChooser();
-        fc.setTitle("选择 Java 可执行文件");
+        fc.setTitle(I18N.get("versionsettings.t0037"));
         if (System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win")) {
             fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Java", "*.exe", "*.cmd"));
         }
@@ -782,7 +796,7 @@ public final class VersionSettingsPage {
         dot.getStyleClass().setAll("vset-note-dot", "ok");
         if (path.isEmpty()) {
             dot.getStyleClass().setAll("vset-note-dot", "warn");
-            javaNote.setText("未填写路径，启动时将按全局策略选择 Java");
+            javaNote.setText(I18N.get("versionsettings.t0038"));
             return;
         }
         try {
@@ -791,7 +805,7 @@ public final class VersionSettingsPage {
                 String home = entry.homePath == null ? "" : entry.homePath.replace('/', '\\').toLowerCase(Locale.ROOT);
                 if (home.isEmpty()) continue;
                 if (normalized.equals(home) || normalized.startsWith(home + "\\")) {
-                    javaNote.setText("已检测到 Java " + entry.version + "（本机扫描结果）");
+                    javaNote.setText(I18N.get("versionsettings.p0102", entry.version));
                     return;
                 }
             }
@@ -799,10 +813,10 @@ public final class VersionSettingsPage {
             // 扫描缓存不可用时退回文件存在性判断
         }
         if (Files.exists(Paths.get(path))) {
-            javaNote.setText("已找到该文件；未匹配到本机扫描的 Java 列表");
+            javaNote.setText(I18N.get("versionsettings.t0039"));
         } else {
             dot.getStyleClass().setAll("vset-note-dot", "warn");
-            javaNote.setText("该路径不存在，启动时可能失败");
+            javaNote.setText(I18N.get("versionsettings.t0040"));
         }
     }
 
@@ -820,8 +834,8 @@ public final class VersionSettingsPage {
         HBox valueBox = new HBox(5, memValue, memUnit);
         valueBox.setAlignment(Pos.BASELINE_LEFT);
 
-        HBox headRow = settingRow("最大内存",
-                "建议 4096 MB 以上；光影/整合包建议 6144 MB", valueBox, false);
+        HBox headRow = settingRow(I18N.get("versionsettings.t0041"),
+                I18N.get("versionsettings.t0042"), valueBox, false);
 
         memSlider = new Slider(MEM_SLIDER_MIN, MEM_SLIDER_MAX, maxMem);
         memSlider.getStyleClass().add("vset-slider");
@@ -862,8 +876,8 @@ public final class VersionSettingsPage {
         minUnit.getStyleClass().add("vset-value-unit");
         HBox minValueBox = new HBox(5, minMemValue, minUnit);
         minValueBox.setAlignment(Pos.BASELINE_LEFT);
-        HBox minRow = settingRow("最小内存",
-                "启动时预分配（-Xms）；一般无需修改", minValueBox, true);
+        HBox minRow = settingRow(I18N.get("versionsettings.t0043"),
+                I18N.get("versionsettings.t0044"), minValueBox, true);
 
         // 滑块下限自适应：若版本里存的最小内存比默认下限还小（手工改过配置文件），
         // 下限临时降到该值，否则滑块会把值顶上去 → 一进页就误报「未保存修改」。
@@ -881,7 +895,7 @@ public final class VersionSettingsPage {
 
         VBox body = new VBox(10, headRow, memSlider, chips, minRow, minMemSlider);
         body.setMinWidth(0);
-        return cardShell("memory", "memory", "内存分配", List.of(minPath, maxPath), null, body, () -> {
+        return cardShell("memory", "memory", I18N.get("versionsettings.t0045"), List.of(minPath, maxPath), null, body, () -> {
             loading = true;
             memSlider.setValue(clampMem(PageKit.parseIntSafe(effective(maxPath), 4096)));
             memValue.setText(String.valueOf((int) Math.round(memSlider.getValue())));
@@ -982,7 +996,7 @@ public final class VersionSettingsPage {
 
         VBox body = new VBox(10, jvmEditor, controls);
         body.setMinWidth(0);
-        return cardShell("jvm", "sliders", "JVM 参数", List.of(path), null, body, () -> {
+        return cardShell("jvm", "sliders", I18N.get("versionsettings.t0046"), List.of(path), null, body, () -> {
             jvmModeReloading = true;
             try {
                 jvmArea.setText(jvmArgsInputValue());
@@ -1039,20 +1053,20 @@ public final class VersionSettingsPage {
 
         sizeGroup = new HBox(9, widthField, x, heightField);
         sizeGroup.setAlignment(Pos.CENTER_LEFT);
-        HBox sizeRow = settingRow("窗口尺寸", "启动时游戏窗口的初始大小", sizeGroup, false);
+        HBox sizeRow = settingRow(I18N.get("versionsettings.t0047"), I18N.get("versionsettings.t0048"), sizeGroup, false);
 
         fullscreenBox = PageKit.toggle(effectiveBool(fullscreenPath));
         fullscreenBox.setOnAction(e -> {
             refreshSizeGroupDisabled();
             markDirty();
         });
-        HBox fsRow = settingRow("全屏模式", "启动前写入游戏 options.txt 的 fullscreen 字段；全屏时忽略上方窗口尺寸",
+        HBox fsRow = settingRow(I18N.get("versionsettings.t0049"), I18N.get("versionsettings.t0050"),
                 new HBox(fullscreenBox), true);
         refreshSizeGroupDisabled();
 
         VBox body = new VBox(10, sizeRow, fsRow);
         body.setMinWidth(0);
-        return cardShell("window", "window", "窗口设置",
+        return cardShell("window", "window", I18N.get("versionsettings.t0051"),
                 List.of(widthPath, heightPath, fullscreenPath), null, body, () -> {
                     loading = true;
                     widthField.setText(effective(widthPath));
@@ -1083,8 +1097,8 @@ public final class VersionSettingsPage {
             refreshIsolationReadout();
             markDirty();
         });
-        HBox row = settingRow("启用版本隔离",
-                "每个版本使用独立的存档、模组与配置文件，互不干扰", new HBox(isolationBox), false);
+        HBox row = settingRow(I18N.get("versionsettings.t0052"),
+                I18N.get("versionsettings.t0053"), new HBox(isolationBox), false);
 
         Region folder = AppIcons.icon("folder", 14, Color.web("#3b82f6"));
         folder.getStyleClass().add("vset-ro-icon");
@@ -1100,7 +1114,7 @@ public final class VersionSettingsPage {
 
         VBox body = new VBox(10, row, isolationReadout);
         body.setMinWidth(0);
-        return cardShell("isolation", "shield", "版本隔离", List.of(path), null, body, () -> {
+        return cardShell("isolation", "shield", I18N.get("versionsettings.t0054"), List.of(path), null, body, () -> {
             loading = true;
             isolationBox.setSelected(effectiveBool(path));
             refreshIsolationReadout();
@@ -1124,7 +1138,7 @@ public final class VersionSettingsPage {
             Path gd = Paths.get(gameDir);
             Path name = gd.getFileName();
             String base = name == null ? gameDir : name.toString();
-            isolationText.setText(base + "（全局共享目录）");
+            isolationText.setText(I18N.get("versionsettings.p0103", base));
         }
     }
 
@@ -1139,18 +1153,21 @@ public final class VersionSettingsPage {
         languageCombo.setMinWidth(Region.USE_PREF_SIZE);
         languageCombo.getItems().add(LANGUAGE_FOLLOW);
         languageCombo.getItems().addAll(GameLanguage.LANGUAGE_MAP.keySet());
+        // 下拉项承载 LANGUAGE_FOLLOW 哨兵与语言代码，显示名单独渲染
+        languageCombo.setCellFactory(cb -> languageCell());
+        languageCombo.setButtonCell(languageCell());
         String current = effective(path);
         languageCombo.setValue((current == null || current.isBlank())
                 ? LANGUAGE_FOLLOW : GameLanguage.getDisplayNameByCode(current));
         languageCombo.setOnAction(e -> markDirty());
 
-        HBox row = settingRow("游戏语言",
-                "启动前写入游戏 options.txt 的 lang 字段；不改动其他游戏内设置",
+        HBox row = settingRow(I18N.get("versionsettings.t0055"),
+                I18N.get("versionsettings.t0056"),
                 new HBox(languageCombo), false);
 
         VBox body = new VBox(10, row);
         body.setMinWidth(0);
-        return cardShell("language", "languages", "游戏语言", List.of(path), null, body, () -> {
+        return cardShell("language", "languages", I18N.get("versionsettings.t0057"), List.of(path), null, body, () -> {
             String v = effective(path);
             languageCombo.setValue((v == null || v.isBlank())
                     ? LANGUAGE_FOLLOW : GameLanguage.getDisplayNameByCode(v));
@@ -1161,6 +1178,21 @@ public final class VersionSettingsPage {
     private String selectedLanguageCode() {
         if (languageCombo == null || LANGUAGE_FOLLOW.equals(languageCombo.getValue())) return "";
         return GameLanguage.getCodeByDisplayName(languageCombo.getValue());
+    }
+
+    /** 游戏语言下拉的显示单元：值仍是哨兵/语言代码，只把值渲染成当前语言的文案 */
+    private static javafx.scene.control.ListCell<String> languageCell() {
+        return new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                setText(LANGUAGE_FOLLOW.equals(item) ? languageFollowLabel() : item);
+            }
+        };
     }
 
     // 7. 游戏参数 //
@@ -1175,11 +1207,11 @@ public final class VersionSettingsPage {
         gameArgsField.textProperty().addListener((o, a, b) -> markDirty());
 
         HBox note = noteRow("ok", mutedNoteLabel(
-                "额外传递给 Minecraft 的参数；多个参数用空格分隔"));
+                I18N.get("versionsettings.t0058")));
 
         VBox body = new VBox(10, gameArgsField, note);
         body.setMinWidth(0);
-        return cardShell("gameArgs", "terminal", "游戏参数", List.of(path), null, body, () ->
+        return cardShell("gameArgs", "terminal", I18N.get("versionsettings.t0059"), List.of(path), null, body, () ->
                 gameArgsField.setText(effective(path)));
     }
 
@@ -1194,7 +1226,7 @@ public final class VersionSettingsPage {
         preArea.setPrefRowCount(2);
         preArea.setMaxWidth(Double.MAX_VALUE);
         preArea.setMinWidth(0);
-        preArea.setPromptText("在游戏启动前执行，例如备份存档…");
+        preArea.setPromptText(I18N.get("versionsettings.t0060"));
         preArea.textProperty().addListener((o, a, b) -> markDirty());
 
         // 右下角三角把手：拖动调高
@@ -1202,7 +1234,7 @@ public final class VersionSettingsPage {
 
         VBox body = new VBox(10, preEditor);
         body.setMinWidth(0);
-        return cardShell("pre", "bolt", "启动前命令", List.of(path), null, body, () ->
+        return cardShell("pre", "bolt", I18N.get("versionsettings.t0061"), List.of(path), null, body, () ->
                 preArea.setText(effective(path)));
     }
 
@@ -1215,7 +1247,7 @@ public final class VersionSettingsPage {
         postArea.setPrefRowCount(2);
         postArea.setMaxWidth(Double.MAX_VALUE);
         postArea.setMinWidth(0);
-        postArea.setPromptText("在游戏退出后执行，例如同步存档…");
+        postArea.setPromptText(I18N.get("versionsettings.t0062"));
         postArea.textProperty().addListener((o, a, b) -> markDirty());
 
         // 右下角三角把手：拖动调高
@@ -1223,7 +1255,7 @@ public final class VersionSettingsPage {
 
         VBox body = new VBox(10, postEditor);
         body.setMinWidth(0);
-        return cardShell("post", "power", "退出后命令", List.of(path), null, body, () ->
+        return cardShell("post", "power", I18N.get("versionsettings.t0063"), List.of(path), null, body, () ->
                 postArea.setText(effective(path)));
     }
 
@@ -1239,13 +1271,13 @@ public final class VersionSettingsPage {
         hintBox.setMinWidth(0);
         HBox.setHgrow(hintBox, Priority.ALWAYS);
 
-        Button reset = new Button("恢复默认");
+        Button reset = new Button(I18N.get("versionsettings.t0064"));
         reset.getStyleClass().add("vset-btn-ghost");
         reset.setMinWidth(Region.USE_PREF_SIZE);
         AppIcons.apply(reset, "refresh", 13, null);
         reset.setOnAction(e -> confirmReset());
 
-        Button save = new Button("保存设置");
+        Button save = new Button(I18N.get("versionsettings.t0065"));
         save.getStyleClass().addAll("btn-primary", "vset-save-btn");
         save.setMinWidth(Region.USE_PREF_SIZE);
         AppIcons.apply(save, "save", 13, null);
@@ -1270,10 +1302,10 @@ public final class VersionSettingsPage {
         if (footerHint == null) return;
         footerDot.getStyleClass().remove("dirty");
         if (dirty) {
-            footerHint.setText("有未保存的修改，点右侧「保存设置」后生效");
+            footerHint.setText(I18N.get("versionsettings.t0066"));
             footerDot.getStyleClass().add("dirty");
         } else {
-            footerHint.setText("修改将在下次启动该版本时生效");
+            footerHint.setText(I18N.get("versionsettings.t0067"));
         }
     }
 
@@ -1315,21 +1347,21 @@ public final class VersionSettingsPage {
 
         // 两个滑块的范围已保证「最小 ≤ 最大」（syncMinSliderRange），这里只兜底
         if (PageKit.parseIntSafe(minS, 0) > PageKit.parseIntSafe(maxS, 0)) {
-            host.ui().toast("最小内存不能大于最大内存", "warning");
+            host.ui().toast(I18N.get("versionsettings.t0068"), "warning");
             return;
         }
         if (!isNumeric(widthS) || !isNumeric(heightS)) {
-            host.ui().toast("窗口宽高请填写数字（像素）", "warning");
+            host.ui().toast(I18N.get("versionsettings.t0069"), "warning");
             return;
         }
         if (PageKit.parseIntSafe(widthS, 0) <= 0 || PageKit.parseIntSafe(heightS, 0) <= 0) {
-            host.ui().toast("窗口宽高必须大于 0", "warning");
+            host.ui().toast(I18N.get("versionsettings.t0070"), "warning");
             return;
         }
         String jvmMode = JVM_ARG_MODES.getOrDefault(jvmModeCombo.getValue(), "replace");
         List<String> jvmTokens = VersionConfigManager.tokenize(jvmArea.getText());
         if (!"replace".equals(jvmMode) && jvmTokens.isEmpty()) {
-            host.ui().toast("请先输入要" + MODE_VERBS.getOrDefault(jvmMode, "调整") + "的 JVM 参数", "warning");
+            host.ui().toast(I18N.get("versionsettings.p0104", MODE_VERBS.getOrDefault(jvmMode, I18N.get("versionsettings.t0071"))), "warning");
             return;
         }
 
@@ -1364,8 +1396,7 @@ public final class VersionSettingsPage {
         VersionConfigManager.setOverrideIfChanged(gameDir, version,
                 VersionConfigManager.PATH_GAME_LANGUAGE, selectedLanguageCode(), globalIni);
 
-        host.ui().toast("设置已保存 · 当前覆盖 "
-                + VersionConfigManager.overriddenPaths(gameDir, version).size() + " 项", "success");
+        host.ui().toast(I18N.get("versionsettings.p0105", VersionConfigManager.overriddenPaths(gameDir, version).size()), "success");
         refreshCardStatuses();
         refreshVersionSummary();
         recomputeDirty();
@@ -1373,16 +1404,16 @@ public final class VersionSettingsPage {
 
     /** 恢复默认：清空该版本的全部独立设置（回继承全局），并原地重载各卡片 */
     private void confirmReset() {
-        host.ui().confirm("恢复默认",
-                "确定要清除版本 \"" + version + "\" 的全部独立设置吗？\n所有字段将恢复继承全局配置。",
-                "恢复默认", true, () -> {
+        host.ui().confirm(I18N.get("versionsettings.t0072"),
+                I18N.get("versionsettings.p0106", version),
+                I18N.get("versionsettings.t0073"), true, () -> {
                     VersionConfigManager.clearAll(gameDir, version);
                     dirty = false;
                     loading = true;
                     rebuildContent();
                     loading = false;
                     refreshFooterHint();
-                    host.ui().toast("已恢复默认设置（全部继承全局）", "warning");
+                    host.ui().toast(I18N.get("versionsettings.t0074"), "warning");
                 });
     }
 
@@ -1393,7 +1424,7 @@ public final class VersionSettingsPage {
             for (String p : status.paths) {
                 overridden |= VersionConfigManager.isOverridden(gameDir, version, p);
             }
-            status.tag.setText(overridden ? "已覆盖" : "继承全局");
+            status.tag.setText(overridden ? I18N.get("versionsettings.t0075") : I18N.get("versionsettings.t0076"));
             status.tag.getStyleClass().remove("on");
             if (overridden) status.tag.getStyleClass().add("on");
             status.restore.setVisible(overridden);
@@ -1406,7 +1437,7 @@ public final class VersionSettingsPage {
     /** 复制文件弹窗：单选目标版本（对齐参考稿的 modal 版式，复用 install-target 行样式） */
     private void openCopyModal() {
         if (!VersionConfigManager.hasOverrides(gameDir, version)) {
-            host.ui().toast("当前版本没有任何独立设置，无需复制", "warning");
+            host.ui().toast(I18N.get("versionsettings.t0077"), "warning");
             return;
         }
 
@@ -1416,8 +1447,8 @@ public final class VersionSettingsPage {
 
         StackPane iconBox = new StackPane(AppIcons.icon("copy", 22, Color.web("#3b82f6")));
         iconBox.getStyleClass().addAll("modal-icon", "info");
-        Label title = centered("复制配置文件", "modal-card-title");
-        Label desc = centered("将「" + version + "」的独立设置复制到以下目标版本。\n目标版本原有的独立设置将被覆盖。",
+        Label title = centered(I18N.get("versionsettings.t0078"), "modal-card-title");
+        Label desc = centered(I18N.get("versionsettings.p0107", version),
                 "modal-desc");
         body.getChildren().addAll(iconBox, title, desc);
 
@@ -1435,17 +1466,17 @@ public final class VersionSettingsPage {
         }
         List<RadioButton> radios = new ArrayList<>();
         if (targets.isEmpty()) {
-            Label empty = centered("没有可复制的其他版本", "install-target-empty");
+            Label empty = centered(I18N.get("versionsettings.t0079"), "install-target-empty");
             list.getChildren().add(empty);
         }
         for (String dir : targets) {
             VersionIconKit.Info info = infoOf(dir);
             StringBuilder sub = new StringBuilder(loaderDisplay(info.loader()));
             if (info.base() != null && !info.base().isBlank() && !info.base().equals("null")) {
-                sub.append(" · 基于 ").append(info.base());
+                sub.append(I18N.get("versionsettings.t0080")).append(info.base());
             }
             if (VersionConfigManager.hasOverrides(gameDir, dir)) {
-                sub.append(" · 已有设置将被覆盖");
+                sub.append(I18N.get("versionsettings.t0081"));
             }
             Label nameLabel = new Label(dir);
             nameLabel.getStyleClass().add("install-target-name");
@@ -1487,13 +1518,13 @@ public final class VersionSettingsPage {
         body.getChildren().add(listScroll);
 
         // 按钮 //
-        Button cancel = new Button("取消");
+        Button cancel = new Button(I18N.get("versionsettings.t0082"));
         cancel.getStyleClass().add("modal-btn-cancel");
         cancel.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(cancel, Priority.ALWAYS);
         cancel.setOnAction(e -> host.ui().closeModal());
 
-        Button confirm = new Button("确认复制");
+        Button confirm = new Button(I18N.get("versionsettings.t0083"));
         confirm.getStyleClass().add("modal-btn-ok");
         confirm.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(confirm, Priority.ALWAYS);
@@ -1506,13 +1537,13 @@ public final class VersionSettingsPage {
                 }
             }
             if (checked == null) {
-                host.ui().toast("请先选择目标版本", "warning");
+                host.ui().toast(I18N.get("versionsettings.t0084"), "warning");
                 return;
             }
             String target = String.valueOf(checked.getUserData());
             VersionConfigManager.copyOverrides(gameDir, version, target);
             host.ui().closeModal();
-            host.ui().toast("已将独立设置复制到「" + target + "」", "success");
+            host.ui().toast(I18N.get("versionsettings.k0042", target + "」"), "success");
         });
 
         HBox actions = new HBox(10, cancel, confirm);
@@ -1532,7 +1563,7 @@ public final class VersionSettingsPage {
         Label nameLabel = new Label(version);
         nameLabel.getStyleClass().add("install-target-name");
         nameLabel.setTextOverrun(OverrunStyle.ELLIPSIS);
-        Label subLabel = new Label(loaderDisplay(info.loader()) + " · 当前编辑");
+        Label subLabel = new Label(I18N.get("versionsettings.r0001", loaderDisplay(info.loader())));
         subLabel.getStyleClass().add("install-target-sub");
 
         VBox infoBox = new VBox(2, nameLabel, subLabel);
@@ -1542,7 +1573,7 @@ public final class VersionSettingsPage {
         StackPane icon = new StackPane(smallIcon(iconImageOf(info), 16));
         icon.getStyleClass().add("install-target-icon");
 
-        Label badge = new Label("当前");
+        Label badge = new Label(I18N.get("versionsettings.t0085"));
         badge.getStyleClass().addAll("install-target-badge", "current");
 
         HBox head = new HBox(10, radio, icon, infoBox, badge);
@@ -1577,19 +1608,19 @@ public final class VersionSettingsPage {
     }
 
     private static final Map<String, String> PATH_DISPLAY_NAMES = Map.ofEntries(
-            Map.entry(VersionConfigManager.PATH_JAVA_PATH, "Java路径"),
-            Map.entry(VersionConfigManager.PATH_AUTO_JAVA, "自动选择Java"),
-            Map.entry(VersionConfigManager.PATH_MIN_MEMORY, "最小内存"),
-            Map.entry(VersionConfigManager.PATH_MAX_MEMORY, "最大内存"),
-            Map.entry(VersionConfigManager.PATH_JVM_ARGS, "JVM参数"),
-            Map.entry(VersionConfigManager.PATH_WIDTH, "窗口宽度"),
-            Map.entry(VersionConfigManager.PATH_HEIGHT, "窗口高度"),
-            Map.entry(VersionConfigManager.PATH_FULLSCREEN, "全屏模式"),
-            Map.entry(VersionConfigManager.PATH_VERSION_ISOLATION, "版本隔离"),
-            Map.entry(VersionConfigManager.PATH_GAME_ARGS, "游戏参数"),
-            Map.entry(VersionConfigManager.PATH_PRE_LAUNCH, "启动前命令"),
-            Map.entry(VersionConfigManager.PATH_POST_EXIT, "退出后命令"),
-            Map.entry(VersionConfigManager.PATH_GAME_LANGUAGE, "游戏语言"));
+            Map.entry(VersionConfigManager.PATH_JAVA_PATH, I18N.get("versionsettings.t0086")),
+            Map.entry(VersionConfigManager.PATH_AUTO_JAVA, I18N.get("versionsettings.t0087")),
+            Map.entry(VersionConfigManager.PATH_MIN_MEMORY, I18N.get("versionsettings.t0088")),
+            Map.entry(VersionConfigManager.PATH_MAX_MEMORY, I18N.get("versionsettings.t0089")),
+            Map.entry(VersionConfigManager.PATH_JVM_ARGS, I18N.get("versionsettings.t0090")),
+            Map.entry(VersionConfigManager.PATH_WIDTH, I18N.get("versionsettings.t0091")),
+            Map.entry(VersionConfigManager.PATH_HEIGHT, I18N.get("versionsettings.t0092")),
+            Map.entry(VersionConfigManager.PATH_FULLSCREEN, I18N.get("versionsettings.t0093")),
+            Map.entry(VersionConfigManager.PATH_VERSION_ISOLATION, I18N.get("versionsettings.t0094")),
+            Map.entry(VersionConfigManager.PATH_GAME_ARGS, I18N.get("versionsettings.t0095")),
+            Map.entry(VersionConfigManager.PATH_PRE_LAUNCH, I18N.get("versionsettings.t0096")),
+            Map.entry(VersionConfigManager.PATH_POST_EXIT, I18N.get("versionsettings.t0097")),
+            Map.entry(VersionConfigManager.PATH_GAME_LANGUAGE, I18N.get("versionsettings.t0098")));
 
     private static List<String> displayNames(Set<String> paths) {
         return paths.stream().map(p -> PATH_DISPLAY_NAMES.getOrDefault(p, p)).toList();
@@ -1599,6 +1630,6 @@ public final class VersionSettingsPage {
         return JVM_ARG_MODES.entrySet().stream()
                 .filter(e -> e.getValue().equals(mode))
                 .map(Map.Entry::getKey)
-                .findFirst().orElse("替换全局参数");
+                .findFirst().orElse(I18N.get("versionsettings.t0099"));
     }
 }

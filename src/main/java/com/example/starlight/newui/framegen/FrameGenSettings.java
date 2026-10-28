@@ -1,5 +1,7 @@
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AppDirs;
 
 import java.io.IOException;
@@ -148,12 +150,12 @@ public final class FrameGenSettings {
     public String qualityName() {
         switch (quality) {
             case 0:
-                return "基础（帧混合）";
+                return I18N.get("framegen.t0065");
             case 2:
-                return "神经（当前降级为块匹配）";
+                return I18N.get("framegen.t0066");
             case 1:
             default:
-                return "标准（块匹配运动估计）";
+                return I18N.get("framegen.t0067");
         }
     }
 }

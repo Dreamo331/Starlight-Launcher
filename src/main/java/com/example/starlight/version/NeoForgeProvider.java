@@ -11,6 +11,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class NeoForgeProvider implements LoaderProvider {
+
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(NeoForgeProvider.class);
+
     private static final String NEOFORGE_MAVEN_METADATA =
             "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml";
 
@@ -59,7 +63,9 @@ public class NeoForgeProvider implements LoaderProvider {
             if (xml == null) return new LoaderVersion(name(), null, false, null);
 
             return parseLatestVersion(xml, versionPrefix);
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LOG.warn("NeoForge version query failed for {}: {}", mcVersion, e.getMessage());
+        }
         return new LoaderVersion(name(), null, false, null);
     }
 
@@ -150,10 +156,13 @@ public class NeoForgeProvider implements LoaderProvider {
             // 元数据是按时间升序的，先全收下来再按版本号从新到旧排，
             // 否则界面上「最新版」会取到最老的那个
             VersionDownloadService.sortLoaderVersionsDesc(list);
-            if (list.size() > 60) {
-                list = new ArrayList<>(list.subList(0, 60));
+            // 截断从 60 放宽到 200：NeoForge 全版本有 1800+，单 MC 前缀通常几十到百余个
+            if (list.size() > 200) {
+                list = new ArrayList<>(list.subList(0, 200));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LOG.warn("NeoForge version list query failed for {}: {}", mcVersion, e.getMessage());
+        }
         return list;
     }
 

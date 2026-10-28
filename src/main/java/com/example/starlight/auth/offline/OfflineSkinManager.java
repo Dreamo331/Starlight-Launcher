@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.auth.offline;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.util.VanillaVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,7 +69,7 @@ public final class OfflineSkinManager {
         try {
             return skin.load(username);
         } catch (Exception e) {
-            LOG.warn("启动前加载皮肤失败：{}", e.getMessage());
+            LOG.warn(I18N.get("offline.t0034"), e.getMessage());
             return null;
         }
     }
@@ -83,7 +85,7 @@ public final class OfflineSkinManager {
         try {
             return SkinTexture.toPngBytes(loaded.getCape().getImage());
         } catch (Exception e) {
-            LOG.debug("披风转 PNG 失败：{}", e.getMessage());
+            LOG.debug(I18N.get("offline.t0035"), e.getMessage());
             return null;
         }
     }

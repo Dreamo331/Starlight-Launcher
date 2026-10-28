@@ -8,6 +8,8 @@
 //   - 使用 arguments.game JSON 格式，支持占位符替换
 package com.example.starlight.startmc.launcher;
 
+
+import com.example.starlight.util.I18N;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,7 +61,7 @@ public class ForgeModernLauncher extends BaseLauncher {
 
     @Override
     public int launch() throws IOException, InterruptedException {
-        writeLog("[模式] Forge 1.17+ (Modern)", "INFO");
+        writeLog(I18N.get("launcher.t0008"), "INFO");
 
         // 确保占位符键已初始化
         if (placeholderKeys == null) buildPlaceholderKeys();
@@ -91,7 +93,7 @@ public class ForgeModernLauncher extends BaseLauncher {
         String versionJarEntry = launchInfo.getVersion() + ".jar";
         if (versionJarEntry.contains(",")) {
             versionJarEntry = versionJarEntry.replace(",", "");
-            writeLog("版本名包含逗号，ignoreList 条目已清理为: " + versionJarEntry, "WARN");
+            writeLog(I18N.get("launcher.p0060", versionJarEntry), "WARN");
         }
         String ignoreList = REQUIRED_MODULES.stream()
                 .map(m -> m.split(":")[1])
@@ -151,9 +153,9 @@ public class ForgeModernLauncher extends BaseLauncher {
         startArgs.addAll(buildGameArgsFromJson(effectiveGameDir));
 
         // 启动进程 //
-        writeLog("启动命令构建完成，正在启动 " + launchInfo.getVersion() + " ...", "INFO");
-        writeLog("Mods 目录: " + modsDir, "INFO");
-        writeLog("日志文件: " + logFile, "INFO");
+        writeLog(I18N.get("launcher.p0061", launchInfo.getVersion() + " ..."), "INFO");
+        writeLog(I18N.get("launcher.p0062", modsDir), "INFO");
+        writeLog(I18N.get("launcher.p0063", logFile), "INFO");
 
         int exitCode = startProcessWithMonitoring(launchInfo.getJavaPath(), startArgs);
 
@@ -222,7 +224,7 @@ public class ForgeModernLauncher extends BaseLauncher {
         JsonArray libraries = versionJson.getAsJsonArray("libraries");
 
         if (libraries == null) {
-            writeLog("警告: version.json 中无 libraries 字段，无法构建模块路径", "WARN");
+            writeLog(I18N.get("launcher.t0009"), "WARN");
             return modulePaths;
         }
 

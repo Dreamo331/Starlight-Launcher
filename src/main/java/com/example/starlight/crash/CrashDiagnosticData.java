@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.crash;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.model.ErrorCode;
 
 import java.util.List;
@@ -67,6 +69,9 @@ public class CrashDiagnosticData {
     /** 系统总物理内存 */
     private String totalMemory;
 
+    /** 环境提示与下一步建议（如「检测到 GraalVM，建议换标准 OpenJDK 对照」），可为 null */
+    private String runtimeAdvice;
+
     // Constructor //
 
     public CrashDiagnosticData() {
@@ -79,38 +84,44 @@ public class CrashDiagnosticData {
      */
     public String buildSummaryText() {
         StringBuilder sb = new StringBuilder();
-        sb.append("===== Starlight Launcher 错误报告 =====\n");
-        sb.append("错误码: ").append(errorCode.getCode()).append("\n");
-        sb.append("错误类型: ").append(errorCode.getDisplayName()).append("\n");
-        sb.append("错误描述: ").append(errorDescription != null ? errorDescription : "无").append("\n");
-        sb.append("\n--- 环境信息 ---\n");
-        sb.append("启动器版本: ").append(launcherVersion != null ? launcherVersion : "未知").append("\n");
-        sb.append("游戏版本: ").append(gameVersion != null ? gameVersion : "未知").append("\n");
-        sb.append("加载器: ").append(loaderType != null ? loaderType : "未知").append("\n");
-        sb.append("Java: ").append(javaVersion != null ? javaVersion : "未知").append("\n");
-        sb.append("Java路径: ").append(javaPath != null ? javaPath : "未知").append("\n");
-        sb.append("最大内存: ").append(maxMemory > 0 ? maxMemory + " MB" : "未知").append("\n");
-        sb.append("操作系统: ").append(osInfo != null ? osInfo : "未知").append("\n");
-        sb.append("系统架构: ").append(osArch != null ? osArch : "未知").append("\n");
-        sb.append("物理内存: ").append(totalMemory != null ? totalMemory : "未知").append("\n");
-        sb.append("游戏目录: ").append(gameDir != null ? gameDir : "未知").append("\n");
+        sb.append(I18N.get("crash.t0001"));
+        sb.append(I18N.get("crash.t0002")).append(errorCode.getCode()).append("\n");
+        sb.append(I18N.get("crash.t0003")).append(errorCode.getDisplayName()).append("\n");
+        sb.append(I18N.get("crash.t0011")).append(errorDescription != null ? errorDescription : I18N.get("crash.t0012")).append("\n");
+        // 退出码是判断「真崩溃 / 被外部结束 / 启动阶段退出」最直接的证据，报告里必须带上
+        sb.append(I18N.get("crash.t0004")).append(exitCode).append("\n");
+        sb.append(I18N.get("crash.t0005"));
+        sb.append(I18N.get("crash.t0013")).append(launcherVersion != null ? launcherVersion : I18N.get("crash.t0014")).append("\n");
+        sb.append(I18N.get("crash.t0015")).append(gameVersion != null ? gameVersion : I18N.get("crash.t0016")).append("\n");
+        sb.append(I18N.get("crash.t0017")).append(loaderType != null ? loaderType : I18N.get("crash.t0018")).append("\n");
+        sb.append("Java: ").append(javaVersion != null ? javaVersion : I18N.get("crash.t0006")).append("\n");
+        sb.append(I18N.get("crash.t0019")).append(javaPath != null ? javaPath : I18N.get("crash.t0020")).append("\n");
+        sb.append(I18N.get("crash.t0021")).append(maxMemory > 0 ? maxMemory + " MB" : I18N.get("crash.t0022")).append("\n");
+        sb.append(I18N.get("crash.t0023")).append(osInfo != null ? osInfo : I18N.get("crash.t0024")).append("\n");
+        sb.append(I18N.get("crash.t0025")).append(osArch != null ? osArch : I18N.get("crash.t0026")).append("\n");
+        sb.append(I18N.get("crash.t0027")).append(totalMemory != null ? totalMemory : I18N.get("crash.t0028")).append("\n");
+        sb.append(I18N.get("crash.t0029")).append(gameDir != null ? gameDir : I18N.get("crash.t0030")).append("\n");
+
+        if (runtimeAdvice != null && !runtimeAdvice.isBlank()) {
+            sb.append(I18N.get("crash.t0007")).append(runtimeAdvice).append("\n");
+        }
 
         if (crashReportPath != null) {
             sb.append("\n--- Crash Report ---\n").append(crashReportContent != null ? crashReportContent : crashReportPath).append("\n");
         }
 
         if (launchCommand != null) {
-            sb.append("\n--- 启动命令 ---\n").append(launchCommand).append("\n");
+            sb.append(I18N.get("crash.t0008")).append(launchCommand).append("\n");
         }
 
         if (latestLogTail != null && !latestLogTail.isEmpty()) {
-            sb.append("\n--- 关键日志 (latest.log 末尾) ---\n");
+            sb.append(I18N.get("crash.t0009"));
             for (String line : latestLogTail) {
                 sb.append(line).append("\n");
             }
         }
 
-        sb.append("\n===== 报告结束 =====\n");
+        sb.append(I18N.get("crash.t0010"));
         return sb.toString();
     }
 
@@ -172,4 +183,7 @@ public class CrashDiagnosticData {
 
     public String getTotalMemory() { return totalMemory; }
     public void setTotalMemory(String totalMemory) { this.totalMemory = totalMemory; }
+
+    public String getRuntimeAdvice() { return runtimeAdvice; }
+    public void setRuntimeAdvice(String runtimeAdvice) { this.runtimeAdvice = runtimeAdvice; }
 }

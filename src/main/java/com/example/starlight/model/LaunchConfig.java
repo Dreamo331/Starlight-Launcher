@@ -30,7 +30,15 @@ public class LaunchConfig {
     /** 游戏进程优先级（low / below_normal / normal / above_normal / high / realtime） */
     public String processPriority = "normal";
 
-    /** 从 ini 配置 Map 构建 */
+    /**
+     * 从 ini 配置 Map 构建。
+     *
+     * <p><b>注意</b>：{@code starlight.ini} 已不再保存 {@code Version}（版本选择的真源是
+     * 各游戏目录内的 {@code starlight.json}，见 {@code config.SelectedVersion}），
+     * 因此本方法从 ini 取 version 只会拿到空串。调用方若需要版本，请自行注入
+     * （参考 {@code UIGeneralControlClass.getLaunchConfigFor}）。
+     * <p>本方法当前无调用方，保留仅为兼容历史签名。
+     */
     public static LaunchConfig fromIni(Map<String, String> ini) {
         LaunchConfig c = new LaunchConfig();
         c.gameDir   = ini.getOrDefault("GameDir", ".minecraft");

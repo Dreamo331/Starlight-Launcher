@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.ui.PageKit;
@@ -31,46 +33,52 @@ public final class MultiplayerSettingsPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(ctx, "联机设置");
+        VBox root = PageKit.settingsPage(ctx, I18N.get("mpsettings.t0001"));
 
         // 中继服务器地址（读写 Starlight-Launcher/multiplayer.json） //
         TextField relayServerField = new TextField(SLanConfig.relayServer());
         relayServerField.getStyleClass().add("input-field");
-        relayServerField.setPromptText("如 ws://your.server:8080（可省略 ws://）");
+        relayServerField.setPromptText(I18N.get("mpsettings.t0002"));
         relayServerField.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(relayServerField, Priority.ALWAYS);
 
-        Label relayEffectiveLabel = new Label("当前生效: " + SLanConfig.relayServer());
+        Label relayEffectiveLabel = new Label(I18N.get("mpsettings.k0001", SLanConfig.relayServer()));
         relayEffectiveLabel.setWrapText(true);
+        // 换行标签必须有最小宽度：默认最小宽=整段文本宽，放在 HBox 右侧被挤压后
+        // 会变成一列几个字符（英文文案变长后尤其明显，表现为一条竖排文字）
+        relayEffectiveLabel.setMinWidth(PageKit.SETTINGS_CONTROL_WIDTH * 0.5);
+        relayEffectiveLabel.setMaxWidth(PageKit.SETTINGS_CONTROL_WIDTH);
         relayEffectiveLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
 
         // 检测结果状态：与按钮同一行，宽度自适应换行 //
-        Label checkStatusLabel = new Label("尚未检测。");
+        Label checkStatusLabel = new Label(I18N.get("mpsettings.t0003"));
         checkStatusLabel.setWrapText(true);
+        // 最小宽度：避免在 HBox 里被压缩成一列竖排文字
+        checkStatusLabel.setMinWidth(140);
         checkStatusLabel.setMaxWidth(Double.MAX_VALUE);
         checkStatusLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
         HBox.setHgrow(checkStatusLabel, Priority.ALWAYS);
 
-        Button saveRelayBtn = PageKit.cardActionButton("保存");
-        Button checkRelayBtn = PageKit.cardActionButton("检测服务器");
+        Button saveRelayBtn = PageKit.cardActionButton(I18N.get("mpsettings.t0004"));
+        Button checkRelayBtn = PageKit.cardActionButton(I18N.get("mpsettings.t0005"));
         AppIcons.apply(checkRelayBtn, "search", 15, null);
 
         saveRelayBtn.setOnAction(e -> {
             String val = relayServerField.getText() == null ? "" : relayServerField.getText().trim();
             if (val.isEmpty()) {
-                ctx.toast("请填写中继服务器地址，如 ws://your.server:8080");
+                ctx.toast(I18N.get("mpsettings.t0006"));
                 return;
             }
             try {
                 SLanConfig.update(val, null);
                 String effective = SLanConfig.relayServer(); // 未带协议头时自动补 ws://
                 relayServerField.setText(effective);
-                relayEffectiveLabel.setText("当前生效: " + effective);
-                checkStatusLabel.setText("配置已更新，请重新检测");
+                relayEffectiveLabel.setText(I18N.get("mpsettings.k0002", effective));
+                checkStatusLabel.setText(I18N.get("mpsettings.t0007"));
                 checkStatusLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
-                ctx.toast("联机中继服务器已保存: " + effective);
+                ctx.toast(I18N.get("mpsettings.k0003", effective));
             } catch (Exception ex) {
-                ctx.toast("保存失败: " + ex.getMessage());
+                ctx.toast(I18N.get("mpsettings.k0004", ex.getMessage()));
             }
         });
 
@@ -79,13 +87,13 @@ public final class MultiplayerSettingsPage {
             String raw = relayServerField.getText() == null ? "" : relayServerField.getText().trim();
             String target = raw.isEmpty() ? SLanConfig.relayServer() : SLanConfig.normalizeRelayServer(raw);
             checkRelayBtn.setDisable(true);
-            checkStatusLabel.setText("检测中... " + target);
+            checkStatusLabel.setText(I18N.get("mpsettings.k0005", target));
             checkStatusLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #f59e0b;");
             SLanServerChecker.check(target).whenComplete((result, err) -> Platform.runLater(() -> {
                 checkRelayBtn.setDisable(false);
                 if (err != null || result == null) {
-                    String msg = err == null ? "未知错误" : (err.getCause() != null ? err.getCause().getMessage() : err.getMessage());
-                    checkStatusLabel.setText("检测失败: " + msg);
+                    String msg = err == null ? I18N.get("mpsettings.t0008") : (err.getCause() != null ? err.getCause().getMessage() : err.getMessage());
+                    checkStatusLabel.setText(I18N.get("mpsettings.k0006", msg));
                     checkStatusLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #ef4444;");
                     return;
                 }
@@ -93,11 +101,11 @@ public final class MultiplayerSettingsPage {
                 checkStatusLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: 600; -fx-text-fill: "
                         + (result.protocolMatched() ? "#10b981" : (result.reachable() ? "#f59e0b" : "#ef4444")) + ";");
                 if (result.protocolMatched()) {
-                    ctx.toast("联机服务器可用: " + target);
+                    ctx.toast(I18N.get("mpsettings.k0007", target));
                 } else if (result.reachable()) {
-                    ctx.toast("端口可达，但未收到联机协议响应");
+                    ctx.toast(I18N.get("mpsettings.t0009"));
                 } else {
-                    ctx.toast("联机服务器不可用");
+                    ctx.toast(I18N.get("mpsettings.t0010"));
                 }
             }));
         });
@@ -107,7 +115,7 @@ public final class MultiplayerSettingsPage {
         HBox actionRow = new HBox(10, checkRelayBtn, checkStatusLabel);
         actionRow.setAlignment(Pos.CENTER_LEFT);
 
-        Label relayPathLabel = new Label("配置文件: " + SLanConfig.configPath().toAbsolutePath());
+        Label relayPathLabel = new Label(I18N.get("mpsettings.k0008", SLanConfig.configPath().toAbsolutePath()));
         relayPathLabel.setWrapText(true);
         relayPathLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #94a3b8;");
 
@@ -115,8 +123,8 @@ public final class MultiplayerSettingsPage {
         relayServerBody.setPrefWidth(PageKit.SETTINGS_CONTROL_WIDTH);
         relayServerBody.setMaxWidth(PageKit.SETTINGS_CONTROL_WIDTH);
         relayServerBody.setMinWidth(0);
-        root.getChildren().add(PageKit.settingsCard("联机中继服务器",
-                "SLAN 联机使用的房间中继服务器（自建服务器填自己的地址，可省略 ws:// 前缀）；保存后重新建房/加房生效",
+        root.getChildren().add(PageKit.settingsCard(I18N.get("mpsettings.t0011"),
+                I18N.get("mpsettings.t0012"),
                 relayServerBody));
 
         // 联机模块状态（SL-MinecraftLAN.exe 是否已安装） //
@@ -128,32 +136,30 @@ public final class MultiplayerSettingsPage {
             modulePath = probeManager.getExecutablePath().toString();
         } catch (Exception ex) {
             moduleInstalled = false;
-            modulePath = "无法定位模块路径: " + ex.getMessage();
+            modulePath = I18N.get("mpsettings.k0009", ex.getMessage());
         }
-        Label moduleStatusLabel = new Label(moduleInstalled ? "已安装" : "未安装");
+        Label moduleStatusLabel = new Label(moduleInstalled ? I18N.get("mpsettings.t0013") : I18N.get("mpsettings.t0014"));
         moduleStatusLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: 600; -fx-text-fill: "
                 + (moduleInstalled ? "#10b981" : "#f59e0b") + ";");
         Label modulePathLabel = new Label(moduleInstalled
                 ? modulePath
-                : "首次使用需要下载联机模块（SL-MinecraftLAN.exe）");
+                : I18N.get("mpsettings.t0015"));
         modulePathLabel.setWrapText(true);
         modulePathLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #94a3b8;");
         VBox moduleBody = new VBox(6, moduleStatusLabel, modulePathLabel);
         if (!moduleInstalled) {
             // 未安装：跳转到「联机 → SLAN 联机」页完成下载安装（安装流程由该页负责，设置页只做导航）
-            Button goInstallBtn = PageKit.cardActionButton("去安装 ›");
+            Button goInstallBtn = PageKit.cardActionButton(I18N.get("mpsettings.t0016"));
             goInstallBtn.setOnAction(e -> ctx.switchToPage("multiplayer"));
             moduleBody.getChildren().add(goInstallBtn);
         }
         moduleBody.setPrefWidth(PageKit.SETTINGS_CONTROL_WIDTH);
         moduleBody.setMaxWidth(PageKit.SETTINGS_CONTROL_WIDTH);
         moduleBody.setMinWidth(0);
-        root.getChildren().add(PageKit.settingsCard("联机模块",
-                "SL-MinecraftLAN 联机模块（负责与中继服务器通信、转发 Minecraft 局域网数据）；"
-                        + "未安装时点「去安装」跳转到联机页完成下载", moduleBody));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("mpsettings.t0017"),
+                I18N.get("mpsettings.r0001"), moduleBody));
 
-        Label hint = new Label("提示：检测会与中继服务器建立一次 WebSocket 连接并发送协议探测帧，"
-                + "成功即说明服务器可用且协议匹配；检测不会创建房间、不影响正在进行的联机。");
+        Label hint = new Label(I18N.get("mpsettings.r0002"));
         hint.setWrapText(true);
         hint.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
         root.getChildren().add(hint);

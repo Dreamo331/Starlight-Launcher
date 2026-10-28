@@ -1,5 +1,7 @@
 package com.example.starlight.longcatapi;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AiConfig;
 import com.example.starlight.util.DebugLog;
 import java.io.BufferedReader;
@@ -87,14 +89,14 @@ public class LongCatChat {
         String logFilePath = args[0];
     
         // 固定问题
-        String baseQuestion = "请详细阅读这个Minecraft错误日志，有什么问题，回答请以json格式，直接给我json内容，格式严格按照json文件的格式，有zh-cn字段（是中文错误原因显示），还要有英文的错误原因显示";
+        String baseQuestion = I18N.get("longcatapi.t0001");
 
         try {
             // 读取log日志文件
             String logContent = readFileContent(logFilePath);
 
             // 拼接问题
-            String userQuestion = baseQuestion + "\n\n日志内容如下：\n" + logContent;
+            String userQuestion = baseQuestion + I18N.get("lcc.r0002", logContent);
 
             // 5. 调用配置好的 AI 服务（地址 / Key / 模型见高级设置 → AI 配置）
             String response = chat(userQuestion);
@@ -208,7 +210,7 @@ public class LongCatChat {
     private static String buildRequestBody(String userMessage, boolean stream) {
         String text = userMessage == null ? "" : userMessage;
         if (text.length() > MAX_MESSAGE_CHARS) {
-            text = text.substring(0, MAX_MESSAGE_CHARS) + "\n...(内容过长已截断)";
+            text = text.substring(0, MAX_MESSAGE_CHARS) + I18N.get("lcc.r0001");
         }
         String escapedUserMessage = escapeJson(text);
         StringBuilder sb = new StringBuilder(1024);
@@ -324,7 +326,7 @@ public class LongCatChat {
         if (content == null || content.isEmpty()) {
             content = extractFieldValue(json, "reasoning_content");
         }
-        return content == null || content.isEmpty() ? "无法解析回复内容" : content;
+        return content == null || content.isEmpty() ? I18N.get("longcatapi.t0002") : content;
     }
 
     // 查找 "<field>":" 并解析其字符串值（处理 JSON 转义）

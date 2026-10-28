@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.download.task;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.download.engine.TerracottaBundleStub;
 
 import java.io.IOException;
@@ -46,7 +48,7 @@ public final class MacOSProvider extends AbstractTerracottaProvider {
 
             ProcessBuilder pb = new ProcessBuilder(
                     osascript.toString(), "-e",
-                    String.format("do shell script \"installer -pkg '%s' -target /\" with prompt \"正在安装 Terracotta，需要管理员权限\" with administrator privileges",
+                    String.format(I18N.get("task.t0064"),
                             movedInstaller)
             );
             Process process = pb.inheritIO().start();

@@ -1,5 +1,7 @@
 package com.example.starlight.download.engine;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.download.DownloadSettings;
 import com.example.starlight.ModsApi.RemoteMod;
 import com.example.starlight.newui.AppConfig;
@@ -148,7 +150,7 @@ public final class HttpDownloadEngine {
             // 必须消费并关闭上一跳的空 body，避免连接泄漏
             try (java.io.InputStream is = resp.body()) { is.transferTo(java.io.OutputStream.nullOutputStream()); }
             if (location == null || location.isBlank()) {
-                throw new IOException("重定向缺少 Location 头 (HTTP " + resp.statusCode() + "): " + resp.uri());
+                throw new IOException(I18N.get("engine.p0004", resp.statusCode() + "): " + resp.uri()));
             }
             // 相对 Location 按当前 URI 解析；非 ASCII 先修复
             java.net.URI base = resp.uri();
@@ -249,7 +251,7 @@ public final class HttpDownloadEngine {
                 try { Files.deleteIfExists(dest); } catch (IOException ignored) {}
             }
         }
-        throw lastErr != null ? lastErr : new IOException("下载失败: " + url);
+        throw lastErr != null ? lastErr : new IOException(I18N.get("engine.p0005", url));
     }
 
     /**
@@ -322,11 +324,65 @@ public final class HttpDownloadEngine {
                 }
             }
         }
-        throw lastErr != null ? lastErr : new IOException("下载失败: " + url);
+        throw lastErr != null ? lastErr : new IOException(I18N.get("engine.p0006", url));
     }
 
-    /** 下载取消的统一异常文案（调用方据此区分「用户取消」与「网络失败」） */
-    public static final String CANCELLED_MESSAGE = "已取消";
+    /**
+     * 可断点续传的流式下载（「自定义下载」入口使用）。
+     *
+     * <p>与 {@link #downloadFileWithProgress} 的区别：<b>不做多线程分块</b>，直接按
+     * 「已存在字节数 → {@code Range: bytes=n-} 续传」写入同一个文件。因此用户取消、
+     * 断网、甚至关掉启动器之后，已经落盘的字节仍然有效；下次对同一个目标文件调用本方法，
+     * 会从断点继续而不是从 0 重下。服务器忽略 Range（对续传请求回 200）时自动整份重下。
+     *
+     * <p>失败重试 3 次（第 1 次 HTTP/2，之后降级 HTTP/1.1）；每次重试同样从当前断点继续。
+     *
+     * @param dest     目标文件（可以已经存在一部分内容）
+     * @param progress 0-100 进度回调，可为 null
+     * @param cancel   取消标志，可为 null；置位后抛出 {@link #CANCELLED_MESSAGE}，已下载部分保留
+     */
+    public static void downloadResumable(String url, Path dest, java.util.function.IntConsumer progress,
+                                         java.util.concurrent.atomic.AtomicBoolean cancel) throws IOException {
+        final int maxAttempts = 3;
+        // 第 1 次走 HTTP/2，后续走 HTTP/1.1（避免 RST_STREAM / Connection reset）
+        java.net.http.HttpClient[] clients = {HTTP_CLIENT, HTTP_CLIENT_FALLBACK, HTTP_CLIENT_FALLBACK};
+        IOException lastErr = null;
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            if (isCancelled(cancel)) throw new IOException(CANCELLED_MESSAGE);
+            try {
+                downloadStreaming(clients[attempt], url, dest, progress, cancel);
+                return;
+            } catch (IOException e) {
+                if (CANCELLED_MESSAGE.equals(e.getMessage())) throw e;
+                lastErr = e;
+                if (attempt < maxAttempts - 1) {
+                    try {
+                        Thread.sleep(500L * (attempt + 1));
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        }
+        throw lastErr != null ? lastErr : new IOException(I18N.get("engine.p0007", url));
+    }
+
+    /**
+     * 下载取消的异常文案标记。
+     *
+     * <p><b>不是界面文案</b>：调用方用它区分「用户取消」与「网络失败」，
+     * 属于进程内协议值。绝不能用 {@code I18N.get(...)} —— 那会在类加载时冻结语言，
+     * 且切语言后与调用方持有的字符串不再相等，「取消」会被误判成失败。
+     * 用户可见的提示由调用方按 {@link #isCancelledText} 自行翻译。
+     */
+    public static final String CANCELLED_MESSAGE = "__CANCELLED__";
+
+    /** 该异常消息是否为「已取消」（兼容历史值：可能是旧的中文文案） */
+    public static boolean isCancelledText(String message) {
+        return message != null
+                && (CANCELLED_MESSAGE.equals(message) || I18N.get("engine.t0001").equals(message));
+    }
 
     private static boolean isCancelled(java.util.concurrent.atomic.AtomicBoolean cancel) {
         return cancel != null && cancel.get();
@@ -349,9 +405,17 @@ public final class HttpDownloadEngine {
                     .build();
             java.net.http.HttpResponse<java.io.InputStream> resp = sendFollowingRedirects(client, req);
             DebugLog.http(true, "GET", url, 0, 0, null, -1);
-            // 必须消费并关闭 body，避免连接泄漏
+            // 必须消费并关闭 body：但 200（服务器不支持 Range）时不能为了拿大小把整个文件拖下来，
+            // 只读掉开头一小段让连接可复用即可。真正的总大小只从 206 的 Content-Range 取，
+            // 非 206 一律返回 -1（调用方会退回单连接流式下载）。
             try (java.io.InputStream is = resp.body()) {
-                is.transferTo(java.io.OutputStream.nullOutputStream());
+                byte[] drain = new byte[8192];
+                long drained = 0L;
+                int n;
+                while ((n = is.read(drain)) != -1) {
+                    drained += n;
+                    if (drained >= 64L * 1024L) break;
+                }
             }
             if (resp.statusCode() == 206) {
                 String cr = resp.headers().firstValue("Content-Range").orElse(null);
@@ -406,7 +470,7 @@ public final class HttpDownloadEngine {
                     f.get();
                 } catch (Exception e) {
                     Throwable cause = e.getCause() != null ? e.getCause() : e;
-                    throw new IOException("分块下载失败: " + cause.getMessage(), cause);
+                    throw new IOException(I18N.get("engine.p0008", cause.getMessage()), cause);
                 }
             }
             // 按顺序合并分块为最终文件
@@ -450,7 +514,7 @@ public final class HttpDownloadEngine {
                     resp = sendFollowingRedirects(clients[attempt], req);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    throw new IOException("分块下载被中断", e);
+                    throw new IOException(I18N.get("engine.t0002"), e);
                 }
                 DebugLog.http(true, "GET", url + " [Range " + start + "-" + end + "]", 0, 0, null, -1);
                 if (resp.statusCode() != 206) {
@@ -458,7 +522,7 @@ public final class HttpDownloadEngine {
                     try (java.io.InputStream is = resp.body()) {
                         is.transferTo(java.io.OutputStream.nullOutputStream());
                     }
-                    throw new IOException("服务器不支持分块下载 (HTTP " + resp.statusCode() + ")");
+                    throw new IOException(I18N.get("engine.p0009", resp.statusCode() + ")"));
                 }
                 try (java.io.InputStream in = resp.body();
                      var out = Files.newOutputStream(part,
@@ -488,7 +552,7 @@ public final class HttpDownloadEngine {
                 }
             }
         }
-        throw lastErr != null ? lastErr : new IOException("分块下载失败: " + url);
+        throw lastErr != null ? lastErr : new IOException(I18N.get("engine.p0010", url));
     }
 
     /** 单次流式下载（支持断点续传） */
@@ -514,7 +578,7 @@ public final class HttpDownloadEngine {
             response = sendFollowingRedirects(client, rb.build());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("下载被中断", e);
+            throw new IOException(I18N.get("engine.t0003"), e);
         }
         DebugLog.http(true, "GET", url, 0, 0, null, -1);
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
@@ -554,6 +618,12 @@ public final class HttpDownloadEngine {
                 }
             }
             DebugLog.http(false, null, url, response.statusCode(), read, "[二进制文件]", -1);
+            // 服务端声明了长度却没给够（连接被提前关闭）不能算成功：
+            // 抛出让调用方重试，重试会从当前断点继续，而不是留一个被截断的文件
+            long received = read - rangeFrom;
+            if (chunkTotal >= 0 && received < chunkTotal) {
+                throw new IOException(I18N.get("engine.p0011", received + "/" + chunkTotal));
+            }
         }
         if (progress != null) progress.accept(100);
     }

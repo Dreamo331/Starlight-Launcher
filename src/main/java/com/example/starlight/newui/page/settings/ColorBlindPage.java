@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.colorblind.ColorBlindOverlayManager;
 import com.example.starlight.download.task.OverlayDownloader;
 import com.example.starlight.gui.UIGeneralControlClass;
@@ -42,7 +44,7 @@ public final class ColorBlindPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(ctx, "色盲辅助");
+        VBox root = PageKit.settingsPage(ctx, I18N.get("colorblind.t0001"));
 
         // 未安装矫正工具：仅显示安装卡片（隔离引导），不渲染后续任何设置项。
         // 下载成功后就地补全完整设置面板（无需手动重建页面）。
@@ -63,7 +65,7 @@ public final class ColorBlindPage {
         autoEnable.setOnAction(e -> {
             ctx.config().put(ColorBlindOverlayManager.KEY_AUTO_ENABLE, String.valueOf(autoEnable.isSelected()));
             ctx.saveConfig();
-            ctx.toast("启动后自动开启: " + (autoEnable.isSelected() ? "已开启" : "已关闭"));
+            ctx.toast(I18N.get("colorblind.k0017", (autoEnable.isSelected() ? I18N.get("colorblind.t0002") : I18N.get("colorblind.t0003"))));
         });
 
         // 总开关 //
@@ -82,12 +84,11 @@ public final class ColorBlindPage {
             ctx.applyColorBlindMode();
             ctx.saveConfig();
             ctx.toast(on
-                    ? "色盲辅助: 已开启"
-                    : "色盲辅助: 已关闭（「启动后自动开启」已一并关闭）");
+                    ? I18N.get("colorblind.t0004")
+                    : I18N.get("colorblind.t0005"));
         });
-        root.getChildren().add(PageKit.settingsCard("色盲辅助",
-                "开启后，每次启动游戏都会自动对游戏窗口启用色盲矫正；游戏退出后矫正自动结束（矫正工具不作用于桌面等其它窗口）。"
-                        + "关闭后本设置会被记住，重启启动器不会自动打开",
+        root.getChildren().add(PageKit.settingsCard(I18N.get("colorblind.t0006"),
+                I18N.get("colorblind.t0031"),
                 master));
 
         // 色障类型 //
@@ -104,14 +105,14 @@ public final class ColorBlindPage {
             String code = ColorBlindOverlayManager.codeOfLabel(label);
             ctx.config().put(ColorBlindOverlayManager.KEY_TYPE, code);
             ctx.saveConfig();
-            ctx.toast("色障类型: " + label + "（" + code + "）");
+            ctx.toast(I18N.get("colorblind.k0018", label + "（" + code + "）"));
         });
-        root.getChildren().add(PageKit.settingsCard("色障类型",
-                "选择与你情况最接近的类型；不确定时先用默认的绿色盲 deuteranopia", typeCombo));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("colorblind.t0007"),
+                I18N.get("colorblind.t0008"), typeCombo));
 
         // 矫正强度 //
         double currentStrength = ColorBlindOverlayManager.resolveStrength(ctx.config());
-        Label strengthLabel = new Label("当前: " + ColorBlindOverlayManager.formatStrength(currentStrength));
+        Label strengthLabel = new Label(I18N.get("colorblind.k0001", ColorBlindOverlayManager.formatStrength(currentStrength)));
         strengthLabel.getStyleClass().add("black-value-label");
         // 锁固有宽度：卡片挤压时数值不许被压成「当前…」
         strengthLabel.setMinWidth(Region.USE_PREF_SIZE);
@@ -122,20 +123,20 @@ public final class ColorBlindPage {
         strengthSlider.setBlockIncrement(0.1);
         strengthSlider.setPrefWidth(200);
         strengthSlider.valueProperty().addListener((obs, old, val) ->
-                strengthLabel.setText("当前: " + ColorBlindOverlayManager.formatStrength(val.doubleValue())));
-        Button saveStrength = AppIcons.button("save", "保存");
+                strengthLabel.setText(I18N.get("colorblind.k0002", ColorBlindOverlayManager.formatStrength(val.doubleValue()))));
+        Button saveStrength = AppIcons.button("save", I18N.get("colorblind.t0009"));
         saveStrength.getStyleClass().add("btn-primary");
         saveStrength.setOnAction(e -> {
             String value = ColorBlindOverlayManager.formatStrength(strengthSlider.getValue());
             ctx.config().put(ColorBlindOverlayManager.KEY_STRENGTH, value);
             ctx.saveConfig();
-            ctx.toast("矫正强度已保存: " + value);
+            ctx.toast(I18N.get("colorblind.k0003", value));
         });
         HBox strengthRow = new HBox(10, strengthSlider, strengthLabel, saveStrength);
         strengthRow.setAlignment(Pos.CENTER_LEFT);
         // 通栏（stacked）而不是与左侧说明挤同一行：说明文字长时右侧控件区会被压到溢出
-        root.getChildren().add(PageKit.settingsCardStacked("矫正强度",
-                "0.0 ~ 3.0，数值越大颜色偏移越明显、画面色彩也越夸张；建议从 1.0 开始微调", strengthRow));
+        root.getChildren().add(PageKit.settingsCardStacked(I18N.get("colorblind.t0010"),
+                I18N.get("colorblind.t0011"), strengthRow));
 
         // 游戏窗口标题 //
         TextField windowField = new TextField(ctx.config().getOrDefault(ColorBlindOverlayManager.KEY_WINDOW, ""));
@@ -143,16 +144,16 @@ public final class ColorBlindPage {
         windowField.setPrefWidth(360);
         // TextField 的默认最小宽度很小，放在一行里会被长说明挤成一条缝（只剩几个像素宽）
         windowField.setMinWidth(260);
-        windowField.setPromptText("留空 = 默认抓取 " + ColorBlindOverlayManager.DEFAULT_WINDOW);
-        Button saveWindow = AppIcons.button("save", "保存");
+        windowField.setPromptText(I18N.get("colorblind.k0004", ColorBlindOverlayManager.DEFAULT_WINDOW));
+        Button saveWindow = AppIcons.button("save", I18N.get("colorblind.t0012"));
         saveWindow.getStyleClass().add("btn-primary");
         Runnable commitWindow = () -> {
             String value = windowField.getText() == null ? "" : windowField.getText().trim();
             ctx.config().put(ColorBlindOverlayManager.KEY_WINDOW, value);
             ctx.saveConfig();
             ctx.toast(value.isEmpty()
-                    ? "已改回默认窗口: " + ColorBlindOverlayManager.DEFAULT_WINDOW
-                    : "游戏窗口标题已保存: " + value);
+                    ? I18N.get("colorblind.r0001", ColorBlindOverlayManager.DEFAULT_WINDOW)
+                    : I18N.get("colorblind.r0002", value));
         };
         saveWindow.setOnAction(e -> commitWindow.run());
         // 回车即保存，省得每次都要摸鼠标点按钮
@@ -160,16 +161,14 @@ public final class ColorBlindPage {
         HBox windowRow = new HBox(10, windowField, saveWindow);
         windowRow.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(windowField, Priority.ALWAYS);
-        root.getChildren().add(PageKit.settingsCardStacked("游戏窗口标题",
-                "抓取哪个窗口做矫正：标题子串匹配且区分大小写（如填 Minecraft 可匹配「Minecraft 1.20.1」）；"
-                        + "不填则使用默认的 " + ColorBlindOverlayManager.DEFAULT_WINDOW + "；填了自定义值就按自定义值匹配",
+        root.getChildren().add(PageKit.settingsCardStacked(I18N.get("colorblind.t0013"),
+                I18N.get("colorblind.p0035", ColorBlindOverlayManager.DEFAULT_WINDOW),
                 windowRow));
 
         // 自动开启 //
         // 勾选框与处理逻辑在方法开头已创建（总开关需要引用它），这里只挂卡片
-        root.getChildren().add(PageKit.settingsCard("启动后自动开启",
-                "开启时：尚未设置过总开关的首次运行，启动器启动后色盲辅助默认开启；之后一律以总开关为准。"
-                        + "手动关闭总开关会自动关闭本项，两个开关不会互相打架",
+        root.getChildren().add(PageKit.settingsCard(I18N.get("colorblind.t0014"),
+                I18N.get("colorblind.t0032"),
                 autoEnable));
 
         // 记住当前配置 //
@@ -178,10 +177,10 @@ public final class ColorBlindPage {
         remember.setOnAction(e -> {
             ctx.config().put(ColorBlindOverlayManager.KEY_REMEMBER, String.valueOf(remember.isSelected()));
             ctx.saveConfig();
-            ctx.toast("记住当前配置: " + (remember.isSelected() ? "已开启" : "已关闭（下次启动恢复默认值）"));
+            ctx.toast(I18N.get("colorblind.k0019", (remember.isSelected() ? I18N.get("colorblind.t0015") : I18N.get("colorblind.t0016"))));
         });
-        root.getChildren().add(PageKit.settingsCard("记住当前配置",
-                "开启时：下次启动启动器沿用当前的色障类型 / 强度 / 窗口标题；关闭时：每次启动都恢复默认值",
+        root.getChildren().add(PageKit.settingsCard(I18N.get("colorblind.t0017"),
+                I18N.get("colorblind.t0018"),
                 remember));
 
         // 快速测试调节（本地网页工具） //
@@ -189,27 +188,27 @@ public final class ColorBlindPage {
         statusLabel.getStyleClass().add("settings-card-desc");
         statusLabel.setWrapText(true);
 
-        Button openTuneBtn = AppIcons.button("globe", "打开调节网页");
+        Button openTuneBtn = AppIcons.button("globe", I18N.get("colorblind.t0019"));
         openTuneBtn.getStyleClass().add("btn-primary");
         openTuneBtn.setOnAction(e -> {
             String url = ColorBlindOverlayManager.tuneServerUrl();
             if (url == null) {
-                ctx.toast("无法启动本地调节服务");
+                ctx.toast(I18N.get("colorblind.t0020"));
                 return;
             }
             ctx.openWebUrl(url);
-            ctx.toast("已打开调节网页: " + url);
+            ctx.toast(I18N.get("colorblind.k0005", url));
             statusLabel.setText(ColorBlindOverlayManager.statusText());
         });
 
-        Button restartBtn = AppIcons.button("refresh", "重启矫正工具");
+        Button restartBtn = AppIcons.button("refresh", I18N.get("colorblind.t0021"));
         restartBtn.getStyleClass().add("btn-primary");
         restartBtn.setOnAction(e -> {
             ctx.toast(ColorBlindOverlayManager.restartOverlay());
             statusLabel.setText(ColorBlindOverlayManager.statusText());
         });
 
-        Button stopBtn = AppIcons.button("stop", "停止矫正工具");
+        Button stopBtn = AppIcons.button("stop", I18N.get("colorblind.t0022"));
         stopBtn.getStyleClass().add("btn-primary");
         stopBtn.setOnAction(e -> {
             ctx.toast(ColorBlindOverlayManager.stopOverlay());
@@ -220,11 +219,8 @@ public final class ColorBlindPage {
         tuneButtons.setAlignment(Pos.CENTER_LEFT);
         VBox tuneBox = new VBox(10, statusLabel, tuneButtons);
         // 通栏布局：三个按钮挤在右侧控件区时会被卡片右边缘裁掉（「停止矫正工具」只露一半）
-        root.getChildren().add(PageKit.settingsCardStacked("快速测试调节（实时看效果）",
-                "在网页里做色觉自测小游戏：看图选数字即可推断色障类型、再挑出最清楚的强度档；"
-                        + "也可以手动拖动强度 / 换类型。点「保存配置」写入配置文件（下次启动游戏生效）；"
-                        + "点「重启矫正工具进程」按当前数值立即重启矫正工具，游戏窗口在运行时马上能看到效果"
-                        + "（矫正工具窗口内按 F10 可手动退出）",
+        root.getChildren().add(PageKit.settingsCardStacked(I18N.get("colorblind.t0023"),
+                I18N.get("colorblind.t0033"),
                 tuneBox));
     }
 
@@ -235,19 +231,17 @@ public final class ColorBlindPage {
      * 并把完整设置面板就地补进 root，使用户不用离开页面即可继续配置。
      */
     private Node buildMissingToolCard(VBox root) {
-        Button downloadBtn = AppIcons.button("download", "下载矫正工具");
+        Button downloadBtn = AppIcons.button("download", I18N.get("colorblind.t0024"));
         downloadBtn.getStyleClass().add("btn-primary");
-        Button openPageBtn = AppIcons.button("external-link", "打开下载页");
+        Button openPageBtn = AppIcons.button("external-link", I18N.get("colorblind.t0025"));
         downloadBtn.getStyleClass().add("btn-primary");
         openPageBtn.getStyleClass().add("btn-primary");
         openPageBtn.setOnAction(e -> ctx.openWebUrl(ColorBlindOverlayManager.DOWNLOAD_URL));
 
         HBox buttons = new HBox(12, downloadBtn, openPageBtn);
         buttons.setAlignment(Pos.CENTER_LEFT);
-        VBox card = PageKit.settingsCardStacked("矫正工具未安装",
-                "色盲辅助依赖外部矫正工具 ColorBlindOverlay.exe（不随启动器分发）。点「下载矫正工具」"
-                        + "会自动下载并放到用户数据目录的 ColorBlindOverlay 文件夹，无需手动安装；"
-                        + "也可以到下载页手动获取后自行放置。安装完成前，下方矫正设置不可用",
+        VBox card = PageKit.settingsCardStacked(I18N.get("colorblind.t0026"),
+                I18N.get("colorblind.t0034"),
                 buttons);
         downloadBtn.setOnAction(e -> downloadOverlay(downloadBtn, () -> {
             // 下载成功：先摘掉「未安装」卡片，再补全完整设置面板（页面实例未重建时立即生效）
@@ -274,8 +268,8 @@ public final class ColorBlindPage {
             return;
         }
         downloadBtn.setDisable(true);
-        DownloadTaskCard dialog = downloads.open("下载色盲矫正工具");
-        dialog.stage("下载矫正工具...");
+        DownloadTaskCard dialog = downloads.open(I18N.get("colorblind.t0027"));
+        dialog.stage(I18N.get("colorblind.t0028"));
         dialog.beginFile("ColorBlindOverlay.exe");
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
@@ -284,17 +278,17 @@ public final class ColorBlindPage {
                 OverlayDownloader.download(ColorBlindOverlayManager.DOWNLOAD_URL,
                         target.toPath(), dialog::progress, dialog.cancelFlag());
                 dialog.finishFile(true);
-                dialog.finish(true, "已下载到 " + target.getAbsolutePath(), null);
+                dialog.finish(true, I18N.get("colorblind.k0006", target.getAbsolutePath()), null);
                 Platform.runLater(() -> {
                     if (onDownloaded != null) {
                         onDownloaded.run();
                     }
-                    ctx.toast("色盲矫正工具已下载完成，下次启动游戏时自动生效");
+                    ctx.toast(I18N.get("colorblind.t0029"));
                 });
             } catch (Exception ex) {
                 boolean cancelled = OverlayDownloader.CANCELLED_MESSAGE.equals(ex.getMessage());
                 dialog.finishFile(false);
-                dialog.finish(false, cancelled ? "已取消下载" : "下载失败: " + ex.getMessage(), null);
+                dialog.finish(false, cancelled ? I18N.get("colorblind.t0030") : I18N.get("colorblind.k0007", ex.getMessage()), null);
                 Platform.runLater(() -> downloadBtn.setDisable(false));
             }
         });

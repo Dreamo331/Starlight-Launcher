@@ -1,5 +1,7 @@
 package com.example.starlight.newui.download;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
@@ -94,7 +96,7 @@ public final class ModInstallTargetDialog {
         Map<String, String> cfg = host.config();
         this.isolation = cfg != null && VersionConfigManager.effectiveVersionIsolation(
                 cfg, dir, this.currentVersion);
-        this.what = what == null || what.isBlank() ? "模组" : what;
+        this.what = what == null || what.isBlank() ? I18N.get("download.t0037") : what;
         this.onConfirm = onConfirm;
     }
 
@@ -124,37 +126,37 @@ public final class ModInstallTargetDialog {
         VBox body = new VBox(10);
         body.setAlignment(Pos.TOP_CENTER);
         body.getChildren().add(dialogIcon());
-        body.getChildren().add(centered("配置下载路径", "modal-card-title"));
-        body.getChildren().add(centered("选择" + what + "的下载位置", "modal-desc"));
+        body.getChildren().add(centered(I18N.get("download.t0038"), "modal-card-title"));
+        body.getChildren().add(centered(I18N.get("mitd.r0001", what), "modal-desc"));
         body.getChildren().add(centered(isolationHintText(), "modal-hint"));
 
         // 候选列表：全局 / 版本 / 自定义（临时） //
         VBox list = new VBox(6);
         list.getStyleClass().add("install-target-list");
 
-        list.getChildren().add(groupLabel("全局文件夹"));
+        list.getChildren().add(groupLabel(I18N.get("download.t0039")));
         Path globalDir = root.resolve("mods");
-        list.getChildren().add(createRow("全局文件夹", relative(globalDir), globalDir,
+        list.getChildren().add(createRow(I18N.get("download.t0061"), relative(globalDir), globalDir,
                 AppIcons.icon("globe", 16, Color.web("#8b5cf6")), "global",
-                List.of(badge(samePath(globalDir, loadDir) ? "会加载" : "所有版本共用",
+                List.of(badge(samePath(globalDir, loadDir) ? I18N.get("download.t0062") : I18N.get("download.t0063"),
                         samePath(globalDir, loadDir) ? "accent" : "shared")), false).node());
 
-        list.getChildren().add(groupLabel("版本文件夹"));
-        emptyNote = centered("没有已安装的游戏版本", "install-target-empty");
+        list.getChildren().add(groupLabel(I18N.get("download.t0040")));
+        emptyNote = centered(I18N.get("download.t0041"), "install-target-empty");
         emptyNote.setVisible(versions.isEmpty());
         emptyNote.setManaged(versions.isEmpty());
         list.getChildren().add(emptyNote);
         for (String v : versions) {
             Path dir = root.resolve("versions").resolve(v).resolve("mods");
             List<Label> badges = new ArrayList<>();
-            if (samePath(dir, loadDir)) badges.add(badge("会加载", "accent"));
+            if (samePath(dir, loadDir)) badges.add(badge(I18N.get("download.t0042"), "accent"));
             if (v.equals(currentVersion)) badges.add(badge("当前", "current"));
             list.getChildren().add(createRow(v, relative(dir), dir,
                     VersionIconKit.icon(VersionIconKit.read(root.toString(), v), 16), "version",
                     badges, true).node());
         }
 
-        customGroupLabel = groupLabel("自定义路径 · 临时");
+        customGroupLabel = groupLabel(I18N.get("download.t0043"));
         customGroupLabel.setVisible(false);
         customGroupLabel.setManaged(false);
         customBox = new VBox(6);
@@ -212,7 +214,7 @@ public final class ModInstallTargetDialog {
     /** 搜索框：放大镜 + 透明输入框 + 清除按钮 */
     private Node searchRow() {
         TextField field = new TextField();
-        field.setPromptText("搜索版本");
+        field.setPromptText(I18N.get("download.t0044"));
         field.getStyleClass().add("install-target-search-field");
         HBox.setHgrow(field, Priority.ALWAYS);
         field.textProperty().addListener((o, a, b) -> filter(b));
@@ -277,7 +279,7 @@ public final class ModInstallTargetDialog {
 
     /** 通栏虚线按钮：打开资源管理器自选路径（加入临时候选，不写配置） */
     private Button browseButton() {
-        Button browse = new Button("打开资源管理器自定义路径");
+        Button browse = new Button(I18N.get("download.t0045"));
         browse.getStyleClass().add("install-target-browse");
         AppIcons.apply(browse, "folder-open", 14, null);
         browse.setMaxWidth(Double.MAX_VALUE);
@@ -287,7 +289,7 @@ public final class ModInstallTargetDialog {
 
     /** 当前选中路径预览：整块可点，直接打开该文件夹 */
     private HBox previewBox() {
-        Label label = new Label("下载至");
+        Label label = new Label(I18N.get("download.t0046"));
         label.getStyleClass().add("install-target-preview-label");
         previewValue.getStyleClass().add("install-target-preview-value");
         previewValue.setTextOverrun(OverrunStyle.ELLIPSIS);
@@ -310,13 +312,13 @@ public final class ModInstallTargetDialog {
     }
 
     private HBox actions() {
-        Button cancelBtn = new Button("取消");
+        Button cancelBtn = new Button(I18N.get("download.t0047"));
         cancelBtn.getStyleClass().add("modal-btn-cancel");
         cancelBtn.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(cancelBtn, Priority.ALWAYS);
         cancelBtn.setOnAction(e -> host.ui().closeModal());
 
-        confirmBtn = new Button("确认下载");
+        confirmBtn = new Button(I18N.get("download.t0048"));
         confirmBtn.getStyleClass().add("modal-btn-ok");
         confirmBtn.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(confirmBtn, Priority.ALWAYS);
@@ -362,7 +364,7 @@ public final class ModInstallTargetDialog {
         }
         if (emptyNote != null && !filterableRows.isEmpty()) {
             boolean none = shown == 0;
-            emptyNote.setText("没有匹配的版本");
+            emptyNote.setText(I18N.get("download.t0049"));
             emptyNote.setVisible(none);
             emptyNote.setManaged(none);
         }
@@ -371,7 +373,7 @@ public final class ModInstallTargetDialog {
     /** 打开资源管理器选文件夹；已有同目录候选时直接选中它，不重复添加 */
     private void browseCustomPath() {
         DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("选择下载到哪个文件夹");
+        chooser.setTitle(I18N.get("download.t0050"));
         Path current = selectedDir();
         Path start = bestExistingDir(current == null ? root : current);
         if (start != null) chooser.setInitialDirectory(start.toFile());
@@ -388,7 +390,7 @@ public final class ModInstallTargetDialog {
         // 自定义候选不参与搜索过滤：刚刚手选的位置必须一直看得见
         Row added = createRow(folderName(dir), dir.toString(), dir,
                 AppIcons.icon("folder", 16, Color.web("#16a34a")), "custom",
-                List.of(badge("不保存", "temp")), false);
+                List.of(badge(I18N.get("download.t0051"), "temp")), false);
         customBox.getChildren().add(added.node());
         customGroupLabel.setVisible(true);
         customGroupLabel.setManaged(true);
@@ -422,7 +424,7 @@ public final class ModInstallTargetDialog {
             }
         }
         if (sel == null) {
-            previewValue.setText("请选择下载位置");
+            previewValue.setText(I18N.get("download.t0052"));
             if (!previewValue.getStyleClass().contains("empty")) previewValue.getStyleClass().add("empty");
             if (confirmBtn != null) confirmBtn.setDisable(true);
             if (openBtn != null) openBtn.setDisable(true);
@@ -466,12 +468,12 @@ public final class ModInstallTargetDialog {
 
     private String isolationHintText() {
         if (!isolation) {
-            return "未开启版本隔离：游戏只加载全局 mods 文件夹";
+            return I18N.get("download.t0053");
         }
         if (currentVersion.isEmpty()) {
-            return "已开启版本隔离，但还没选中游戏版本";
+            return I18N.get("download.t0054");
         }
-        return "已开启版本隔离：只加载当前版本的 mods 文件夹";
+        return I18N.get("download.t0055");
     }
 
     /** 相对游戏目录显示；不在其下时退回绝对路径 */

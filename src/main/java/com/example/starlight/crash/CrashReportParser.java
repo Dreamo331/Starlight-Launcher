@@ -1,5 +1,7 @@
 package com.example.starlight.crash;
 
+
+import com.example.starlight.util.I18N;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -115,6 +117,108 @@ public class CrashReportParser {
         } catch (IOException e) {
             return null;
         }
+    }
+
+    /**
+     * 查找本次启动之后写出的 {@code hs_err_pid*.log}（JVM 原生崩溃的唯一现场证据）。
+     *
+     * <p>Java 层崩溃会留 crash-report，而 {@code EXCEPTION_ACCESS_VIOLATION} 这类原生崩溃由
+     * HotSpot 的 signal handler 兜住，只写下这份 hs_err 然后进程直接消失；面板不主动找它，
+     * 用户就只看到一句「未知错误」。JVM 把 ErrorFile 写在**进程工作目录**，本启动器把工作目录
+     * 设成版本隔离目录 / 游戏目录，所以两处都搜，再拿启动器自身工作目录兜底。
+     *
+     * @param gameDir     game directory root
+     * @param version     版本 ID（可为 null）
+     * @param sinceMillis 只取此时间戳(ms)之后写出的文件；≤0 表示不过滤
+     * @return 最匹配的 hs_err 绝对路径，或 null
+     */
+    public static String findLatestHsErr(String gameDir, String version, long sinceMillis) {
+        List<Path> dirs = new ArrayList<>();
+        if (gameDir != null && !gameDir.isBlank()) {
+            if (version != null && !version.isBlank()) {
+                dirs.add(Paths.get(gameDir, "versions", version));
+            }
+            dirs.add(Paths.get(gameDir));
+        }
+        dirs.add(Paths.get("."));
+
+        Path newest = null;
+        long newestTime = Long.MIN_VALUE;
+        for (Path dir : dirs) {
+            if (!Files.isDirectory(dir)) continue;
+            try (Stream<Path> stream = Files.list(dir)) {
+                for (Path p : stream
+                        .filter(f -> f.getFileName().toString().matches("hs_err_pid\\d*\\.log"))
+                        .toList()) {
+                    long time = p.toFile().lastModified();
+                    if (sinceMillis > 0 && time < sinceMillis) continue;
+                    if (time > newestTime) {
+                        newestTime = time;
+                        newest = p;
+                    }
+                }
+            } catch (IOException ignored) {
+                // 目录不可读就跳过，继续看下一处
+            }
+        }
+        return newest == null ? null : newest.toAbsolutePath().toString();
+    }
+
+    /**
+     * 从 hs_err 里摘出「崩在哪」：fatal error 标题 + 异常类型行 + Problematic frame 那一帧。
+     * hs_err 是 {@code #} 注释风格，直接套 {@link #parse(String)} 只会拿到一个孤零零的 "#"。
+     *
+     * @return 两三行摘要；文件不可读或没有可识别内容时返回 null
+     */
+    public static String summarizeHsErr(String filePath) {
+        Path path = Paths.get(filePath);
+        if (!Files.isRegularFile(path) || !Files.isReadable(path)) return null;
+        List<String> lines;
+        try {
+            lines = Files.readAllLines(path);
+        } catch (IOException e) {
+            return null;
+        }
+
+        String header = null, exception = null, frame = null;
+        for (int i = 0; i < lines.size() && i < 400; i++) {
+            String body = stripHsErrComment(lines.get(i));
+            if (body.isEmpty()) continue;
+            String lower = body.toLowerCase(Locale.ROOT);
+            if (header == null && lower.contains("fatal error has been detected")) {
+                header = body;
+            } else if (exception == null && (body.startsWith("EXCEPTION_") || body.startsWith("SIGSEGV")
+                    || body.startsWith("SIGILL") || body.startsWith("SIGBUS") || body.startsWith("SIGFPE"))) {
+                exception = body;
+            } else if (frame == null && lower.startsWith("problematic frame:")) {
+                // 帧信息紧跟其后（形如 "C  [nvoglv64.dll+0x17f5b3b]" 或 "J 1234 c2 ..."）
+                for (int j = i + 1; j < lines.size() && j < i + 6; j++) {
+                    String next = stripHsErrComment(lines.get(j));
+                    if (!next.isEmpty()) {
+                        frame = next;
+                        break;
+                    }
+                }
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        if (header != null) appendLine(sb, header);
+        if (exception != null) appendLine(sb, exception);
+        if (frame != null) appendLine(sb, I18N.get("crash.p0031", frame));
+        return sb.isEmpty() ? null : sb.toString();
+    }
+
+    /** 去掉 hs_err 的 {@code #} 注释前缀并 trim */
+    private static String stripHsErrComment(String raw) {
+        String trimmed = raw == null ? "" : raw.trim();
+        while (trimmed.startsWith("#")) trimmed = trimmed.substring(1).trim();
+        return trimmed;
+    }
+
+    private static void appendLine(StringBuilder sb, String line) {
+        if (!sb.isEmpty()) sb.append('\n');
+        sb.append(line);
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.ui.InertiaScrollSupport;
@@ -23,15 +25,15 @@ public final class AccessibilityPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(ctx, "辅助功能");
+        VBox root = PageKit.settingsPage(ctx, I18N.get("a11y.t0001"));
         CheckBox toggle = PageKit.toggle("true".equalsIgnoreCase(ctx.config().getOrDefault("HighContrast", "false")));
         toggle.setOnAction(e -> {
             ctx.config().put("HighContrast", String.valueOf(toggle.isSelected()));
             ctx.saveConfig();
             ctx.applyHighContrast();
-            ctx.toast("高对比度: " + (toggle.isSelected() ? "开启" : "关闭"));
+            ctx.toast(I18N.get("a11y.k0003", (toggle.isSelected() ? I18N.get("a11y.t0002") : I18N.get("a11y.t0003"))));
         });
-        root.getChildren().add(PageKit.settingsCard("高对比度", "提高界面对比度（文字更清晰）", toggle));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("a11y.t0004"), I18N.get("a11y.t0005"), toggle));
 
         //色盲辅助（与「色盲辅助」设置页共用 ColorBlindMode 这一个总开关）
         CheckBox colorBlindToggle = PageKit.toggle("true".equalsIgnoreCase(ctx.config().getOrDefault("ColorBlindMode", "false")));
@@ -42,17 +44,16 @@ public final class AccessibilityPage {
             // 而关闭总开关会连带把「启动后自动开启」也关掉（见 applyMasterSwitch），顺序反了会写回旧值
             ctx.applyColorBlindMode();
             ctx.saveConfig();
-            ctx.toast(on ? "色盲辅助: 开启" : "色盲辅助: 关闭（「启动后自动开启」已一并关闭）");
+            ctx.toast(on ? I18N.get("a11y.t0006") : I18N.get("a11y.t0007"));
         });
         // 详细配置（色障类型 / 强度 / 游戏窗口标题 / 快速调节工具）在独立的「色盲辅助」设置页
-        Button configBtn = AppIcons.button("sliders", "详细配置");
+        Button configBtn = AppIcons.button("sliders", I18N.get("a11y.t0008"));
         configBtn.getStyleClass().add("btn-primary");
         configBtn.setOnAction(e -> ctx.switchToSettings("sidebarColorBlind"));
         HBox colorBlindRow = new HBox(12, colorBlindToggle, configBtn);
         colorBlindRow.setAlignment(Pos.CENTER_LEFT);
-        root.getChildren().add(PageKit.settingsCard("色盲辅助",
-                "启动游戏时自动对游戏窗口启用色盲矫正（游戏退出后自动结束），关闭后会被记住、重启启动器不会自动打开；"
-                        + "类型 / 强度 / 窗口标题点右侧「详细配置」调节",
+        root.getChildren().add(PageKit.settingsCard(I18N.get("a11y.t0009"),
+                I18N.get("a11y.t0014"),
                 colorBlindRow));
 
         // 停用惯性滚动（无障碍开关，实时生效；规格见 spec 5.8。选中即停用）
@@ -61,10 +62,10 @@ public final class AccessibilityPage {
         inertiaToggle.setOnAction(e -> {
             ctx.config().put(InertiaScrollSupport.CONFIG_ENABLED, String.valueOf(!inertiaToggle.isSelected()));
             ctx.saveConfig();
-            ctx.toast(inertiaToggle.isSelected() ? "惯性滚动: 关闭" : "惯性滚动: 开启");
+            ctx.toast(inertiaToggle.isSelected() ? I18N.get("a11y.t0010") : I18N.get("a11y.t0011"));
         });
-        root.getChildren().add(PageKit.settingsCard("停用惯性滚动",
-                "关闭后滚轮/键盘改为直接跳转、不再播放滚动动画，适合对动效敏感、易眩晕的用户",
+        root.getChildren().add(PageKit.settingsCard(I18N.get("a11y.t0012"),
+                I18N.get("a11y.t0013"),
                 inertiaToggle));
         return root;
     }

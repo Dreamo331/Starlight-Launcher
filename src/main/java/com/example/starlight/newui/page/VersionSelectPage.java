@@ -1,6 +1,9 @@
 package com.example.starlight.newui.page;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.GameDirManager;
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.launch.LaunchRecordStore;
 import com.example.starlight.util.ArchiveUtils;
 import com.example.starlight.newui.LauncherContext;
@@ -61,7 +64,7 @@ public final class VersionSelectPage {
     // 版本选择页面 //
 
     public Node build() {
-        VBox root = PageKit.settingsPage(host, "版本选择", "home");
+        VBox root = PageKit.settingsPage(host, I18N.get("page.t0540"), "home");
 
         // 左侧「版本文件夹」栏 + 右侧版本列表：两栏各自独立滚动（本页不再被外层 ScrollPane 包裹）
         HBox layout = new HBox(16);
@@ -86,12 +89,12 @@ public final class VersionSelectPage {
         // 标题行：已安装版本数量 + 刷新；当前文件夹完整路径另起一行（可换行，不省略）
         HBox titleRow = new HBox(10);
         titleRow.setAlignment(Pos.CENTER_LEFT);
-        Label listTitle = new Label("已安装版本（读取中…）");
+        Label listTitle = new Label(I18N.get("page.t0541"));
         // 显式指定文字颜色（浅色背景上默认文字色偏白看不清），深色主题由 CSS 覆盖
         listTitle.getStyleClass().add("section-title");
         listTitle.setMinWidth(Region.USE_PREF_SIZE);
         HBox.setHgrow(listTitle, Priority.ALWAYS);
-        Button refreshBtn = AppIcons.button("refresh", "刷新");
+        Button refreshBtn = AppIcons.button("refresh", I18N.get("page.t0542"));
         refreshBtn.getStyleClass().add("btn-primary");
         refreshBtn.setStyle("-fx-padding: 4 12; -fx-font-size: 11px;");
         refreshBtn.setMinWidth(Region.USE_PREF_SIZE);
@@ -101,7 +104,7 @@ public final class VersionSelectPage {
         });
         titleRow.getChildren().addAll(listTitle, refreshBtn);
 
-        Label dirLabel = new Label("当前文件夹: " + GameDirManager.resolve(gameDir));
+        Label dirLabel = new Label(I18N.get("page.p0898", GameDirManager.resolve(gameDir)));
         dirLabel.getStyleClass().add("settings-card-desc");
         dirLabel.setWrapText(true);
         content.getChildren().add(new VBox(4, titleRow, dirLabel));
@@ -130,15 +133,14 @@ public final class VersionSelectPage {
                 VersionIconKit.Info info = VersionIconKit.read(gameDir, ver);
                 grouped.computeIfAbsent(groupKeyOf(info), k -> new ArrayList<>()).add(info);
             }
-            String currentVer = host.config().getOrDefault("Version", "");
+            String currentVer = SelectedVersion.of(host.config());
             Platform.runLater(() -> {
-                listTitle.setText("已安装版本 (" + versions.size() + ")");
+                listTitle.setText(I18N.get("page.p0899", versions.size() + ")"));
                 groupList.getChildren().remove(skeleton);
                 if (versions.isEmpty()) {
-                    groupList.getChildren().add(new Label("该文件夹暂无已安装的版本\n请先在启动器中下载游戏版本，或在左侧切换到其他文件夹"
-                            + (Files.isDirectory(Paths.get(gameDir, "versions"))
+                    groupList.getChildren().add(new Label(I18N.get("page.p0900", (Files.isDirectory(Paths.get(gameDir, "versions"))
                                 ? ""
-                                : "\n（添加文件夹时会自动初始化标准目录结构）")) {{
+                                : I18N.get("page.t0732")))) {{
                         setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20; -fx-text-alignment: center;");
                     }});
                 } else {
@@ -149,7 +151,7 @@ public final class VersionSelectPage {
             });
         });
 
-        Button addVerBtn = AppIcons.button("download", "下载新版本");
+        Button addVerBtn = AppIcons.button("download", I18N.get("page.t0543"));
         addVerBtn.getStyleClass().add("btn-primary");
         addVerBtn.setMaxWidth(Double.MAX_VALUE);
         // 复用下载中心已有的版本下载流程（游戏版本分类），不再只是提示占位
@@ -174,7 +176,7 @@ public final class VersionSelectPage {
         nav.setFillWidth(true);
         nav.getStyleClass().add("download-nav");
 
-        Label navTitle = new Label("版本文件夹");
+        Label navTitle = new Label(I18N.get("page.t0544"));
         navTitle.getStyleClass().add("download-nav-title");
         nav.getChildren().add(navTitle);
 
@@ -189,12 +191,13 @@ public final class VersionSelectPage {
             Integer cachedCount = GameDirManager.cachedVersionCount(entry.getPath());
             boolean cacheValid = cachedCount != null;
             int versions = cachedCount != null ? cachedCount : -1;
-            String countText = !exists ? "目录不存在"
-                    : (versions >= 0 ? versions + " 个版本" : "读取版本数…");
+            String countText = !exists ? I18N.get("page.t0733")
+                    : (versions >= 0 ? I18N.get("vs.r0001", versions) : I18N.get("page.t0734"));
 
             Button item = navItem("folder", entry.getName() + "\n" + countText);
             item.setTooltip(new Tooltip(entry.getDisplayPath()
-                    + (exists ? (versions >= 0 ? "\n已安装 " + versions + " 个版本" : "\n版本数读取中") : "\n目录不存在")));
+                    + (exists ? (versions >= 0 ? I18N.get("vs.r0005", versions)
+                            : I18N.get("page.t0735")) : I18N.get("page.t0736"))));
             if (isActive) {
                 item.getStyleClass().add("selected");
                 AppIcons.apply(item, "bullet", 8, null);
@@ -206,15 +209,15 @@ public final class VersionSelectPage {
                     int count = entry.countVersions();
                     GameDirManager.putVersionCount(entry.getPath(), count);
                     Platform.runLater(() -> {
-                        item.setText(entry.getName() + "\n" + count + " 个版本");
-                        item.setTooltip(new Tooltip(entry.getDisplayPath() + "\n已安装 " + count + " 个版本"));
+                        item.setText(entry.getName() + "\n" + I18N.get("vs.r0001", count));
+                        item.setTooltip(new Tooltip(I18N.get("vs.r0006", entry.getDisplayPath(), count)));
                     });
                 });
             }
 
             item.setOnAction(e -> {
                 if (GameDirManager.samePath(entry.getPath(), GameDirManager.activePath(host.config()))) {
-                    host.ui().toast("当前已是该版本文件夹: " + entry.getName());
+                    host.ui().toast(I18N.get("page.p0901", entry.getName()));
                     return;
                 }
                 // 切换目录后重新挂载本页：右侧列表刷新为该文件夹的版本
@@ -230,16 +233,16 @@ public final class VersionSelectPage {
         VBox.setMargin(sep, new Insets(8, 4, 8, 4));
         nav.getChildren().add(sep);
 
-        Button addItem = navItem("plus", "添加文件夹");
+        Button addItem = navItem("plus", I18N.get("page.t0545"));
         addItem.setOnAction(e -> {
             DirectoryChooser dc = new DirectoryChooser();
-            dc.setTitle("选择要切换的 .minecraft 目录");
+            dc.setTitle(I18N.get("page.t0546"));
             File f = dc.showDialog(host.stage());
             if (f != null) host.ui().toast(host.switchGameDir(f.getAbsolutePath(), "versionSelect"));
         });
         nav.getChildren().add(addItem);
 
-        Button manageItem = navItem("list", "管理目录");
+        Button manageItem = navItem("list", I18N.get("page.t0547"));
         manageItem.setOnAction(e -> host.switchToSettings("sidebarGameDir"));
         nav.getChildren().add(manageItem);
 
@@ -323,7 +326,7 @@ public final class VersionSelectPage {
     private static String groupDisplayName(String groupKey) {
         if (MODPACK_GROUP.equals(groupKey)) return "整合包";
         if (LoaderDetector.VANILLA.equals(groupKey)) return "原版（Vanilla）";
-        if (groupKey == null || groupKey.isBlank()) return "未识别（缺少版本 JSON）";
+        if (groupKey == null || groupKey.isBlank()) return I18N.get("page.t0548");
         return groupKey;
     }
 
@@ -370,7 +373,7 @@ public final class VersionSelectPage {
         HBox.setHgrow(nameLabel, Priority.ALWAYS);
 
         Label statusLabel = new Label(holdsCurrent
-                ? "当前使用中"
+                ? I18N.get("page.t0549")
                 : versions.size() + " " + groupUnit(groupKey));
         statusLabel.getStyleClass().add("component-status");
         if (holdsCurrent) statusLabel.getStyleClass().add("chosen");
@@ -390,10 +393,7 @@ public final class VersionSelectPage {
 
         // 「整合包」分组悬停说明判定标准：免得看不出为什么某些版本没被归进来
         if (MODPACK_GROUP.equals(groupKey)) {
-            Tooltip.install(row, new Tooltip("整合包判定：由本启动器安装的整合包"
-                    + "（版本 JSON 有 inheritsFrom、没有 mainClass）。\n"
-                    + "用 PCL2 等外部启动器安装的整合包无法自动识别（目录里没有标记），"
-                    + "仍按底层加载器归类。"));
+            Tooltip.install(row, new Tooltip(I18N.get("page.t0557")));
         }
 
         return new VBox(6, row, panel);
@@ -405,7 +405,7 @@ public final class VersionSelectPage {
         panel.getStyleClass().add("settings-card");
         panel.setStyle("-fx-padding: 12 16; -fx-translate-y: 0; -fx-background-color: rgba(127,127,127,0.07);");
 
-        Label allTitle = new Label("已安装 " + versions.size() + " 个版本");
+        Label allTitle = new Label(I18N.get("vs.r0002", versions.size()));
         allTitle.getStyleClass().add("config-panel-title");
         panel.getChildren().add(allTitle);
 
@@ -439,7 +439,7 @@ public final class VersionSelectPage {
         Label nameLabel = new Label(ver);
         nameLabel.getStyleClass().add("loader-version-name");
         info.getChildren().add(nameLabel);
-        String caption = isCurrent ? "当前使用中" : (entry.base().isBlank() ? "" : "基于 " + entry.base());
+        String caption = isCurrent ? I18N.get("page.t0737") : (entry.base().isBlank() ? "" : I18N.get("page.p0902", entry.base()));
         if (!caption.isEmpty()) {
             Label capLabel = new Label(caption);
             capLabel.getStyleClass().add("loader-version-caption");
@@ -448,7 +448,7 @@ public final class VersionSelectPage {
         HBox.setHgrow(info, Priority.ALWAYS);
         item.getChildren().addAll(iconBox, info);
 
-        Button selectBtn = AppIcons.button("check", isCurrent ? "当前" : "选择");
+        Button selectBtn = AppIcons.button("check", isCurrent ? I18N.get("page.t0738") : I18N.get("page.t0739"));
         selectBtn.getStyleClass().add("btn-primary");
         selectBtn.setStyle("-fx-padding: 4 12; -fx-font-size: 11px;");
         selectBtn.setMinWidth(Region.USE_PREF_SIZE);
@@ -456,9 +456,11 @@ public final class VersionSelectPage {
             selectBtn.setDisable(true);
         } else {
             selectBtn.setOnAction(e -> {
-                host.config().put("Version", ver);
+                // 版本选择的真源：写进该游戏目录自己的 starlight.json（ini 不再保存 Version）
+                SelectedVersion.set(gameDir, ver);
+                SelectedVersion.syncCache(host.config());
                 host.saveConfig();
-                host.ui().toast("已选择版本: " + ver);
+                host.ui().toast(I18N.get("page.p0903", ver));
                 host.refreshHomeCache();
                 host.cachePage("versionSelect", build());
                 host.switchToPage("versionSelect");
@@ -466,41 +468,44 @@ public final class VersionSelectPage {
         }
 
         // 版本设置：进入该版本的独立设置页（差异继承全局，未覆盖字段跟随全局配置）
-        Button verSettingsBtn = AppIcons.button("sliders", "版本设置");
+        Button verSettingsBtn = AppIcons.button("sliders", I18N.get("page.t0550"));
         verSettingsBtn.getStyleClass().add("btn-primary");
         verSettingsBtn.setStyle("-fx-padding: 4 12; -fx-font-size: 11px;");
         verSettingsBtn.setMinWidth(Region.USE_PREF_SIZE);
         verSettingsBtn.setOnAction(e -> {
             if (!ver.equals(currentVer)) {
-                host.config().put("Version", ver);
+                // 版本选择的真源：该游戏目录自己的 starlight.json
+                SelectedVersion.set(gameDir, ver);
+                SelectedVersion.syncCache(host.config());
                 host.saveConfig();
             }
             host.switchToSettings("sidebarVersionSettings");
         });
 
         // 删除版本：确认后删除版本目录，并同步清理首页「最近游玩」中该版本的记录
-        Button deleteBtn = AppIcons.button("trash", "删除");
+        Button deleteBtn = AppIcons.button("trash", I18N.get("page.t0551"));
         deleteBtn.setStyle("-fx-padding: 4 12; -fx-font-size: 11px;"
                 + " -fx-background-color: #fee2e2; -fx-text-fill: #dc2626;");
         deleteBtn.setMinWidth(Region.USE_PREF_SIZE);
         deleteBtn.setOnAction(e -> {
             Path versionDir = Paths.get(gameDir, "versions", ver);
-            host.confirmDelete("确定要删除版本 \"" + ver + "\" 吗？\n将删除该版本全部文件（含此版本的隔离存档、模组等数据），此操作不可恢复！", () -> {
+            host.confirmDelete(I18N.get("vs.r0003", ver), () -> {
                 try {
                     ArchiveUtils.deleteRecursively(versionDir);
                 } catch (Exception ex) {
-                    host.ui().toast("删除版本失败: " + ex.getMessage());
+                    host.ui().toast(I18N.get("page.p0904", ex.getMessage()));
                     return;
                 }
                 // 同步清理首页「最近游玩」中该版本的启动记录
                 LaunchRecordStore.removeIf(r -> ver.equals(r.version)
                         && java.util.Objects.equals(gameDir, r.gameDir));
-                // 删除的是当前选中版本时，重置版本配置
-                if (ver.equals(host.config().get("Version"))) {
-                    host.config().put("Version", "");
+                // 删除的是当前选中版本时，清掉该目录里的选择记录
+                if (ver.equals(SelectedVersion.of(gameDir))) {
+                    SelectedVersion.set(gameDir, "");
+                    SelectedVersion.syncCache(host.config());
                     host.saveConfig();
                 }
-                host.ui().toast("已删除版本: " + ver);
+                host.ui().toast(I18N.get("page.p0905", ver));
                 host.refreshHomeCache();
                 host.cachePage("versionSelect", build());
                 host.switchToPage("versionSelect");

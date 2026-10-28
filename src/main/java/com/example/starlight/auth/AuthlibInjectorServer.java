@@ -1,5 +1,7 @@
 package com.example.starlight.auth;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.AppConfig;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -73,7 +75,7 @@ public class AuthlibInjectorServer {
     public static AuthlibInjectorServer locateServer(String url) throws IOException {
         try {
             if (url == null || url.isBlank()) {
-                throw new IOException("认证服务器地址不能为空");
+                throw new IOException(I18N.get("auth.t0004"));
             }
             String input = url.trim();
             if (!input.startsWith("http://") && !input.startsWith("https://")) {
@@ -98,16 +100,16 @@ public class AuthlibInjectorServer {
             } catch (JsonSyntaxException | IllegalStateException e) {
                 String body = resp.body();
                 String snippet = body == null ? "" : (body.length() > 200 ? body.substring(0, 200) + "..." : body);
-                throw new IOException("服务器响应不是有效的 Authlib-Injector metadata JSON: " + snippet);
+                throw new IOException(I18N.get("auth.p0012", snippet));
             }
             return new AuthlibInjectorServer(current, metadata);
         } catch (IOException e) {
             throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("定位认证服务器被中断", e);
+            throw new IOException(I18N.get("auth.t0005"), e);
         } catch (IllegalArgumentException e) {
-            throw new IOException("无效的服务器地址: " + url, e);
+            throw new IOException(I18N.get("auth.p0013", url), e);
         }
     }
 
@@ -153,7 +155,7 @@ public class AuthlibInjectorServer {
                 .build();
         HttpResponse<String> resp = CLIENT.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         if (resp.statusCode() >= 400) {
-            throw new IOException("服务器返回 HTTP " + resp.statusCode() + " (GET " + url + ")");
+            throw new IOException(I18N.get("auth.p0014", resp.statusCode() + " (GET " + url + ")"));
         }
         return resp;
     }

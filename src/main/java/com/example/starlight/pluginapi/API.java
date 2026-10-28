@@ -1,5 +1,7 @@
 package com.example.starlight.pluginapi;
 
+
+import com.example.starlight.util.I18N;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,13 +66,14 @@ public final class API {
      */
     public void registerProvider(ApiProvider provider) {
         if (provider == null) {
-            throw new IllegalArgumentException("provider 不能为 null");
+            throw new IllegalArgumentException(I18N.get("pluginapi.t0001"));
         }
         String id = provider.apiId();
         ApiProvider old = providers.putIfAbsent(id, provider);
         if (old != null) {
             throw new IllegalStateException(
-                    "API ID 冲突：" + id + " 已被 " + old.getClass().getName() + " 注册，拒绝重复注册 " + provider.getClass().getName());
+                    I18N.get("api.r0001", id, old.getClass().getName(),
+                    provider.getClass().getName()));
         }
         LOGGER.info("已注册 API: " + id + " v" + provider.apiVersion()
                 + " (" + provider.getClass().getSimpleName() + ")");
@@ -121,7 +124,7 @@ public final class API {
             if (DEBUG) {
                 LOGGER.warning("[API-DEBUG] 未找到 API: " + apiId + "（已注册 " + providers.size() + " 个）");
             }
-            throw new ApiException(404, "未知 API: " + apiId);
+            throw new ApiException(404, I18N.get("pluginapi.p0004", apiId));
         }
 
         try {
@@ -129,7 +132,7 @@ public final class API {
             if (DEBUG) {
                 long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
                 LOGGER.info(String.format(
-                        "[API-DEBUG] apiId=%s params=%s 耗时=%dms 返回大小=%d bytes",
+                        I18N.get("pluginapi.t0002"),
                         apiId, request.params(), elapsedMs, result == null ? 0 : result.length));
             }
             return result;
@@ -144,7 +147,7 @@ public final class API {
             if (DEBUG) {
                 LOGGER.warning("[API-DEBUG] apiId=" + apiId + " 参数错误: " + e.getMessage());
             }
-            throw new ApiException(400, "参数错误: " + e.getMessage(), e);
+            throw new ApiException(400, I18N.get("pluginapi.p0005", e.getMessage()), e);
         } catch (Throwable t) {
             // 兜底：Error（如 NoClassDefFoundError / ExceptionInInitializerError）也必须转成
             // ApiException 返回 —— 否则异常会逃逸到 HttpServer 工作线程使其静默死亡，
@@ -156,7 +159,7 @@ public final class API {
             if (DEBUG) {
                 LOGGER.log(Level.SEVERE, "[API-DEBUG] apiId=" + apiId + " 调用失败(Throwable) 耗时=" + elapsedMs + "ms", t);
             }
-            throw new ApiException(500, "API 调用失败: " + apiId + " -> " + t, t);
+            throw new ApiException(500, I18N.get("pluginapi.p0006", apiId + " -> " + t), t);
         }
     }
 }

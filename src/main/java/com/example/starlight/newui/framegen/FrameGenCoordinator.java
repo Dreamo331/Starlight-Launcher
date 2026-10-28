@@ -1,7 +1,10 @@
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.gui.UIGeneralControlClass;
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.PageKit;
@@ -98,7 +101,7 @@ public final class FrameGenCoordinator {
                             }
                             if (fgTray != null && fgTray.isActive()) {
                                 String detail = (pid > 0) ? (name + " (PID " + pid + ")") : name;
-                                fgTray.showMessage("游戏已启动", detail, java.awt.TrayIcon.MessageType.INFO);
+                                fgTray.showMessage(I18N.get("framegen.t0002"), detail, java.awt.TrayIcon.MessageType.INFO);
                             }
                         }
                         catch (Throwable t) {
@@ -116,7 +119,7 @@ public final class FrameGenCoordinator {
             // 倍率变化（本页 / 托盘触发）时：托盘可用则弹气泡提示
             fgController.addListener((n, msg) -> {
                 if (n > 0 && fgTray != null && fgTray.isActive()) {
-                    Platform.runLater(() -> fgTray.showMessage("帧生成已启用", msg, java.awt.TrayIcon.MessageType.INFO));
+                    Platform.runLater(() -> fgTray.showMessage(I18N.get("framegen.t0003"), msg, java.awt.TrayIcon.MessageType.INFO));
                 }
             });
 
@@ -169,7 +172,7 @@ public final class FrameGenCoordinator {
                 fgTray = null;
                 // 启动失败（系统托盘不支持等）：回退已保存的开关状态，避免下次启动反复尝试
                 fgConfig.setTrayEnabled(false);
-                host.toast("系统托盘不可用，无法启用帧生成托盘");
+                host.toast(I18N.get("framegen.t0004"));
             }
             else {
                 refreshFrameGenTrayControl();
@@ -190,13 +193,13 @@ public final class FrameGenCoordinator {
         }
         if (fgTrayStateLabel != null) {
             if (active) {
-                fgTrayStateLabel.setText("已启用");
+                fgTrayStateLabel.setText(I18N.get("framegen.t0005"));
             }
             else if (fgConfig != null && fgConfig.isTrayEnabled()) {
-                fgTrayStateLabel.setText("启用失败（系统托盘不可用）");
+                fgTrayStateLabel.setText(I18N.get("framegen.t0006"));
             }
             else {
-                fgTrayStateLabel.setText("未启用");
+                fgTrayStateLabel.setText(I18N.get("framegen.t0007"));
             }
         }
     }
@@ -236,7 +239,7 @@ public final class FrameGenCoordinator {
             gameDir = ".minecraft";
         }
         gameDir = gameDir.trim();
-        String version = host.config().getOrDefault("Version", "");
+        String version = SelectedVersion.of(host.config());
         // 隔离按当前版本的有效配置判定（版本独立设置页可单版本开关）
         boolean isolated = VersionConfigManager.effectiveVersionIsolation(
                 host.config(), gameDir, version);
@@ -326,11 +329,11 @@ public final class FrameGenCoordinator {
         if (fgStatusGameLabel != null) {
             if (game) {
                 int pid = fgMonitor != null ? fgMonitor.getGamePid() : -1;
-                fgStatusGameLabel.setText(pid > 0 ? "运行中（PID " + pid + "）" : "运行中");
+                fgStatusGameLabel.setText(pid > 0 ? I18N.get("framegen.p0133", pid + "）") : I18N.get("framegen.t0091"));
                 fgStatusGameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: -sl-ok;");
             }
             else {
-                fgStatusGameLabel.setText("等待 Minecraft 启动…");
+                fgStatusGameLabel.setText(I18N.get("framegen.t0008"));
                 fgStatusGameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: -sl-idle;");
             }
         }
@@ -338,11 +341,11 @@ public final class FrameGenCoordinator {
         int base = fgConfig != null ? fgConfig.getBaseFps() : 60;
         if (fgStatusFrameLabel != null) {
             if (mult > 0) {
-                fgStatusFrameLabel.setText(mult + "x 已启用（目标 " + (base * mult) + " FPS）");
+                fgStatusFrameLabel.setText(I18N.get("fgc.r0001", mult, base * mult));
                 fgStatusFrameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: -sl-ok;");
             }
             else {
-                fgStatusFrameLabel.setText("未启用");
+                fgStatusFrameLabel.setText(I18N.get("framegen.t0009"));
                 fgStatusFrameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: -sl-idle;");
             }
         }
@@ -364,10 +367,10 @@ public final class FrameGenCoordinator {
         if (fgOptionsLabel != null) {
             File optionsFile = fgMonitor != null ? fgMonitor.findOptionsFile() : null;
             if (optionsFile != null) {
-                fgOptionsLabel.setText("options.txt 已自动定位: " + optionsFile.getAbsolutePath());
+                fgOptionsLabel.setText(I18N.get("framegen.p0134", optionsFile.getAbsolutePath()));
             }
             else {
-                AppIcons.setText(fgOptionsLabel, "file", "options.txt 尚未找到（游戏首次启动后会自动生成，届时自动生效，无需任何设置）");
+                AppIcons.setText(fgOptionsLabel, "file", I18N.get("framegen.t0010"));
             }
         }
         if (fgLsStatusLabel != null) {
@@ -375,8 +378,8 @@ public final class FrameGenCoordinator {
             boolean lsReady = lsPath != null && !lsPath.trim().isEmpty()
                     && new File(lsPath.trim()).isFile();
             fgLsStatusLabel.setText(lsReady
-                    ? "当前模式：Lossless Scaling（lsfg 帧生成）"
-                    : "当前模式：options.txt 自动（FPS 限制）");
+                    ? I18N.get("framegen.t0092")
+                    : I18N.get("framegen.t0093"));
         }
         refreshFrameGenTrayControl();
     }
@@ -391,10 +394,10 @@ public final class FrameGenCoordinator {
         // 标题行：← 返回首页
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = AppIcons.button("back", "返回");
+        Button backBtn = AppIcons.button("back", I18N.get("framegen.t0011"));
         backBtn.getStyleClass().add("back-btn");
         backBtn.setOnAction(e -> host.switchToPage("home"));
-        Label titleLabel = new Label("帧生成器");
+        Label titleLabel = new Label(I18N.get("framegen.t0012"));
         titleLabel.getStyleClass().add("content-title");
         header.getChildren().addAll(backBtn, titleLabel);
         root.getChildren().add(header);
@@ -402,31 +405,31 @@ public final class FrameGenCoordinator {
         // 运行状态 //
         VBox statusCard = new VBox(10);
         statusCard.getStyleClass().add("settings-card");
-        Label statusTitle = AppIcons.label("desktop", "运行状态");
+        Label statusTitle = AppIcons.label("desktop", I18N.get("framegen.t0013"));
         statusTitle.getStyleClass().add("settings-card-title");
         statusTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: 700;");
         HBox statusCols = new HBox(50);
         VBox gameCol = new VBox(4);
-        Label gameCap = new Label("游戏状态");
+        Label gameCap = new Label(I18N.get("framegen.t0014"));
         gameCap.getStyleClass().add("settings-card-desc");
-        fgStatusGameLabel = new Label("等待 Minecraft 启动…");
+        fgStatusGameLabel = new Label(I18N.get("framegen.t0015"));
         fgStatusGameLabel.getStyleClass().add("settings-card-title");
         fgStatusGameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: 700;");
         fgStatusGameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: -sl-idle;");
         gameCol.getChildren().addAll(gameCap, fgStatusGameLabel);
         VBox frameCol = new VBox(4);
-        Label frameCap = new Label("当前帧生成");
+        Label frameCap = new Label(I18N.get("framegen.t0016"));
         frameCap.getStyleClass().add("settings-card-desc");
-        fgStatusFrameLabel = new Label("未启用");
+        fgStatusFrameLabel = new Label(I18N.get("framegen.t0017"));
         fgStatusFrameLabel.getStyleClass().add("settings-card-title");
         fgStatusFrameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: 700;");
         fgStatusFrameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: -sl-idle;");
         frameCol.getChildren().addAll(frameCap, fgStatusFrameLabel);
         statusCols.getChildren().addAll(gameCol, frameCol);
-        Label modeHint = new Label("全程自动：选中倍率后，检测到 Minecraft 启动会自动定位其 options.txt 并写入 maxFps（目标 = 基础 FPS × 倍率），关闭倍率或退出启动器时自动还原；如需使用 Lossless Scaling 硬件帧生成，可在下方“Lossless Scaling（可选）”中自行配置其路径，配置后自动优先使用。");
+        Label modeHint = new Label(I18N.get("framegen.t0018"));
         modeHint.getStyleClass().add("settings-card-desc");
         modeHint.setWrapText(true);
-        fgOptionsLabel = new Label("正在自动搜索 options.txt …");
+        fgOptionsLabel = new Label(I18N.get("framegen.t0019"));
         fgOptionsLabel.getStyleClass().add("settings-card-desc");
         fgOptionsLabel.setWrapText(true);
         statusCard.getChildren().addAll(statusTitle, statusCols, modeHint, fgOptionsLabel);
@@ -435,15 +438,15 @@ public final class FrameGenCoordinator {
         // 倍率选择 //
         VBox rateCard = new VBox(10);
         rateCard.getStyleClass().add("settings-card");
-        Label rateTitle = AppIcons.label("bolt", "帧生成倍率");
+        Label rateTitle = AppIcons.label("bolt", I18N.get("framegen.t0020"));
         rateTitle.getStyleClass().add("settings-card-title");
         rateTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: 700;");
-        Label rateDesc = new Label("关闭或选择 2x / 4x / 6x / 8x 立即生效（目标 FPS = 基础 FPS × 倍率）；无需先配置任何目录，options.txt 全自动定位");
+        Label rateDesc = new Label(I18N.get("framegen.t0021"));
         rateDesc.getStyleClass().add("settings-card-desc");
         HBox rateRow = new HBox(8);
         rateRow.setAlignment(Pos.CENTER_LEFT);
         int[] multVals = {0, 2, 4, 6, 8};
-        String[] multNames = {"关闭", "2x", "4x", "6x", "8x"};
+        String[] multNames = {I18N.get("framegen.t0022"), "2x", "4x", "6x", "8x"};
         fgMultiplierButtons = new Button[multVals.length];
         for (int i = 0; i < multVals.length; i++) {
             final int mv = multVals[i];
@@ -456,7 +459,7 @@ public final class FrameGenCoordinator {
                     return;
                 }
                 fgController.applyFrameGen(mv);
-                host.toast(mv == 0 ? "帧生成已关闭" : "帧生成 " + mv + "x 已应用");
+                host.toast(mv == 0 ? I18N.get("framegen.t0094") : I18N.get("fgc.r0002", mv));
                 refreshFrameGenUi();
             });
             fgMultiplierButtons[i] = btn;
@@ -468,42 +471,42 @@ public final class FrameGenCoordinator {
         // Lossless Scaling（可选 · 自主配置） //
         VBox lsCard = new VBox(10);
         lsCard.getStyleClass().add("settings-card");
-        Label lsTitle = new Label("Lossless Scaling（可选）");
+        Label lsTitle = new Label(I18N.get("framegen.t0023"));
         lsTitle.getStyleClass().add("settings-card-title");
         lsTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: 700;");
-        Label lsDesc = new Label("自主配置：设置 Lossless Scaling.exe 路径后，帧生成优先使用其 lsfg 模式；留空则自动使用 options.txt FPS 限制模式（无需其它任何配置）。");
+        Label lsDesc = new Label(I18N.get("framegen.t0024"));
         lsDesc.getStyleClass().add("settings-card-desc");
         lsDesc.setWrapText(true);
         TextField lsPathField = new TextField(fgConfig != null ? fgConfig.getLosslessScalingPath() : "");
         lsPathField.getStyleClass().add("input-field");
         lsPathField.setPrefWidth(360);
-        lsPathField.setPromptText("LosslessScaling.exe 完整路径（留空 = options.txt 自动模式）");
-        Button lsBrowseBtn = AppIcons.button("folder", "浏览…");
+        lsPathField.setPromptText(I18N.get("framegen.t0025"));
+        Button lsBrowseBtn = AppIcons.button("folder", I18N.get("framegen.t0026"));
         lsBrowseBtn.getStyleClass().add("btn-primary");
         lsBrowseBtn.setOnAction(e -> {
             FileChooser fc = new FileChooser();
-            fc.setTitle("选择 Lossless Scaling.exe");
-            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("可执行文件", "*.exe"));
+            fc.setTitle(I18N.get("framegen.t0027"));
+            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(I18N.get("framegen.t0028"), "*.exe"));
             File f = fc.showOpenDialog(host.stage());
             if (f != null) {
                 lsPathField.setText(f.getAbsolutePath());
                 fgSaveLosslessScalingPath(f.getAbsolutePath());
-                host.toast("Lossless Scaling 路径已保存");
+                host.toast(I18N.get("framegen.t0029"));
             }
         });
-        Button lsSaveBtn = AppIcons.button("save", "保存");
+        Button lsSaveBtn = AppIcons.button("save", I18N.get("framegen.t0030"));
         lsSaveBtn.getStyleClass().add("btn-primary");
         lsSaveBtn.setOnAction(e -> {
             String v = lsPathField.getText() == null ? "" : lsPathField.getText().trim();
             fgSaveLosslessScalingPath(v);
-            host.toast(v.isEmpty() ? "已改用 options.txt 自动模式" : "Lossless Scaling 路径已保存");
+            host.toast(v.isEmpty() ? I18N.get("framegen.t0095") : I18N.get("framegen.t0096"));
         });
-        Button lsClearBtn = AppIcons.button("close", "清除");
+        Button lsClearBtn = AppIcons.button("close", I18N.get("framegen.t0031"));
         lsClearBtn.getStyleClass().add("btn-primary");
         lsClearBtn.setOnAction(e -> {
             lsPathField.setText("");
             fgSaveLosslessScalingPath("");
-            host.toast("已清除，改用 options.txt 自动模式");
+            host.toast(I18N.get("framegen.t0032"));
         });
         HBox lsRow = new HBox(10, lsPathField, lsBrowseBtn, lsSaveBtn, lsClearBtn);
         lsRow.setAlignment(Pos.CENTER_LEFT);
@@ -525,12 +528,12 @@ public final class FrameGenCoordinator {
             boolean on = fgTrayToggle.isSelected();
             fgConfig.setTrayEnabled(on);
             applyFrameGenTray(on);
-            host.toast(on ? "正在启用帧生成系统托盘…" : "帧生成系统托盘已停用");
+            host.toast(on ? I18N.get("framegen.t0097") : I18N.get("framegen.t0098"));
             refreshFrameGenTrayControl();
         });
         HBox trayRow = new HBox(14, fgTrayToggle, fgTrayStateLabel);
         trayRow.setAlignment(Pos.CENTER_LEFT);
-        root.getChildren().add(PageKit.settingsCard("系统托盘", "在系统托盘显示帧生成图标：左键打开本页面，右键快捷切换倍率（原 INS 键全局呼出方式已移除）", trayRow));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("framegen.t0099"), I18N.get("framegen.t0100"), trayRow));
 
         // 定时刷新（1s） //
         Timeline fgRefresh = new Timeline(new KeyFrame(Duration.seconds(1), e -> refreshFrameGenUi()));

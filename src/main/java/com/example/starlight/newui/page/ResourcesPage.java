@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.ModsApi.RemoteMod;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
@@ -86,7 +88,7 @@ public final class ResourcesPage {
         nav.setMaxWidth(160);
         nav.setMaxHeight(Double.MAX_VALUE);
         nav.getStyleClass().add("download-nav");
-        Label title = new Label("资源管理");
+        Label title = new Label(I18N.get("page.t0405"));
         title.getStyleClass().add("download-nav-title");
         nav.getChildren().add(title);
 
@@ -101,11 +103,11 @@ public final class ResourcesPage {
 
         // 分类导航：图标 + 选中高亮（默认选中第一个“存档”）
         String[][] cats = {
-                {"resource_archives", "存档", "archive"}, {"resource_mods", "模组", "puzzle"},
-                {"resource_resourcepacks", "资源包", "image"}, {"resource_shaders", "光影包", "sun"},
-                {"resource_crashreports", "崩溃报告", "warning"}, {"resource_screenshots", "截图", "camera"},
-                {"resource_uploaded_logs", "上传的日志", "upload"},
-                {"resource_others", "其他", "ellipsis"}
+                {"resource_archives", I18N.get("page.t0406"), "archive"}, {"resource_mods", I18N.get("page.t0407"), "puzzle"},
+                {"resource_resourcepacks", I18N.get("page.t0408"), "image"}, {"resource_shaders", I18N.get("page.t0409"), "sun"},
+                {"resource_crashreports", I18N.get("page.t0410"), "warning"}, {"resource_screenshots", I18N.get("page.t0411"), "camera"},
+                {"resource_uploaded_logs", I18N.get("page.t0412"), "upload"},
+                {"resource_others", I18N.get("page.t0413"), "ellipsis"}
         };
         for (String[] c : cats) {
             Button btn = new Button(c[1]);
@@ -135,14 +137,14 @@ public final class ResourcesPage {
         VBox content = new VBox(16);
         content.setPadding(new Insets(0, 4, 0, 0));
         String title = switch (type) {
-            case "resource_archives" -> "存档管理";
-            case "resource_mods" -> "模组管理";
-            case "resource_resourcepacks" -> "资源包";
-            case "resource_shaders" -> "光影包";
-            case "resource_crashreports" -> "崩溃报告";
-            case "resource_screenshots" -> "截图";
-            case "resource_uploaded_logs" -> "上传的日志";
-            default -> "其他资源";
+            case "resource_archives" -> I18N.get("page.t0414");
+            case "resource_mods" -> I18N.get("page.t0415");
+            case "resource_resourcepacks" -> I18N.get("page.t0416");
+            case "resource_shaders" -> I18N.get("page.t0417");
+            case "resource_crashreports" -> I18N.get("page.t0418");
+            case "resource_screenshots" -> I18N.get("page.t0419");
+            case "resource_uploaded_logs" -> I18N.get("page.t0420");
+            default -> I18N.get("page.t0421");
         };
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("content-title");
@@ -165,33 +167,33 @@ public final class ResourcesPage {
                     addDirComboFilter(content, saveDirs, gameDir,
                             scanOrigin, origin -> { currentFilterOrigin = origin; showResourceContent(type, container); });
                     if (saves.isEmpty()) {
-                        content.getChildren().add(new Label("暂无存档") {{
+                        content.getChildren().add(new Label(I18N.get("page.t0422")) {{
                             setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20;");
                         }});
                     } else {
                         // 搜索 + 分批渲染：一次只铺 20 张存档卡片，其余点底部按钮继续往下加载
-                        content.getChildren().add(pagedSearchSection("搜索存档名称 / 版本目录...", saves,
+                        content.getChildren().add(pagedSearchSection(I18N.get("page.t0423"), saves,
                                 s -> s.worldName + " " + s.version + " " + s.path,
                                 s -> {
                                     String savePath = s.path;
-                                    return createResourceCard(s.worldName, "来源: " + s.version,
-                                            new String[]{"备份", "删除", "打开文件夹"},
+                                    return createResourceCard(s.worldName, I18N.get("page.p0862", s.version),
+                                            new String[]{I18N.get("page.t0671"), I18N.get("page.t0672"), I18N.get("page.t0673")},
                                             new Runnable[]{
                                                     () -> {
                                                         String backupDir = gameDir + "/backups";
                                                         var result = UIGeneralControlClass.backupSave(savePath, backupDir);
                                                         host.ui().toast(result.message);
                                                     },
-                                                    () -> host.confirmDelete("确定要删除存档 \"" + s.worldName + "\" 吗？此操作不可恢复！", () -> {
+                                                    () -> host.confirmDelete(I18N.get("res.r0001", s.worldName), () -> {
                                                         try {
                                                             java.nio.file.Path saveDir = java.nio.file.Paths.get(savePath);
                                                             java.nio.file.Files.walk(saveDir)
                                                                     .sorted((a, b) -> b.toString().length() - a.toString().length())
                                                                     .forEach(p -> { try { java.nio.file.Files.deleteIfExists(p); } catch (Exception ignored) {} });
-                                                            host.ui().toast("已删除存档: " + s.worldName);
+                                                            host.ui().toast(I18N.get("page.p0863", s.worldName));
                                                             showResourceContent(type, container);
                                                         } catch (Exception ex) {
-                                                            host.ui().toast("删除失败: " + ex.getMessage());
+                                                            host.ui().toast(I18N.get("page.p0864", ex.getMessage()));
                                                         }
                                                     }),
                                                     () -> host.openFile(savePath)
@@ -203,13 +205,13 @@ public final class ResourcesPage {
                 });
             });
         } else if (type.equals("resource_mods")) {
-            loadToggleableItems("模组", ResourceScanner.collectResourceDirs(gameDir, "mods"), container, type, true);
+            loadToggleableItems(I18N.get("page.t0424"), ResourceScanner.collectResourceDirs(gameDir, "mods"), container, type, true);
             return;
         } else if (type.equals("resource_resourcepacks")) {
-            loadToggleableItems("资源包", ResourceScanner.collectResourceDirs(gameDir, "resourcepacks"), container, type, false);
+            loadToggleableItems(I18N.get("page.t0425"), ResourceScanner.collectResourceDirs(gameDir, "resourcepacks"), container, type, false);
             return;
         } else if (type.equals("resource_shaders")) {
-            loadToggleableItems("光影包", ResourceScanner.collectResourceDirs(gameDir, "shaderpacks"), container, type, false);
+            loadToggleableItems(I18N.get("page.t0426"), ResourceScanner.collectResourceDirs(gameDir, "shaderpacks"), container, type, false);
             return;
         } else if (type.equals("resource_crashreports")) {
             java.util.List<Path> reports = ResourceScanner.listCrashReports(gameDir, currentFilterOrigin);
@@ -217,13 +219,13 @@ public final class ResourcesPage {
             addDirComboFilter(content, ResourceScanner.collectResourceDirs(gameDir, "crash-reports"), gameDir,
                     currentFilterOrigin, origin -> { currentFilterOrigin = origin; showResourceContent(type, container); });
             if (reports.isEmpty()) {
-                content.getChildren().add(new Label("暂无崩溃报告") {{
+                content.getChildren().add(new Label(I18N.get("page.t0427")) {{
                     setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20;");
                 }});
             } else {
                 // 摘要要读文件，先缓存下来（只对当前这批用到的报告解析，避免几百份报告全部读一遍）
                 Map<Path, String> summaryCache = new LinkedHashMap<>();
-                content.getChildren().add(pagedSearchSection("搜索崩溃报告（摘要 / 文件名）...", reports,
+                content.getChildren().add(pagedSearchSection(I18N.get("page.t0428"), reports,
                         r -> summaryCache.computeIfAbsent(r, p -> CrashReportParser.summarize(p.toString()))
                                 + " " + r.getFileName(),
                         r -> {
@@ -232,15 +234,15 @@ public final class ResourcesPage {
                             return createResourceCard(titleText,
                                     r.getFileName() + "  |  " + FormatUtils.formatFileSize(r.toFile().length())
                                             + "  |  " + ResourceScanner.dirOriginLabel(r.getParent(), gameDir),
-                                    new String[]{"打开", "删除"},
+                                    new String[]{I18N.get("page.t0674"), I18N.get("page.t0675")},
                                     new Runnable[]{
                                             () -> host.openFile(r.toString()),
-                                            () -> host.confirmDelete("确定要删除崩溃报告 \"" + r.getFileName() + "\" 吗？", () -> {
+                                            () -> host.confirmDelete(I18N.get("res.r0002", r.getFileName()), () -> {
                                                 try {
                                                     Files.delete(r);
-                                                    host.ui().toast("已删除 " + r.getFileName());
+                                                    host.ui().toast(I18N.get("page.p0865", r.getFileName()));
                                                 } catch (Exception ex) {
-                                                    host.ui().toast("删除失败: " + ex.getMessage());
+                                                    host.ui().toast(I18N.get("page.p0866", ex.getMessage()));
                                                 }
                                                 showResourceContent(type, container);
                                             })
@@ -265,12 +267,12 @@ public final class ResourcesPage {
             addDirComboFilter(content, ssDirs, gameDir,
                     currentFilterOrigin, origin -> { currentFilterOrigin = origin; showResourceContent(type, container); });
             if (shots.isEmpty()) {
-                content.getChildren().add(new Label("暂无截图") {{
+                content.getChildren().add(new Label(I18N.get("page.t0429")) {{
                     setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20;");
                 }});
             } else {
                 // 缩略图网格：点击预览大图；每批只解码 20 张缩略图，避免几百张截图一次全部读进内存
-                content.getChildren().add(pagedSearchSection("搜索截图文件名...", shots,
+                content.getChildren().add(pagedSearchSection(I18N.get("page.t0430"), shots,
                         shot -> shot.getFileName().toString(),
                         shot -> createScreenshotThumb(shot, ResourceScanner.dirOriginLabel(shot.getParent(), gameDir)),
                         true,
@@ -280,27 +282,29 @@ public final class ResourcesPage {
             java.util.List<LogUploadRecord> records = LogUploadStore.load();
             titleLabel.setText(title + " (" + records.size() + ")");
             if (records.isEmpty()) {
-                content.getChildren().add(new Label("暂无上传的日志") {{
+                content.getChildren().add(new Label(I18N.get("page.t0431")) {{
                     setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20;");
                 }});
             } else {
-                content.getChildren().add(pagedSearchSection("搜索文件名 / 链接...", records,
+                content.getChildren().add(pagedSearchSection(I18N.get("page.t0432"), records,
                         r -> (r.name == null ? "" : r.name) + " " + (r.url == null ? "" : r.url),
                         r -> {
                             String timeStr = r.time > 0
                                     ? new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-                                            .format(new java.util.Date(r.time)) : "时间未知";
+                                            .format(new java.util.Date(r.time)) : I18N.get("page.t0433");
                             String url = r.url == null ? "" : r.url;
-                            String sub = timeStr + "  |  " + (r.fileCount > 0 ? r.fileCount + " 个文件" : "1 个文件")
+                            String sub = timeStr + "  |  "
+                                    + (r.fileCount > 0 ? I18N.get("res.r0003", r.fileCount)
+                                            : I18N.get("page.t0676"))
                                     + "  |  " + (url.length() > 56 ? url.substring(0, 56) + "…" : url);
                             return createResourceCard(
-                                    r.name == null || r.name.isEmpty() ? "日志" : r.name, sub,
-                                    new String[]{"再次分享", "复制链接", "删除"},
+                                    r.name == null || r.name.isEmpty() ? I18N.get("page.t0434") : r.name, sub,
+                                    new String[]{I18N.get("page.t0677"), I18N.get("page.t0678"), I18N.get("page.t0679")},
                                     new Runnable[]{
                                             () -> LogUploadResultWindow.show(host.stage(), r,
                                                     host.ui()::toast,
                                                     () -> {
-                                                        host.ui().toast("已撤回并删除该日志");
+                                                        host.ui().toast(I18N.get("page.t0435"));
                                                         showResourceContent(type, container);
                                                     }),
                                             () -> {
@@ -308,10 +312,10 @@ public final class ResourcesPage {
                                                     ClipboardContent cc = new ClipboardContent();
                                                     cc.putString(r.url);
                                                     Clipboard.getSystemClipboard().setContent(cc);
-                                                    host.ui().toast("链接已复制到剪贴板");
+                                                    host.ui().toast(I18N.get("page.t0436"));
                                                 }
                                             },
-                                            () -> host.confirmDelete("确定要删除这条上传记录吗？（将同时尝试撤回线上日志）", () -> {
+                                            () -> host.confirmDelete(I18N.get("page.t0437"), () -> {
                                                 try {
                                                     if (r.id != null && !r.id.isEmpty()) {
                                                         try { sendlogs.deleteLog(r.id, r.token); } catch (Exception ignored) {}
@@ -323,9 +327,9 @@ public final class ResourcesPage {
                                                                 || (r.url != null && r.url.equals(x.url) && r.time == x.time));
                                                         LogUploadStore.save(all);
                                                     }
-                                                    host.ui().toast("已删除上传记录");
+                                                    host.ui().toast(I18N.get("page.t0438"));
                                                 } catch (Exception ex) {
-                                                    host.ui().toast("删除失败: " + ex.getMessage());
+                                                    host.ui().toast(I18N.get("page.p0867", ex.getMessage()));
                                                 }
                                                 showResourceContent(type, container);
                                             })
@@ -341,18 +345,18 @@ public final class ResourcesPage {
             java.util.List<DirEntry> entries = new ArrayList<>();
             if (logDirs.isEmpty()) {
                 Path missing = Paths.get(gameDir, "logs");
-                entries.add(new DirEntry("日志目录", missing + "（目录不存在）", missing.toString()));
+                entries.add(new DirEntry(I18N.get("page.t0680"), I18N.get("res.r0004", missing), missing.toString()));
             } else {
                 for (Path p : logDirs) {
-                    entries.add(new DirEntry("日志目录（" + ResourceScanner.dirOriginLabel(p, gameDir) + "）",
+                    entries.add(new DirEntry(I18N.get("page.p0868", ResourceScanner.dirOriginLabel(p, gameDir) + "）"),
                             p.toString(), p.toString()));
                 }
             }
-            entries.add(new DirEntry("游戏根目录", gameDir, gameDir));
-            content.getChildren().add(pagedSearchSection("搜索目录...", entries,
+            entries.add(new DirEntry(I18N.get("page.t0439"), gameDir, gameDir));
+            content.getChildren().add(pagedSearchSection(I18N.get("page.t0440"), entries,
                     e -> e.name() + " " + e.desc(),
                     e -> createResourceCard(e.name(), e.desc(),
-                            new String[]{"打开文件夹"},
+                            new String[]{I18N.get("page.t0441")},
                             new Runnable[]{() -> host.openFile(e.path())}),
                     false,
                     n -> setCountTitle(titleLabel, title, n, entries.size())));
@@ -390,13 +394,15 @@ public final class ResourcesPage {
 
         if (items.isEmpty()) {
             titleLabel.setText(label + " (0)");
-            String hint = dirs.isEmpty() ? "暂无" + label + "（目录不存在）" : "暂无" + label;
+            String hint = dirs.isEmpty()
+                ? I18N.get("res.r0005", label)
+                : I18N.get("res.r0006", label);
             content.getChildren().add(new Label(hint) {{
                 setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20;");
             }});
         } else {
             // 搜索 + 分批渲染：模组 / 资源包 / 光影包常有上百个，一次只铺 20 行，其余点底部按钮继续加载
-            content.getChildren().add(pagedSearchSection("搜索" + label + "文件名...", items,
+            content.getChildren().add(pagedSearchSection(I18N.get("res.r0007", label), items,
                     p -> p.getFileName().toString(),
                     p -> buildToggleableRow(p, label, suffix, dirs, container, type, isMod),
                     false,
@@ -415,8 +421,8 @@ public final class ResourcesPage {
         boolean enabled = isDir || fileName.endsWith(suffix);
         String displayName = isDir ? fileName :
                 (enabled ? fileName : fileName.replace(suffix + ".disabled", suffix));
-        String sizeStr = isDir ? "目录" : FormatUtils.formatFileSize(item.toFile().length());
-        String status = enabled ? "已启用" : "已禁用";
+        String sizeStr = isDir ? I18N.get("page.t0442") : FormatUtils.formatFileSize(item.toFile().length());
+        String status = enabled ? I18N.get("page.t0681") : I18N.get("page.t0682");
         String origin = ResourceScanner.dirOriginLabel(item.getParent(), host.config().getOrDefault("GameDir", ".minecraft"));
 
         HBox row = new HBox(12);
@@ -431,6 +437,8 @@ public final class ResourcesPage {
 
         Label metaLbl = new Label(status + " | " + sizeStr + " | " + origin);
         metaLbl.getStyleClass().add("settings-card-desc");
+        // 来源路径可能很长：单行省略，悬停看完整信息
+        PageKit.cardTooltip(metaLbl);
         info.getChildren().addAll(nameLbl, metaLbl);
 
         HBox actions = new HBox(6);
@@ -440,12 +448,12 @@ public final class ResourcesPage {
         Path finalItem = item;
         boolean finalEnabled = enabled;
         boolean finalIsDir = isDir;
-        Button toggleBtn = new Button(enabled ? "禁用" : "启用");
+        Button toggleBtn = new Button(enabled ? I18N.get("page.t0683") : I18N.get("page.t0684"));
         toggleBtn.getStyleClass().add("btn-primary");
         toggleBtn.setStyle("-fx-padding: 4 10; -fx-font-size: 11px;");
         toggleBtn.setOnAction(e -> {
             if (finalIsDir) {
-                host.ui().toast("目录类型暂不支持切换");
+                host.ui().toast(I18N.get("page.t0443"));
                 return;
             }
             try {
@@ -457,18 +465,18 @@ public final class ResourcesPage {
                     newPath = finalItem.resolveSibling(n.replace(suffix + ".disabled", suffix));
                 }
                 Files.move(finalItem, newPath);
-                host.ui().toast(finalEnabled ? "已禁用" : "已启用");
+                host.ui().toast(finalEnabled ? I18N.get("page.t0685") : I18N.get("page.t0686"));
                 loadToggleableItems(label, dirs, container, type, isMod);
             } catch (Exception ex) {
-                host.ui().toast("操作失败: " + ex.getMessage());
+                host.ui().toast(I18N.get("page.p0869", ex.getMessage()));
             }
         });
         actions.getChildren().add(toggleBtn);
 
         // 删除按钮
-        Button delBtn = AppIcons.button("trash", "删除");
+        Button delBtn = AppIcons.button("trash", I18N.get("page.t0444"));
         delBtn.setStyle("-fx-padding: 4 10; -fx-font-size: 11px; -fx-background-color: #fee2e2; -fx-text-fill: #dc2626;");
-        delBtn.setOnAction(e -> host.confirmDelete("确定要删除 \"" + displayName + "\" 吗？", () -> {
+        delBtn.setOnAction(e -> host.confirmDelete(I18N.get("res.r0008", displayName), () -> {
             if (finalIsDir) {
                 try {
                     Files.walk(finalItem)
@@ -478,13 +486,13 @@ public final class ResourcesPage {
             } else {
                 try { Files.delete(finalItem); } catch (Exception ignored) {}
             }
-            host.ui().toast("已删除 " + displayName);
+            host.ui().toast(I18N.get("page.p0870", displayName));
             loadToggleableItems(label, dirs, container, type, isMod);
         }));
         actions.getChildren().add(delBtn);
 
         // 跳转下载中心对应分类搜索（模组/资源包/光影包）
-        Button dlBtn = AppIcons.button("search", "搜索资源");
+        Button dlBtn = AppIcons.button("search", I18N.get("page.t0445"));
         dlBtn.getStyleClass().add("btn-primary");
         dlBtn.setStyle("-fx-padding: 4 10; -fx-font-size: 11px;");
         dlBtn.setOnAction(e -> {
@@ -495,7 +503,7 @@ public final class ResourcesPage {
                 default -> -1;
             };
             if (dlIdx >= 0) host.openDownloadCategory(dlIdx);
-            else host.ui().toast("下载功能开发中");
+            else host.ui().toast(I18N.get("page.t0446"));
         });
         actions.getChildren().add(dlBtn);
 
@@ -581,7 +589,7 @@ public final class ResourcesPage {
         combo.getStyleClass().add("select-field");
         combo.setPrefWidth(360);
         combo.setMaxWidth(Double.MAX_VALUE);
-        combo.getItems().add("全部");
+        combo.getItems().add(I18N.get("page.t0447"));
 
         Map<String, Path> pathByOrigin = new LinkedHashMap<>();
         for (Path dir : dirs) {
@@ -591,21 +599,21 @@ public final class ResourcesPage {
             }
         }
         boolean hasSelected = selectedOrigin != null && pathByOrigin.containsKey(selectedOrigin);
-        combo.getSelectionModel().select(hasSelected ? selectedOrigin : "全部");
+        combo.getSelectionModel().select(hasSelected ? selectedOrigin : I18N.get("page.t0448"));
 
         Runnable updateTip = () -> {
             String sel = combo.getSelectionModel().getSelectedItem();
             Path p = sel == null ? null : pathByOrigin.get(sel);
-            combo.setTooltip(new Tooltip(p == null ? "显示全部目录的内容" : p.toString()));
+            combo.setTooltip(new Tooltip(p == null ? I18N.get("page.t0449") : p.toString()));
         };
         updateTip.run();
 
-        Label hint = new Label("目录:");
+        Label hint = new Label(I18N.get("page.t0450"));
         hint.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim; -fx-font-weight: 600;");
         hint.setMinWidth(Region.USE_PREF_SIZE);
 
         // 与原来的右键菜单等价：打开当前选中目录
-        Button openBtn = AppIcons.button("folder", "打开目录");
+        Button openBtn = AppIcons.button("folder", I18N.get("page.t0451"));
         openBtn.getStyleClass().add("btn-primary");
         openBtn.setStyle("-fx-padding: 3 10; -fx-font-size: 11px;");
         openBtn.setMinWidth(Region.USE_PREF_SIZE);
@@ -618,7 +626,8 @@ public final class ResourcesPage {
         combo.setOnAction(e -> {
             updateTip.run();
             String sel = combo.getSelectionModel().getSelectedItem();
-            onSelect.accept(sel == null || "全部".equals(sel) ? null : sel);
+            onSelect.accept(sel == null || combo.getItems().isEmpty()
+                    || combo.getItems().get(0).equals(sel) ? null : sel);
         });
         openBtn.setOnAction(e -> {
             String sel = combo.getSelectionModel().getSelectedItem();
@@ -729,18 +738,18 @@ public final class ResourcesPage {
 
         // 右键菜单：预览 / 打开所在文件夹 / 复制路径 / 删除
         ContextMenu menu = new ContextMenu();
-        MenuItem previewItem = new MenuItem("预览");
+        MenuItem previewItem = new MenuItem(I18N.get("page.t0452"));
         previewItem.setOnAction(e -> host.ui().localImagePreview(shot.toString()));
-        MenuItem openFolderItem = new MenuItem("打开所在文件夹");
+        MenuItem openFolderItem = new MenuItem(I18N.get("page.t0453"));
         openFolderItem.setOnAction(e -> host.openFile(shot.getParent().toString()));
-        MenuItem copyPathItem = new MenuItem("复制路径");
+        MenuItem copyPathItem = new MenuItem(I18N.get("page.t0454"));
         copyPathItem.setOnAction(e -> {
             ClipboardContent cc = new ClipboardContent();
             cc.putString(shot.toString());
             Clipboard.getSystemClipboard().setContent(cc);
-            host.ui().toast("已复制路径");
+            host.ui().toast(I18N.get("page.t0455"));
         });
-        MenuItem deleteItem = new MenuItem("删除");
+        MenuItem deleteItem = new MenuItem(I18N.get("page.t0456"));
         deleteItem.setOnAction(e -> deleteScreenshot(shot));
         menu.getItems().addAll(previewItem, openFolderItem, copyPathItem, deleteItem);
         box.setOnContextMenuRequested(e -> menu.show(box, e.getScreenX(), e.getScreenY()));
@@ -749,13 +758,13 @@ public final class ResourcesPage {
 
     /** 删除截图：确认后删除文件并刷新截图管理页 */
     private void deleteScreenshot(Path shot) {
-        host.confirmDelete("确定要删除截图 \"" + shot.getFileName() + "\" 吗？此操作不可恢复！", () -> {
+        host.confirmDelete(I18N.get("res.r0009", shot.getFileName()), () -> {
             try {
                 Files.deleteIfExists(shot);
-                host.ui().toast("已删除");
+                host.ui().toast(I18N.get("page.t0457"));
                 host.switchToPage("screenshots");
             } catch (Exception ex) {
-                host.ui().toast("删除失败: " + ex.getMessage());
+                host.ui().toast(I18N.get("page.p0871", ex.getMessage()));
             }
         });
     }
@@ -771,6 +780,7 @@ public final class ResourcesPage {
         cardTitle.getStyleClass().add("settings-card-title");
         Label description = new Label(desc);
         description.getStyleClass().add("settings-card-desc");
+        PageKit.cardTooltip(description);
         info.getChildren().addAll(cardTitle, description);
         HBox btnBox = new HBox(6);
         for (String a : actions) {
@@ -795,6 +805,7 @@ public final class ResourcesPage {
         cardTitle.getStyleClass().add("settings-card-title");
         Label description = new Label(desc);
         description.getStyleClass().add("settings-card-desc");
+        PageKit.cardTooltip(description);
         info.getChildren().addAll(cardTitle, description);
         HBox btnBox = new HBox(6);
         for (int i = 0; i < actions.length; i++) {
@@ -820,16 +831,16 @@ public final class ResourcesPage {
     // 截图管理页面 //
 
     public Node buildScreenshots() {
-        VBox root = PageKit.settingsPage(host, "截图管理", "home");
-        HBox pathCard = (HBox) PageKit.settingsCard("截图目录", "游戏截图保存位置", null);
+        VBox root = PageKit.settingsPage(host, I18N.get("page.t0458"), "home");
+        HBox pathCard = (HBox) PageKit.settingsCard(I18N.get("page.t0687"), I18N.get("page.t0688"), null);
         TextField pathField = new TextField(host.screenshotDir());
         pathField.getStyleClass().add("input-field");
         pathField.setPrefWidth(250);
-        Button browseBtn = AppIcons.button("folder", "浏览");
+        Button browseBtn = AppIcons.button("folder", I18N.get("page.t0459"));
         browseBtn.getStyleClass().add("btn-primary");
         browseBtn.setOnAction(e -> {
             DirectoryChooser dc = new DirectoryChooser();
-            dc.setTitle("选择截图目录");
+            dc.setTitle(I18N.get("page.t0460"));
             File f = dc.showDialog(host.stage());
             if (f != null) {
                 pathField.setText(f.getAbsolutePath());
@@ -844,16 +855,16 @@ public final class ResourcesPage {
         HBox titleRow = new HBox(10);
         titleRow.setAlignment(Pos.CENTER_LEFT);
         titleRow.setPadding(new Insets(10, 0, 0, 0));
-        Label listTitle = new Label("全部截图");
+        Label listTitle = new Label(I18N.get("page.t0461"));
         listTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: 600;");
         // 撑满剩余空间，但空间不足时不许被压成省略号
         listTitle.setMinWidth(Region.USE_PREF_SIZE);
         HBox.setHgrow(listTitle, Priority.ALWAYS);
-        Button refreshBtn = AppIcons.button("refresh", "刷新");
+        Button refreshBtn = AppIcons.button("refresh", I18N.get("page.t0462"));
         refreshBtn.getStyleClass().add("btn-primary");
         refreshBtn.setStyle("-fx-padding: 4 12; -fx-font-size: 11px;");
         refreshBtn.setOnAction(e -> host.switchToPage("screenshots"));
-        Button openDirBtn = AppIcons.button("folder", "打开截图文件夹");
+        Button openDirBtn = AppIcons.button("folder", I18N.get("page.t0463"));
         openDirBtn.getStyleClass().add("btn-primary");
         openDirBtn.setStyle("-fx-padding: 4 12; -fx-font-size: 11px;");
         openDirBtn.setOnAction(e -> {
@@ -881,20 +892,20 @@ public final class ResourcesPage {
 
         // 截图缩略图网格：点击预览大图，悬停可删除，右键更多操作
         List<Path> shots = ResourceScanner.listScreenshots(gameDir, currentScreenshotFilterOrigin, host.config().get("ScreenshotDir"));
-        listTitle.setText("全部截图 (" + shots.size() + ")");
+        listTitle.setText(I18N.get("page.p0872", shots.size() + ")"));
         if (shots.isEmpty()) {
-            Label empty = new Label("暂无截图");
+            Label empty = new Label(I18N.get("page.t0464"));
             empty.setStyle("-fx-text-fill: -sl-text-faint; -fx-padding: 20;");
             root.getChildren().add(empty);
         } else {
             // 搜索 + 分批渲染：截图常有几百张，一次只铺 20 张缩略图（点底部按钮继续往下加载）
-            root.getChildren().add(pagedSearchSection("搜索截图文件名...", shots,
+            root.getChildren().add(pagedSearchSection(I18N.get("page.t0689"), shots,
                     shot -> shot.getFileName().toString(),
                     shot -> createScreenshotManageThumb(shot, ResourceScanner.dirOriginLabel(shot.getParent(), gameDir)),
                     true,
                     n -> listTitle.setText(n == shots.size()
-                            ? "全部截图 (" + n + ")"
-                            : "全部截图 (" + n + " / " + shots.size() + ")"),
+                            ? I18N.get("res.r0010", n)
+                            : I18N.get("res.r0011", n, shots.size())),
                     currentScreenshotKeyword, kw -> currentScreenshotKeyword = kw));
         }
         return root;

@@ -96,18 +96,22 @@ public class LogExporter {
     }
 
     /**
-     * 在资源管理器中打开指定文件
+     * 在资源管理器中打开指定文件。
+     *
+     * <p>必须用 {@code exec(String[])} 而不是 {@code exec(String)}：后者会把整条命令按空白
+     * 重新切词，路径里的空格（如 {@code D:\新建文件夹 (15)}）会被拆成两个参数，还可能把引号
+     * 当成命令的一部分 —— 这类「字符串拼命令」正是原生层崩溃 / 行为异常的常见来源。
      */
     public static void openInExplorer(String filePath) {
         try {
             File file = new File(filePath);
             if (file.exists()) {
-                Runtime.getRuntime().exec("explorer.exe /select,\"" + file.getAbsolutePath() + "\"");
+                Runtime.getRuntime().exec(new String[]{"explorer.exe", "/select,", file.getAbsolutePath()});
             } else {
                 // 如果文件不存在，打开父目录
                 String parent = file.getParent();
                 if (parent != null) {
-                    Runtime.getRuntime().exec("explorer.exe \"" + parent + "\"");
+                    Runtime.getRuntime().exec(new String[]{"explorer.exe", parent});
                 }
             }
         } catch (IOException e) {

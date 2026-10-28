@@ -4,6 +4,7 @@ import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.ui.InertiaScrollSupport;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.PageKit;
+import com.example.starlight.util.I18N;
 
 import javafx.scene.Node;
 import javafx.scene.layout.VBox;
@@ -13,6 +14,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleGroup;
@@ -33,7 +35,7 @@ public final class MainUiPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(ctx, "主界面");
+        VBox root = PageKit.settingsPage(ctx, I18N.get("mainui.t0001"));
 
         // 卡片「侧边栏」 //
         CheckBox toggle = PageKit.toggle(!"false".equalsIgnoreCase(ctx.config().getOrDefault("ShowSidebar", "true")));
@@ -44,14 +46,14 @@ public final class MainUiPage {
             // 侧边栏显隐影响设置页导航形态（隐藏时显示下拉导航），重建全部设置页
             ctx.rebuildSettingsPages();
             if (ctx.currentSidebarItemId() != null) ctx.switchToPage(ctx.currentSidebarItemId());
-            ctx.toast("显示侧边栏: " + (toggle.isSelected() ? "开启" : "关闭"));
+            ctx.toast(I18N.get("mainui.k0037", (toggle.isSelected() ? I18N.get("mainui.t0002") : I18N.get("mainui.t0003"))));
         });
-        root.getChildren().add(PageKit.settingsCard("显示侧边栏",
-                "在设置页面显示左侧导航；关闭后顶部出现下拉导航（分组与侧边栏一致）", toggle));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("mainui.t0004"),
+                I18N.get("mainui.t0005"), toggle));
 
         // 卡片「滚动」：速度滑杆（拖动结束 500ms 防抖自动保存，重构 §4.1 Slider 行） //
         int curSpeed = PageKit.parseIntSafe(ctx.config().getOrDefault("ScrollSpeed", "35"), 35);
-        Label speedLabel = new Label("当前: " + curSpeed);
+        Label speedLabel = new Label(I18N.get("mainui.k0001", curSpeed));
         speedLabel.getStyleClass().add("black-value-label");
         Slider speedSlider = new Slider(5, 200, curSpeed);
         speedSlider.getStyleClass().add("black-ticks");
@@ -59,7 +61,7 @@ public final class MainUiPage {
         speedSlider.setMajorTickUnit(20);
         speedSlider.setBlockIncrement(5);
         speedSlider.setPrefWidth(200);
-        speedSlider.valueProperty().addListener((obs, old, val) -> speedLabel.setText("当前: " + val.intValue()));
+        speedSlider.valueProperty().addListener((obs, old, val) -> speedLabel.setText(I18N.get("mainui.k0002", val.intValue())));
         // 防抖自动保存（500ms 内不再拖动才落盘）
         javafx.animation.PauseTransition speedDebounce = new javafx.animation.PauseTransition(javafx.util.Duration.millis(500));
         speedDebounce.setOnFinished(e -> {
@@ -67,19 +69,19 @@ public final class MainUiPage {
             if (String.valueOf(val).equals(ctx.config().getOrDefault("ScrollSpeed", "35"))) return;
             ctx.config().put("ScrollSpeed", String.valueOf(val));
             ctx.saveConfig();
-            ctx.toast("滚动速度已保存: " + val);
+            ctx.toast(I18N.get("mainui.k0003", val));
         });
         speedSlider.valueProperty().addListener((obs, old, val) -> speedDebounce.playFromStart());
         HBox speedRow = new HBox(10, speedSlider, speedLabel);
         speedRow.setAlignment(Pos.CENTER_LEFT);
-        root.getChildren().add(PageKit.settingsCard("滚动速度",
-                "页面的滚动灵敏度（数值越大滚动越快），拖动结束自动保存，重启后生效", speedRow));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("mainui.t0006"),
+                I18N.get("mainui.t0007"), speedRow));
 
         // 卡片「滚动」第二行：平滑度单选（即时保存，原有逻辑不变） //
         String curEase = InertiaScrollSupport.readEaseValue(ctx);
-        String[] easeNames = {"慢滑", "标准", "跟手"};
+        String[] easeNames = {I18N.get("mainui.t0008"), I18N.get("mainui.t0009"), I18N.get("mainui.t0010")};
         String[] easeValues = {"0.05", "0.1", "0.18"};
-        String[] easeLabels = {"慢滑 (0.05)", "标准 (0.1)", "跟手 (0.18)"};
+        String[] easeLabels = {I18N.get("mainui.t0011"), I18N.get("mainui.t0012"), I18N.get("mainui.t0013")};
         ToggleGroup easeGroup = new ToggleGroup();
         RadioButton[] easeRadios = new RadioButton[easeValues.length];
         for (int i = 0; i < easeValues.length; i++) {
@@ -97,30 +99,39 @@ public final class MainUiPage {
             easeRadios[i].setOnAction(e -> {
                 ctx.config().put(InertiaScrollSupport.CONFIG_EASE, easeValues[idx]);
                 ctx.saveConfig();
-                ctx.toast("滚动平滑度: " + easeNames[idx]);
+                ctx.toast(I18N.get("mainui.k0004", easeNames[idx]));
             });
         }
         HBox easeRow = new HBox(24, easeRadios);
         easeRow.setAlignment(Pos.CENTER_LEFT);
-        root.getChildren().add(PageKit.settingsCard("滚动平滑度",
-                "滚轮滚动的顺滑程度（慢滑更绵柔、跟手更迅速），选中即生效", easeRow));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("mainui.t0014"),
+                I18N.get("mainui.t0015"), easeRow));
 
         // 卡片「显示语言」（原 LanguagePage 并入，配置键 Language 不变；重构 §6.8 布局第 3 条） //
+        // 下拉项存语言代码、显示名走 LanguageChoices：不再用中文字面量反推代码。
+        // 界面语言为「重启生效」，这里只写配置并如实提示。
         ComboBox<String> langCombo = new ComboBox<>();
-        langCombo.getItems().addAll("简体中文", "English", "日本語");
-        String curLang = ctx.config().getOrDefault("Language", "zh_CN");
-        langCombo.setValue("zh_CN".equals(curLang) ? "简体中文" : "en_US".equals(curLang) ? "English" : "日本語");
+        langCombo.getItems().addAll(LanguageChoices.CODES);
+        langCombo.setValue(LanguageChoices.normalize(ctx.config().getOrDefault("Language", "zh_CN")));
+        langCombo.setCellFactory(cb -> languageCell());
+        langCombo.setButtonCell(languageCell());
         langCombo.getStyleClass().add("select-field");
-        langCombo.setOnAction(e -> {
-            String val = langCombo.getValue();
-            String langCode = "简体中文".equals(val) ? "zh_CN" : "English".equals(val) ? "en_US" : "ja_JP";
-            ctx.config().put("Language", langCode);
-            ctx.saveConfig();
-            ctx.toast("语言已切换，重启后生效");
-        });
-        root.getChildren().add(PageKit.settingsCard("显示语言",
-                "选择启动器界面语言（功能逐步完善，当前界面文本以简体中文为主）", langCombo));
+        langCombo.setOnAction(e -> LanguageChoices.apply(ctx, langCombo.getValue()));
+        root.getChildren().add(PageKit.settingsCard(
+                I18N.get("lang.displayLanguage"),
+                I18N.get("lang.displayLanguageDesc"), langCombo));
 
         return root;
+    }
+
+    /** 语言下拉的显示单元：值仍是语言代码，只把代码渲染成名称 */
+    private static ListCell<String> languageCell() {
+        return new ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : LanguageChoices.displayName(item));
+            }
+        };
     }
 }

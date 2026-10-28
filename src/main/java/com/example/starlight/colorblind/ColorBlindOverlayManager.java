@@ -1,5 +1,7 @@
 package com.example.starlight.colorblind;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AppDirs;
 import com.example.starlight.config.Endpoints;
 import com.example.starlight.main.ConfigManager;
@@ -58,14 +60,14 @@ public final class ColorBlindOverlayManager {
 
     static {
         Map<String, String> types = new LinkedHashMap<>();
-        types.put("deuteranopia", "绿色盲");
-        types.put("deuteranomaly", "绿色弱");
-        types.put("protanopia", "红色盲");
-        types.put("protanomaly", "红色弱");
-        types.put("tritanopia", "蓝色盲");
-        types.put("tritanomaly", "蓝色弱");
-        types.put("achromatopsia", "全色盲");
-        types.put("achromatomaly", "色弱");
+        types.put("deuteranopia", I18N.get("colorblind.t0037"));
+        types.put("deuteranomaly", I18N.get("colorblind.t0038"));
+        types.put("protanopia", I18N.get("colorblind.t0039"));
+        types.put("protanomaly", I18N.get("colorblind.t0040"));
+        types.put("tritanopia", I18N.get("colorblind.t0041"));
+        types.put("tritanomaly", I18N.get("colorblind.t0042"));
+        types.put("achromatopsia", I18N.get("colorblind.t0043"));
+        types.put("achromatomaly", I18N.get("colorblind.t0044"));
         TYPES = Collections.unmodifiableMap(types);
     }
 
@@ -236,18 +238,18 @@ public final class ColorBlindOverlayManager {
             ConfigManager.saveClientConfig(Map.of(KEY_AUTO_ENABLE, "false"));
             boolean wasRunning = isRunning();
             stopOverlayInternal();
-            return wasRunning ? "色盲辅助已关闭，矫正工具已停止" : "色盲辅助已关闭";
+            return wasRunning ? I18N.get("colorblind.t0053") : I18N.get("colorblind.t0054");
         }
         if (!gameRunning) {
-            return "色盲辅助已开启，将在下次启动游戏时自动生效";
+            return I18N.get("colorblind.t0045");
         }
-        return "色盲辅助已开启：" + ensureStarted();
+        return I18N.get("colorblind.p0061", ensureStarted());
     }
 
     /** 按当前配置重启矫正工具（设置页 / 快速调节网页的「重启」按钮） */
     public static synchronized String restartOverlay() {
         if (!isEnabled()) {
-            return "色盲辅助总开关未开启，未启动矫正工具";
+            return I18N.get("colorblind.t0046");
         }
         stopOverlayInternal();
         return ensureStarted();
@@ -256,10 +258,10 @@ public final class ColorBlindOverlayManager {
     /** 停止矫正工具 */
     public static synchronized String stopOverlay() {
         if (!isRunning()) {
-            return "矫正工具未在运行";
+            return I18N.get("colorblind.t0047");
         }
         stopOverlayInternal();
-        return "矫正工具已停止";
+        return I18N.get("colorblind.t0048");
     }
 
     /** 矫正工具进程是否在运行 */
@@ -285,7 +287,7 @@ public final class ColorBlindOverlayManager {
         if (dir != null && (dir.isDirectory() || dir.mkdirs())) {
             return primary;
         }
-        throw new IOException("无法创建矫正工具目录: " + dir);
+        throw new IOException(I18N.get("colorblind.p0062", dir));
     }
 
     /** 游戏是否正在运行（由启动器检测信号维护） */
@@ -295,9 +297,10 @@ public final class ColorBlindOverlayManager {
 
     /** 状态描述（设置页 / 调节网页展示） */
     public static String statusText() {
-        return "总开关 " + (isEnabled() ? "开启" : "关闭")
-                + " · 游戏 " + (gameRunning ? "运行中" : "未运行")
-                + " · 矫正工具 " + (isRunning() ? "运行中" : "未运行");
+        return I18N.get("cbom.r0002",
+                isEnabled() ? I18N.get("colorblind.t0055") : I18N.get("colorblind.t0056"),
+                gameRunning ? I18N.get("colorblind.t0057") : I18N.get("colorblind.t0058"),
+                isRunning() ? I18N.get("colorblind.t0059") : I18N.get("colorblind.t0060"));
     }
 
     // 内部实现 //
@@ -305,11 +308,11 @@ public final class ColorBlindOverlayManager {
     /** 按当前配置启动矫正工具（已在运行则原样返回） */
     private static String ensureStarted() {
         if (isRunning()) {
-            return "矫正工具已在运行";
+            return I18N.get("colorblind.t0049");
         }
         File exe = resolveExe();
         if (exe == null) {
-            return "未找到矫正工具: " + EXE_RELATIVE_PATH;
+            return I18N.get("colorblind.p0063", EXE_RELATIVE_PATH);
         }
         Map<String, String> config = readMergedConfig();
         String window = resolveWindow(config);
@@ -324,10 +327,10 @@ public final class ColorBlindOverlayManager {
             addShutdownHook();
             System.out.println("[ColorBlind] 矫正工具已启动: " + exe.getAbsolutePath()
                     + " -w " + window + " -t " + type + " -s " + strength);
-            return "矫正工具已启动（窗口 " + window + " · " + typeLabel(type) + " · 强度 " + strength + "）";
+            return I18N.get("cbom.r0001", window, typeLabel(type), strength);
         } catch (IOException e) {
             System.err.println("[ColorBlind] 启动矫正工具失败: " + e.getMessage());
-            return "启动矫正工具失败: " + e.getMessage();
+            return I18N.get("colorblind.p0064", e.getMessage());
         }
     }
 

@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.PageKit;
@@ -32,15 +34,15 @@ public final class AboutPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(ctx, "关于");
+        VBox root = PageKit.settingsPage(ctx, I18N.get("about.t0001"));
 
         // 页头：当前版本 + 检查更新（非卡片区，重构 §6.2 布局第 1/2 条） //
         String version = AppConfig.DISPLAY_VERSION;
         HBox versionRow = new HBox(12);
         versionRow.setAlignment(Pos.CENTER_LEFT);
-        Label versionLabel = new Label("当前版本: " + version);
+        Label versionLabel = new Label(I18N.get("about.k0001", version));
         versionLabel.getStyleClass().add("settings-card-title");
-        Button checkBtn = AppIcons.button("search", "检查更新");
+        Button checkBtn = AppIcons.button("search", I18N.get("about.t0002"));
         checkBtn.getStyleClass().add("btn-primary");
         checkBtn.setOnAction(e -> ctx.checkForUpdates());
         versionRow.getChildren().addAll(versionLabel, checkBtn);
@@ -55,22 +57,22 @@ public final class AboutPage {
         giteeBtn.setOnAction(e -> ctx.openWebUrl(GITEE_URL));
         HBox repoButtons = new HBox(10, githubBtn, giteeBtn);
         repoButtons.setAlignment(Pos.CENTER_RIGHT);
-        root.getChildren().add(PageKit.settingsCard("开源仓库", "查看源代码、提交问题反馈或参与开发", repoButtons));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("about.t0003"), I18N.get("about.t0004"), repoButtons));
 
         // 卡片「许可信息」（原版权页内容并入，重构 §6.2 布局第 4 条） //
-        Button mitBtn = AppIcons.button("view", "查看");
+        Button mitBtn = AppIcons.button("view", I18N.get("about.t0005"));
         mitBtn.getStyleClass().add("btn-primary");
         mitBtn.setOnAction(e -> ctx.ui().mitLicenseDialog());
-        root.getChildren().add(PageKit.settingsCard("项目许可",
-                "Starlight Launcher 本体以 MIT License 开源发布", mitBtn));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("about.t0006"),
+                I18N.get("about.t0007"), mitBtn));
 
-        Button viewBtn = AppIcons.button("view", "查看");
+        Button viewBtn = AppIcons.button("view", I18N.get("about.t0008"));
         viewBtn.getStyleClass().add("btn-primary");
         viewBtn.setOnAction(e -> ctx.ui().licenseDialog());
-        root.getChildren().add(PageKit.settingsCard("开源许可", "第三方组件列表（含名称、版本、许可证）", viewBtn));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("about.t0009"), I18N.get("about.t0010"), viewBtn));
 
         // 页底版权声明（重构 §6.2 布局第 5 条） //
-        Label copyright = new Label("Copyright (c) 2026 Starlight Launcher Contributors · 以 MIT License 开源发布");
+        Label copyright = new Label(I18N.get("about.t0011"));
         copyright.setStyle("-fx-font-size: 11px; -fx-text-fill: -sl-text-faint;");
         root.getChildren().add(copyright);
 

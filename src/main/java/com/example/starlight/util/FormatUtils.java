@@ -1,5 +1,7 @@
 package com.example.starlight.util;
 
+
+import com.example.starlight.util.I18N;
 /**
  * 通用格式化工具（从 LauncherView 抽离，逻辑与原实现保持一致）。
  *
@@ -12,7 +14,7 @@ public final class FormatUtils {
 
     /** 下载量缩写（10000 -> 1.0万） */
     public static String formatCompactNumber(int n) {
-        if (n >= 10000) return String.format("%.1f万", n / 10000.0);
+        if (n >= 10000) return String.format(I18N.get("util.t0005"), n / 10000.0);
         return String.valueOf(n);
     }
 
@@ -51,9 +53,9 @@ public final class FormatUtils {
         long hours = totalSeconds / 3600;
         long minutes = (totalSeconds % 3600) / 60;
         if (hours > 0) {
-            return minutes > 0 ? hours + "小时" + minutes + "分" : hours + "小时";
+            return minutes > 0 ? I18N.get("fmt.r0001", hours, minutes) : I18N.get("fmt.r0002", hours);
         }
-        if (minutes > 0) return minutes + "分钟";
-        return totalSeconds + "秒";
+        if (minutes > 0) return I18N.get("fmt.r0003", minutes);
+        return I18N.get("fmt.r0004", totalSeconds);
     }
 }

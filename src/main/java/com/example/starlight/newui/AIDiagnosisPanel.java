@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.newui;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AiConfig;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.crash.CrashDiagnosticData;
@@ -74,31 +76,31 @@ public class AIDiagnosisPanel extends VBox {
         // 顶部：状态 + 加载指示 + 操作按钮
         HBox topRow = new HBox(10);
         topRow.setAlignment(Pos.CENTER_LEFT);
-        statusLabel = new Label("准备分析...");
+        statusLabel = new Label(I18N.get("newui.t0001"));
         statusLabel.getStyleClass().add("modal-text-title");
         HBox.setHgrow(statusLabel, Priority.ALWAYS);
         loadingIndicator = new ProgressIndicator();
         loadingIndicator.setPrefSize(18, 18);
         loadingIndicator.setVisible(false);
         // 未配置 AI 服务时才出现的快捷入口
-        settingsBtn = AppIcons.button("gear", "去 AI 配置");
+        settingsBtn = AppIcons.button("gear", I18N.get("newui.t0002"));
         settingsBtn.getStyleClass().add("btn-primary");
         settingsBtn.setStyle("-fx-padding: 4 14; -fx-font-size: 12px; -fx-cursor: hand;");
         settingsBtn.setVisible(false);
         settingsBtn.setManaged(false);
         settingsBtn.setOnAction(e -> {
             if (openAiSettings != null) openAiSettings.run();
-            else toast.accept("请到「设置 → 高级设置 → AI 配置」填写 API 地址与模型");
+            else toast.accept(I18N.get("newui.t0003"));
         });
-        retryBtn = AppIcons.button("refresh", "重新分析");
+        retryBtn = AppIcons.button("refresh", I18N.get("newui.t0004"));
         retryBtn.getStyleClass().add("btn-primary");
         retryBtn.setStyle("-fx-padding: 4 14; -fx-font-size: 12px; -fx-cursor: hand;");
         retryBtn.setOnAction(e -> startAnalysis());
-        copyBtn = AppIcons.button("copy", "复制结果");
+        copyBtn = AppIcons.button("copy", I18N.get("newui.t0005"));
         copyBtn.getStyleClass().add("btn-primary");
         copyBtn.setStyle("-fx-padding: 4 14; -fx-font-size: 12px; -fx-cursor: hand;");
         copyBtn.setOnAction(e -> copyResult());
-        Button closeBtn = AppIcons.button("close", "关闭");
+        Button closeBtn = AppIcons.button("close", I18N.get("newui.t0006"));
         closeBtn.getStyleClass().add("modal-btn-cancel");
         // 与同排按钮（4 14 / 12px）保持一致：.modal-btn-cancel 是弹窗底栏尺寸，直接用会比同排高一截
         closeBtn.setStyle("-fx-padding: 4 14; -fx-font-size: 12px;");
@@ -107,8 +109,8 @@ public class AIDiagnosisPanel extends VBox {
 
         // 提示文案：把当前实际用的模型写出来（未配置时提示去哪配）
         Label subtitle = new Label(AiConfig.isConfigured()
-                ? "将崩溃信息发送至 " + AiConfig.model() + " 进行分析，结果以 Markdown 渲染"
-                : "尚未配置 AI 服务：请先在「设置 → 高级设置 → AI 配置」选服务商并填写 API Key");
+                ? I18N.get("aid.r0001", AiConfig.model())
+                : I18N.get("newui.t0114"));
         subtitle.getStyleClass().add("modal-hint");
 
         // WebView 结果区
@@ -116,9 +118,7 @@ public class AIDiagnosisPanel extends VBox {
         webView.setPrefHeight(400);
         VBox.setVgrow(webView, Priority.ALWAYS);
         webView.getEngine().loadContent(
-                "<html><body style='font-family:sans-serif;color:#888;padding:40px;text-align:center;'>" +
-                        "<h2>点击上方「重新分析」开始诊断</h2>" +
-                        "</body></html>", "text/html");
+                I18N.get("newui.t0112"), "text/html");
         // 每次重载完成后再滚到底部，模拟「逐字输出 + 自动跟随」
         webView.getEngine().getLoadWorker().stateProperty().addListener((o, ov, nv) -> {
             if (nv == javafx.concurrent.Worker.State.SUCCEEDED) {
@@ -149,7 +149,7 @@ public class AIDiagnosisPanel extends VBox {
         setSettingsButtonVisible(false);
         analyzing = true;
 
-        setLoadingState(true, "正在连接 AI...");
+        setLoadingState(true, I18N.get("newui.t0007"));
         lastAiResponse = null;
         synchronized (streamAnswer) { streamAnswer.setLength(0); }
         synchronized (streamReasoning) { streamReasoning.setLength(0); }
@@ -172,7 +172,7 @@ public class AIDiagnosisPanel extends VBox {
                         });
                 Platform.runLater(() -> {
                     lastAiResponse = full;
-                    setLoadingState(false, "AI 诊断完成");
+                    setLoadingState(false, I18N.get("newui.t0008"));
                     renderStream(false);
                 });
             } catch (Exception e) {
@@ -181,11 +181,8 @@ public class AIDiagnosisPanel extends VBox {
                     String msg = e.getMessage() == null || e.getMessage().isBlank()
                             ? e.getClass().getSimpleName() : e.getMessage();
                     webView.getEngine().loadContent(
-                            "<html><body style='font-family:sans-serif;color:#c0392b;padding:40px;'>" +
-                                    "<h2>AI 诊断失败</h2><p>" + escapeHtml(msg) + "</p>" +
-                                    "<p>请检查网络与「高级设置 → AI 配置」后点击「重新分析」重试</p>" +
-                                    "</body></html>", "text/html");
-                    setLoadingState(false, "分析失败");
+                            I18N.get("aid.r0003", escapeHtml(msg)), "text/html");
+                    setLoadingState(false, I18N.get("newui.t0009"));
                 });
             } finally {
                 analyzing = false;
@@ -198,16 +195,10 @@ public class AIDiagnosisPanel extends VBox {
      * 配置好后点「重新分析」即可（配置是每次调用实时读取的，不用重启启动器）。
      */
     private void showNotConfigured() {
-        setLoadingState(false, "尚未配置 AI 服务");
+        setLoadingState(false, I18N.get("newui.t0010"));
         setSettingsButtonVisible(true);
         webView.getEngine().loadContent(
-                "<html><head><meta charset='utf-8'></head>" +
-                        "<body style='font-family:sans-serif;color:#6b7280;padding:40px;text-align:center;'>" +
-                        "<h2 style='color:#374151;'>还没有配置 AI 服务</h2>" +
-                        "<p>" + escapeHtml(AiConfig.missingHint()) + "</p>" +
-                        "<p style='font-size:13px;'>配置好之后回到这里点「重新分析」即可；" +
-                        "不配置也不影响其它功能。</p>" +
-                        "</body></html>", "text/html");
+                I18N.get("aid.r0004", escapeHtml(AiConfig.missingHint())), "text/html");
     }
 
     /** 「去 AI 配置」按钮的显隐（只有未配置时才需要） */
@@ -248,9 +239,9 @@ public class AIDiagnosisPanel extends VBox {
             body = answer;
         } else if (!reasoning.isEmpty()) {
             // Nemotron 这类推理模型会先输出思考过程，正文稍后才到
-            body = "*正在思考…*\n\n" + reasoning;
+            body = I18N.get("newui.p0140", reasoning);
         } else {
-            body = "*正在等待 AI 返回内容…*";
+            body = I18N.get("newui.t0011");
         }
         if (streaming) {
             body = body + "\n\n<span class=\"typing\">▌</span>";
@@ -261,49 +252,49 @@ public class AIDiagnosisPanel extends VBox {
     /** 构建发送给 AI 的问题 —— 包含崩溃摘要信息 */
     private String buildQuestion() {
         StringBuilder sb = new StringBuilder();
-        sb.append("请分析以下 Minecraft 游戏崩溃信息，请用 Markdown 格式回复，包含以下部分：\n\n");
-        sb.append("## 1. 错误概述\n简要描述发生了什么错误。\n\n");
-        sb.append("## 2. 可能原因\n列出可能导致此崩溃的原因（列表形式）。\n\n");
-        sb.append("## 3. 解决方案\n给出详细的解决步骤（列表形式）。\n\n");
-        sb.append("## 4. 相关建议\n其他有用的建议或注意事项。\n\n");
+        sb.append(I18N.get("newui.t0012"));
+        sb.append(I18N.get("newui.t0013"));
+        sb.append(I18N.get("newui.t0014"));
+        sb.append(I18N.get("newui.t0015"));
+        sb.append(I18N.get("newui.t0016"));
         sb.append("---\n\n");
-        sb.append("**崩溃信息如下**\n\n");
+        sb.append(I18N.get("newui.t0017"));
 
         if (crashData.getErrorCode() != null) {
-            sb.append("- **错误码**: ").append(crashData.getErrorCode().getCode())
+            sb.append(I18N.get("newui.t0018")).append(crashData.getErrorCode().getCode())
                     .append(" (").append(crashData.getErrorCode().getDisplayName()).append(")\n");
         }
-        sb.append("- **退出码**: ").append(crashData.getExitCode()).append("\n");
+        sb.append(I18N.get("newui.t0019")).append(crashData.getExitCode()).append("\n");
         if (crashData.getGameVersion() != null) {
-            sb.append("- **游戏版本**: ").append(crashData.getGameVersion()).append("\n");
+            sb.append(I18N.get("newui.t0020")).append(crashData.getGameVersion()).append("\n");
         }
         if (crashData.getLoaderType() != null) {
-            sb.append("- **加载器**: ").append(crashData.getLoaderType()).append("\n");
+            sb.append(I18N.get("newui.t0021")).append(crashData.getLoaderType()).append("\n");
         }
         if (crashData.getJavaVersion() != null) {
             sb.append("- **Java**: ").append(crashData.getJavaVersion()).append("\n");
         }
         if (crashData.getMaxMemory() > 0) {
-            sb.append("- **最大内存**: ").append(crashData.getMaxMemory()).append(" MB\n");
+            sb.append(I18N.get("newui.t0022")).append(crashData.getMaxMemory()).append(" MB\n");
         }
         if (crashData.getOsInfo() != null) {
-            sb.append("- **操作系统**: ").append(crashData.getOsInfo()).append("\n");
+            sb.append(I18N.get("newui.t0023")).append(crashData.getOsInfo()).append("\n");
         }
         sb.append("\n");
 
         if (crashData.getErrorDescription() != null) {
-            sb.append("### 错误详情\n```\n");
+            sb.append(I18N.get("newui.t0024"));
             String desc = crashData.getErrorDescription();
             if (desc.length() > 2000) {
-                desc = desc.substring(0, 2000) + "\n...(截断)";
+                desc = desc.substring(0, 2000) + I18N.get("aid.r0002");
             }
             sb.append(desc).append("\n```\n\n");
         }
         if (crashData.getCrashReportContent() != null) {
-            sb.append("### 崩溃报告（部分）\n```\n");
+            sb.append(I18N.get("newui.t0025"));
             String report = crashData.getCrashReportContent();
             if (report.length() > 3000) {
-                report = report.substring(0, 3000) + "\n...(截断)";
+                report = report.substring(0, 3000) + I18N.get("aid.r0002");
             }
             sb.append(report).append("\n```\n");
         }
@@ -314,14 +305,14 @@ public class AIDiagnosisPanel extends VBox {
 
     private void copyResult() {
         if (lastAiResponse == null || lastAiResponse.isEmpty()) {
-            toast.accept("暂无可用结果");
+            toast.accept(I18N.get("newui.t0026"));
             return;
         }
         Clipboard clipboard = Clipboard.getSystemClipboard();
         ClipboardContent content = new ClipboardContent();
         content.putString(lastAiResponse);
         clipboard.setContent(content);
-        toast.accept("AI 诊断结果已复制到剪贴板");
+        toast.accept(I18N.get("newui.t0027"));
     }
 
     private void setLoadingState(boolean loading, String status) {

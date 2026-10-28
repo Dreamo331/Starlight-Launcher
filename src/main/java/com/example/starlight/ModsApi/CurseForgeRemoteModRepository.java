@@ -1,5 +1,7 @@
 package com.example.starlight.ModsApi;
 
+import com.example.starlight.util.I18N;
+
 import com.example.starlight.download.source.DownloadProvider;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -229,8 +231,7 @@ public class CurseForgeRemoteModRepository implements RemoteModRepository {
         if (body == null || body.isBlank()) {
             String summary = getString(obj, "summary");
             body = "<p>" + (summary == null ? "" : summary) + "</p>"
-                    + "<p class=\"md-empty\">CurseForge 接口不提供完整说明，"
-                    + "可点击右上角「打开主页」查看作者撰写的详细介绍。</p>";
+                    + I18N.get("cfr.r0001") + "</p>";
         }
 
         return RemoteModDetail.builder()

@@ -102,6 +102,22 @@ public interface LauncherContext {
     /** 用指定配置启动游戏（首页「最近游玩」直接进存档等场景） */
     void launchGame(com.example.starlight.gui.UIGeneralControlClass.LaunchConfig presetConfig);
 
+    /**
+     * 启动状态（只驱动界面动效，不参与启动流程）：
+     * STARTED=真正开始启动，SUCCEEDED=游戏进程已拉起，FAILED=启动失败 / 用户取消。
+     */
+    enum LaunchState { STARTED, SUCCEEDED, FAILED }
+
+    /**
+     * 订阅启动状态（首页「启动游戏」按钮的收圈 / 加载环 / 对勾动效）。
+     *
+     * <p>订阅时会立即同步一次当前状态，页面重建（刷新首页）时不会闪回常态。
+     * 返回注销句柄；页面重建前必须调用，避免旧按钮继续被驱动。
+     */
+    default Runnable addLaunchStateListener(java.util.function.Consumer<LaunchState> listener) {
+        return () -> { };
+    }
+
     /** 首页快捷工具：按名称执行对应操作（启动器日志 / 崩溃报告 / 截图 / 存档 / 游戏目录） */
     void handleQuickTool(String toolName);
 
@@ -165,17 +181,8 @@ public interface LauncherContext {
     /** 重新从磁盘加载配置表（账号切换等场景后调用） */
     void loadConfig();
 
-    /** 账号数据变化后重建「Account / 游戏账户档案」页缓存，正停留在该页时原地刷新 */
+    /** 账号数据变化后重建「账户」页缓存，正停留在该页时原地刷新 */
     void refreshAccountPages();
-
-    /** 微软登录（设备码流） */
-    void microsoftLogin();
-
-    /** 离线登录 */
-    void offlineLogin();
-
-    /** 第三方（外置登录）账号登录 */
-    void thirdPartyLogin();
 
     /** 应用色盲辅助模式（读取配置后立即生效） */
     void applyColorBlindMode();

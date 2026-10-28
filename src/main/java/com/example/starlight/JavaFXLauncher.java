@@ -1,5 +1,7 @@
 package com.example.starlight;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.listjava.JavaCacheManager;
@@ -107,7 +109,7 @@ public class JavaFXLauncher extends Application {
         long t0 = System.currentTimeMillis();
         SplashProgress.reset();
 
-        SplashProgress.update("正在加载配置…", 0.05);
+        SplashProgress.update(I18N.get("app.t0001"), 0.05);
         // 预加载配置
         Map<String, String> cfg = new java.util.HashMap<>();
         try {
@@ -115,30 +117,30 @@ public class JavaFXLauncher extends Application {
             cfg.putAll(ConfigManager.readClientConfig());
         } catch (Exception ignored) {}
 
-        SplashProgress.update("正在读取账号…", 0.12);
+        SplashProgress.update(I18N.get("app.t0002"), 0.12);
         // 预初始化 AccountManager（读取账号信息）
         try { AccountManager.listAccounts(); } catch (Exception ignored) {}
 
-        SplashProgress.update("正在检查联机组件…", 0.18);
+        SplashProgress.update(I18N.get("app.t0003"), 0.18);
         // 预检查 Terracotta 状态（触发静态初始化，确保 Provider 元数据就绪）
         try { org.starlight.terracotta.TerracottaManager.stateProperty(); } catch (Exception ignored) {}
 
-        SplashProgress.update("正在读取系统信息…", 0.25);
+        SplashProgress.update(I18N.get("app.t0004"), 0.25);
         // 预热系统信息采样（CPU 采样窗口、物理内存、磁盘读写速率），进入首页时数据已就绪
         try { SystemInfoMonitor.warmUp(); } catch (Exception ignored) {}
 
         // 静默登录（模式二「开启启动器静默登录」）：闪屏后台提前刷新过期令牌，
         // 游戏启动时直接命中有效令牌，不再等待网络刷新
         if (SilentLoginManager.isStartupMode()) {
-            SplashProgress.update("正在静默登录…", 0.35);
+            SplashProgress.update(I18N.get("app.t0005"), 0.35);
             try { SilentLoginManager.refreshIfNeeded(null); } catch (Exception ignored) {}
         }
 
-        SplashProgress.update("正在扫描 Java 运行时…", 0.60);
+        SplashProgress.update(I18N.get("app.t0006"), 0.60);
         // 预热 Java 扫描缓存：全盘扫描一次后写入 json，后续自动选择 Java / 设置页列表直接读缓存
         try { JavaCacheManager.warmUp(); } catch (Exception ignored) {}
 
-        SplashProgress.update("正在启动插件…", 0.85);
+        SplashProgress.update(I18N.get("app.t0007"), 0.85);
         // 插件系统初始化（顺序固定，不可颠倒）： //
         // 1) 先启动本地 API 服务 —— 绑定 0 端口，由操作系统分配空闲端口，
         // 服务启动成功后立即把实际端口写入 .minecraft/starlight_api.port；
@@ -162,7 +164,7 @@ public class JavaFXLauncher extends Application {
             log.error("插件系统初始化失败（不影响启动器主功能）", t);
         }
 
-        SplashProgress.update("准备就绪", 1.0);
+        SplashProgress.update(I18N.get("app.t0008"), 1.0);
 
         long elapsed = System.currentTimeMillis() - t0;
         log.info("Splash initialization took: {}ms", elapsed);
@@ -192,7 +194,7 @@ public class JavaFXLauncher extends Application {
     private void showFatalError(Stage stage, Throwable t) {
         try {
             javafx.scene.control.Label label = new javafx.scene.control.Label(
-                    "主界面初始化失败：\n" + t + "\n\n详情见 logs/launcher-crash.log");
+                    I18N.get("jfxl.r0001", t));
             label.setStyle("-fx-text-fill: #ff6b6b; -fx-font-size: 13px; -fx-padding: 30; -fx-wrap-text: true;");
             javafx.scene.Scene scene = new javafx.scene.Scene(label, 560, 360);
             scene.setFill(Color.web("#13162b"));

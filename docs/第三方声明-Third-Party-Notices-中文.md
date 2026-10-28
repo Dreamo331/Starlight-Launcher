@@ -37,6 +37,7 @@
 | 组件 | 用途 | 许可 |
 |---|---|---|
 | Lucide 图标集 | 界面图标 | ISC |
+| Bing 标识（`images/bing.png`） | 顶部搜索胶囊上的搜索引擎指示 | Microsoft 的商标与图形资源，仅作「此搜索会打开 Bing」的指示性使用；本项目与 Microsoft 无隶属关系，不主张任何权利 |
 | 星光启动器图标与美术素材 | 项目标识 | © 2026 Starlight Launcher Contributors。**未授权在分支中复用**，见[许可协议](LICENSE-ZH.md)第 4 条。 |
 
 ## 四、网络服务与数据源
@@ -56,13 +57,16 @@
 | `api.modrinth.com`、`cdn.modrinth.com`（或 `mod.mcimirror.top` 镜像） | 模组与整合包搜索、下载 | Modrinth |
 | `api.curseforge.com`、`edge.forgecdn.net`（或镜像） | 模组与整合包搜索、下载 | Overwolf / CurseForge |
 | `raw.githubusercontent.com`（HMCL 模组词典）、`www.mcmod.cn` | 中文模组名称与链接 | HMCL 贡献者；mcmod.cn |
-| `littleskin.cn` 及用户自选皮肤站 | 外置登录（Yggdrasil / authlib） | 该皮肤站运营方 |
+| `littleskin.cn`、`skin.prinzeugen.net`（Blessing Skin 官方演示）、`skin.mualliance.ltd`（MUA 皮肤站），以及你自行填写的皮肤站 | 外置登录（Yggdrasil / authlib）。`services.thirdPartyPresets` 里的预设只为「第三方登录」下拉框预填地址，选中不发起请求；请求一律由你点击登录触发 | 各皮肤站运营方，与本项目无隶属关系 |
 | `authlib-injector.yushi.moe`、GitHub Releases | authlib-injector，按需下载 | yushijinhun，AGPL-3.0 |
 | `mirrors.tuna.tsinghua.edu.cn`、`repo.huaweicloud.com`、`adoptium.net` | JDK 下载 | 各镜像运营方；Eclipse Adoptium |
 | `api.logshare.cn` | **仅在你主动点击"上传日志"时**使用的日志分享 | Logshare |
+| `api.natfrp.com`、`www.natfrp.com`、`nya.globalslb.net`（frpc 下载 CDN）及你所用隧道的节点域名 | FRP 联机（樱花 SakuraFrp）：访问密钥校验、隧道与节点管理、读取隧道配置、下载官方 frpc。访问密钥只保存在本机 | 樱花 SakuraFrp（natfrp），与本项目无隶属关系；使用时须遵守其服务条款 |
 | 你自行配置的 AI 服务商（OpenAI、DeepSeek、Kimi、智谱、通义千问、豆包、硅基流动、OpenRouter、Groq、MiniMax、混元、文心一言、讯飞星火、阶跃星辰、百川、Gemini、Claude） | 你主动调用的文本类功能 | 你所选服务商 |
 | 第三方社区站点 API（仅在配置了社区模块时） | 社区帖子与签到 | 该站点 |
 | GitHub / Gitee | 更新检查与发布包下载 | GitHub, Inc. / Gitee |
+| `cn.bing.com` | 顶部搜索胶囊：启动器只在本地把关键词拼成结果页地址，**交给系统默认浏览器打开**，不代替用户发起请求，也不读取或解析结果页 | Microsoft（Bing）；由你的浏览器直接访问 |
+| 星光启动器官方发布渠道（`services.capeAgentUrl` 指向的地址，可配置） | 单 EXE 内置的披风补丁 agent（`cape-url-patch-agent.jar`）**仅在内置副本缺失时**的补下载；该组件由本项目自行编写并随源码以 MIT 提供 | 本项目 |
 
 ## 五、游戏内容与商标
 
@@ -76,6 +80,8 @@
 
 - **不含**任何 Mojang 游戏代码，也**不含** Minecraft 客户端文件；
 - **不捆绑** JDK、authlib-injector 与任何模组——这些仅在用户主动请求时下载；
+  （例外说明：披风补丁 agent `cape-url-patch-agent.jar` 是本项目自有的若干 KB 代码，
+  作为内置资源随 EXE 分发，用于让离线账号的 OptiFine 披风指向本机回环地址；它不包含任何第三方代码。）
 - **不含**广告 SDK、统计 SDK、崩溃自动上报 SDK，也**不追踪**用户行为；
 - **不含**内建充值、支付、打赏功能，**不处理**任何支付；
 - **不附带**任何可变现的服务器列表，**不从**任何第三方服务器取得分成。

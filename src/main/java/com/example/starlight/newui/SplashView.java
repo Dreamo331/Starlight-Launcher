@@ -1,5 +1,7 @@
 package com.example.starlight.newui;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.Controllers.PageView;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -29,7 +31,7 @@ public class SplashView implements PageView {
             root = loader.load();
             controller = loader.getController();
         } catch (Exception e) {
-            throw new IllegalStateException("加载启动动画 FXML 失败", e);
+            throw new IllegalStateException(I18N.get("newui.t0110"), e);
         }
 
         // 版权行用真实的年份 / 名称 / 版本号，不写死

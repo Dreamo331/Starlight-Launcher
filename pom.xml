@@ -188,6 +188,17 @@
                     <include>**/*.otf</include>
                 </includes>
             </resource>
+            <!-- 披风 URL 补丁 agent：单 EXE 没有 lib/ 目录，而 -javaagent 只能指向真实文件。
+                 这里把 lib/cape-url-patch-agent.jar 作为 classpath 资源编进 exe，
+                 运行期由 CapeAgentInstaller 释放到 ~/.starlight/ 再注入游戏 JVM。
+                 targetPath 固定 assets/agent，与 CapeAgentInstaller.RESOURCE 对应。 -->
+            <resource>
+                <directory>${project.basedir}/lib</directory>
+                <targetPath>assets/agent</targetPath>
+                <includes>
+                    <include>cape-url-patch-agent.jar</include>
+                </includes>
+            </resource>
         </resources>
 
         <plugins>
@@ -403,8 +414,11 @@
                          写单反斜杠 \. 会让 resourceconfig-x86_64-windows.json 成为非法 JSON,
                          native-image 报 "Invalid escape character". step3-fix.ps1 里还有兜底修复. -->
                     <resourcesList>
-                        <list>.*\\.(fxml|css|png|jpg|jpeg|webp|ico|svg|properties|json|xml|html|txt|ttf|otf|dll|dat|so|dylib)$</list>
+                        <list>.*\\.(fxml|css|png|jpg|jpeg|webp|ico|svg|properties|json|xml|html|txt|ttf|otf|dll|dat|so|dylib|jar)$</list>
                     </resourcesList>
+                    <!-- jar 后缀是为 assets/agent/cape-url-patch-agent.jar 加的：它必须在
+                         原生镜像里可被 CapeAgentInstaller 当资源读出来。注意不要把它打进
+                         上面 lib/ 之外的任何位置，否则会被当成真正的 classpath jar 处理。 -->
                     <!-- Gson 反射模型类：Native Image 关闭运行期反射，必须显式注册
                          （LaunchRecord 最近游玩 / Community* 社区登录 / Modrinth* 模组库 / CacheEntry） -->
                     <reflectionList>

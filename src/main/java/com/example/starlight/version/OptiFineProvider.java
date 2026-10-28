@@ -23,6 +23,9 @@ import java.util.List;
  */
 public class OptiFineProvider implements LoaderProvider {
 
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(OptiFineProvider.class);
+
     public String name() { return "OptiFine"; }
     public String icon() { return ""; }
     public String fallbackUrl() { return "https://optifine.net/downloads"; }
@@ -54,10 +57,13 @@ public class OptiFineProvider implements LoaderProvider {
             }
             // 同 MC 版本下可能同时有 HD_U / pre 等多个渠道，按 patch 从新到旧排
             VersionDownloadService.sortLoaderVersionsDesc(list);
-            if (list.size() > 40) {
-                list = new ArrayList<>(list.subList(0, 40));
+            // 截断从 40 放宽到 120：老 patch 交给 UI 搜索，不在源头砍掉
+            if (list.size() > 120) {
+                list = new ArrayList<>(list.subList(0, 120));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LOG.warn("OptiFine version list query failed for {}: {}", mcVersion, e.getMessage());
+        }
         return list;
     }
 

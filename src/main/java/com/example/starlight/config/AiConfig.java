@@ -1,5 +1,7 @@
 package com.example.starlight.config;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.main.ConfigManager;
 
 import java.util.LinkedHashMap;
@@ -92,12 +94,12 @@ public final class AiConfig {
         boolean noUrl = baseUrl().isEmpty();
         boolean noModel = model().isEmpty();
         if (noUrl && noModel) {
-            return "尚未配置 AI 服务：请到「设置 → 高级设置 → AI 配置」点一个服务商图标并填写 API Key";
+            return I18N.get("config.t0001");
         }
         if (noUrl) {
-            return "尚未填写 AI 服务的 API 地址：请到「设置 → 高级设置 → AI 配置」补全";
+            return I18N.get("config.t0002");
         }
-        return "尚未选择 AI 模型：请到「设置 → 高级设置 → AI 配置」点「选择模型」挑一个";
+        return I18N.get("config.t0003");
     }
 
     /**

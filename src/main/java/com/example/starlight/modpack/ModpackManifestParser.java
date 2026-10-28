@@ -1,5 +1,7 @@
 package com.example.starlight.modpack;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.ModsApi.CurseForgeAPI;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -74,10 +76,10 @@ public final class ModpackManifestParser {
         if (Files.exists(mrIndex)) {
             JsonObject index = new Gson().fromJson(
                     Files.readString(mrIndex, java.nio.charset.StandardCharsets.UTF_8), JsonObject.class);
-            if (index == null) throw new IOException("modrinth.index.json 解析失败");
+            if (index == null) throw new IOException(I18N.get("modpack.t0001"));
             JsonObject deps = index.getAsJsonObject("dependencies");
             if (deps == null || !deps.has("minecraft")) {
-                throw new IOException("整合包未声明 Minecraft 版本");
+                throw new IOException(I18N.get("modpack.t0002"));
             }
             String loaderType = null, loaderVersion = null;
             for (String[] lm : MODPACK_LOADER_KEYS) {
@@ -99,7 +101,7 @@ public final class ModpackManifestParser {
                     files.add(new PackFile(path, urls.get(0).getAsString()));
                 }
             }
-            progress.logLine("清单格式: Modrinth .mrpack", true);
+            progress.logLine(I18N.get("modpack.t0003"), true);
             return new PackManifest(deps.get("minecraft").getAsString(),
                     loaderType, loaderVersion, "overrides", files);
         }
@@ -109,9 +111,9 @@ public final class ModpackManifestParser {
         if (Files.exists(cfManifest)) {
             JsonObject m = new Gson().fromJson(
                     Files.readString(cfManifest, java.nio.charset.StandardCharsets.UTF_8), JsonObject.class);
-            if (m == null) throw new IOException("manifest.json 解析失败");
+            if (m == null) throw new IOException(I18N.get("modpack.t0004"));
             JsonObject mc = m.getAsJsonObject("minecraft");
-            if (mc == null || !mc.has("version")) throw new IOException("整合包未声明 Minecraft 版本");
+            if (mc == null || !mc.has("version")) throw new IOException(I18N.get("modpack.t0005"));
             String mcVersionRaw = mc.get("version").getAsString();
 
             // modLoaders 形如 [{"id":"neoforge-21.1.72","primary":true}]
@@ -134,12 +136,12 @@ public final class ModpackManifestParser {
 
             String overridesDir = m.has("overrides") ? m.get("overrides").getAsString() : "overrides";
             List<PackFile> files = resolveCurseForgePackFiles(m, progress);
-            progress.logLine("清单格式: CurseForge manifest.json", true);
+            progress.logLine(I18N.get("modpack.t0006"), true);
             return new PackManifest(mcVersionRaw, loaderType, loaderVersion,
                     (overridesDir == null || overridesDir.isBlank()) ? "overrides" : overridesDir, files);
         }
 
-        throw new IOException("无法识别的整合包格式（既没有 modrinth.index.json，也没有 manifest.json）");
+        throw new IOException(I18N.get("modpack.t0007"));
     }
 
     /**
@@ -172,7 +174,7 @@ public final class ModpackManifestParser {
             // 整批文件都不存在时 CurseForge 返回 404（例如整合包引用了已下架的文件）。
             // 这不该让整个整合包安装失败：原版、加载器、overrides 仍然可用。
             if (String.valueOf(e.getMessage()).contains("404")) {
-                progress.logLine("CurseForge 未能解析清单文件（可能引用了已下架的文件）: " + e.getMessage(), false);
+                progress.logLine(I18N.get("modpack.p0008", e.getMessage()), false);
                 return out;
             }
             throw e;
@@ -194,7 +196,7 @@ public final class ModpackManifestParser {
                     ? meta.get("downloadUrl").getAsString() : null;
             if (dl == null || dl.isBlank()) {
                 noUrl++;
-                progress.logLine("跳过（作者未开放第三方下载）: " + fileName, false);
+                progress.logLine(I18N.get("modpack.p0009", fileName), false);
                 continue;
             }
             // CurseForge 清单里的文件都是 mod，统一放进 mods/

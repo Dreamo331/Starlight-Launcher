@@ -1,5 +1,7 @@
 package com.example.starlight.newui;
 
+
+import com.example.starlight.util.I18N;
 import javafx.animation.AnimationTimer;
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
@@ -363,7 +365,7 @@ public class StarlightSplashController implements Initializable {
         } else if (finishTimer != Double.MAX_VALUE) {
             if (t - finishTimer > 0.35) {
                 finishTimer = Double.MAX_VALUE;
-                setStatus("准备就绪");
+                setStatus(I18N.get("newui.t0111"));
                 playExit();
             }
         }

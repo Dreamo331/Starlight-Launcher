@@ -1,5 +1,7 @@
 package com.example.starlight.pluginapi.provider;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.pluginapi.ApiRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -41,7 +43,7 @@ public final class ProviderSupport {
     public static String required(ApiRequest request, String name) {
         String v = request.param(name);
         if (v == null || v.isBlank()) {
-            throw new IllegalArgumentException("缺少必要参数: " + name);
+            throw new IllegalArgumentException(I18N.get("provider.p0005", name));
         }
         return v.trim();
     }
@@ -55,7 +57,7 @@ public final class ProviderSupport {
         try {
             return Integer.parseInt(v.trim());
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("参数 " + name + " 非法（需整数）: " + v);
+            throw new IllegalArgumentException(I18N.get("psup.r0001", name, v));
         }
     }
 
@@ -76,13 +78,13 @@ public final class ProviderSupport {
         try {
             return future.get(timeoutSeconds, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
-            throw new IOException("操作超时（" + timeoutSeconds + "s）");
+            throw new IOException(I18N.get("provider.p0006", timeoutSeconds + "s）"));
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof Exception ex) {
                 throw ex;
             }
-            throw new IOException("操作失败: " + cause);
+            throw new IOException(I18N.get("provider.p0007", cause));
         }
     }
 }

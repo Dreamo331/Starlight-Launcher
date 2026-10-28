@@ -1,5 +1,7 @@
 package com.example.starlight.plugin;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.pluginapi.SemVer;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -80,9 +82,9 @@ public final class PluginMetadata {
 
     /** @return UI 展示用类型标签：官方 / 社区 / 未标注 */
     public String typeLabel() {
-        if (isOfficial()) return "官方";
-        if (isCommunity()) return "社区";
-        return "未标注";
+        if (isOfficial()) return I18N.get("plugin.t0001");
+        if (isCommunity()) return I18N.get("plugin.t0002");
+        return I18N.get("plugin.t0003");
     }
 
     /**
@@ -92,26 +94,26 @@ public final class PluginMetadata {
      */
     public String validate() {
         if (isBlank(id)) {
-            return "id 不能为空";
+            return I18N.get("plugin.t0004");
         }
         if (isBlank(name)) {
-            return "name 不能为空";
+            return I18N.get("plugin.t0005");
         }
         if (!isValidSemVer(version)) {
-            return "version 非法（需为 SemVer，如 1.0.0）: " + version;
+            return I18N.get("plugin.p0007", version);
         }
         if (!isValidSemVer(launcherApiVersion)) {
-            return "launcher_api_version 非法（需为 SemVer）: " + launcherApiVersion;
+            return I18N.get("plugin.p0008", launcherApiVersion);
         }
         if (isBlank(mainClass)) {
-            return "main_class 不能为空";
+            return I18N.get("plugin.t0006");
         }
         if (pluginType != null && !"official".equals(pluginType) && !"community".equals(pluginType)) {
-            return "plugin_type 只能为 official 或 community: " + pluginType;
+            return I18N.get("plugin.p0009", pluginType);
         }
         // official.* 前缀为官方插件保留：社区插件使用视为非法（保留语义，仅做元数据层面校验）
         if (isCommunity() && id != null && id.startsWith("official.")) {
-            return "official.* 前缀为官方插件保留，社区插件不得使用: " + id;
+            return I18N.get("plugin.p0010", id);
         }
         return null;
     }

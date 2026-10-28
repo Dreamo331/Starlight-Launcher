@@ -4,6 +4,8 @@
 // mods 目录由 --gameDir（版本隔离时为版本目录）决定，不需要额外参数。
 package com.example.starlight.startmc.launcher;
 
+
+import com.example.starlight.util.I18N;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -29,7 +31,7 @@ public class FabricLauncher extends BaseLauncher {
 
     @Override
     public int launch() throws IOException, InterruptedException {
-        writeLog("[模式] Fabric/Quilt 加载器", "INFO");
+        writeLog(I18N.get("launcher.t0006"), "INFO");
 
         // 确保占位符键已初始化
         if (placeholderKeys == null) buildPlaceholderKeys();
@@ -46,11 +48,11 @@ public class FabricLauncher extends BaseLauncher {
         // 类路径
         List<String> libs = getLibraries(true);
         String cp = formatClassPath(libs);
-        writeLog("类路径条目数: " + libs.size(), "INFO");
+        writeLog(I18N.get("launcher.p0053", libs.size()), "INFO");
 
         // 有效游戏数据目录
         String effectiveGameDir = launchInfo.resolveEffectiveGameDir().toString();
-        writeLog("Mods 目录: " + Path.of(effectiveGameDir, "mods"), "INFO");
+        writeLog(I18N.get("launcher.p0054", Path.of(effectiveGameDir, "mods")), "INFO");
 
         // 完整启动参数
         // 注意：-D 参数必须位于 -cp 之前（JVM 参数区），否则会被当作游戏参数
@@ -65,8 +67,8 @@ public class FabricLauncher extends BaseLauncher {
         startArgs.addAll(buildGameArgsFromJson(effectiveGameDir));
 
         // 启动进程 //
-        writeLog("启动命令构建完成，正在启动 " + launchInfo.getVersion() + " ...", "INFO");
-        writeLog("日志文件: " + logFile, "INFO");
+        writeLog(I18N.get("launcher.p0055", launchInfo.getVersion() + " ..."), "INFO");
+        writeLog(I18N.get("launcher.p0056", logFile), "INFO");
 
         int exitCode = startProcessWithMonitoring(launchInfo.getJavaPath(), startArgs);
 

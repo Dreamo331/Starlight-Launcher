@@ -1,5 +1,7 @@
 package com.example.starlight.newui.update;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.AppConfig;
 import com.example.starlight.newui.LauncherContext;
@@ -50,11 +52,11 @@ public final class UpdateCoordinator {
      * 本类只负责展示结果
      */
     public void check() {
-        host.ui().toast("正在检查更新...");
+        host.ui().toast(I18N.get("update.t0001"));
         UpdateChecker.checkUpdate(AppConfig.APP_VERSION, result -> {
             if (result.error != null || result.latestTag == null || result.latestTag.isEmpty()) {
-                showErrorDialog("检查更新失败",
-                        "无法获取最新版本信息：\n" + (result.error != null ? result.error : "响应格式错误"));
+                showErrorDialog(I18N.get("update.t0020"),
+                        I18N.get("update.p0037", (result.error != null ? result.error : I18N.get("update.t0021"))));
                 return;
             }
             int cmp = UpdateChecker.compareVersions(result.latestVersion, AppConfig.APP_VERSION);
@@ -62,12 +64,12 @@ public final class UpdateCoordinator {
                 showUpdateDialog(result.latestVersion, result.releaseBody,
                         result.downloadUrl, result.md5, result.forceUpdate, result.releasePageUrl);
             } else if (cmp == 0) {
-                showInfoDialog("检查更新",
-                        "当前已是最新版本（" + AppConfig.DISPLAY_VERSION + "）" + sourceHint(result));
+                showInfoDialog(I18N.get("update.t0022"),
+                        I18N.get("update.p0038", AppConfig.DISPLAY_VERSION + "）" + sourceHint(result)));
             } else {
-                showInfoDialog("检查更新",
-                        "当前版本（" + AppConfig.DISPLAY_VERSION + "）不低于最新发布版本（"
-                                + result.latestTag + "）" + sourceHint(result));
+                showInfoDialog(I18N.get("update.t0023"),
+                        I18N.get("upd.r0001", AppConfig.DISPLAY_VERSION, result.latestTag)
+                        + sourceHint(result));
             }
         });
     }
@@ -80,11 +82,11 @@ public final class UpdateCoordinator {
     private static String sourceHint(UpdateChecker.UpdateResult result) {
         if (result.source == null) return "";
         if (result.source != UpdateChecker.Source.OFFICIAL) {
-            return "\n（官方更新服务不可用，本次版本信息来自 " + result.source.label() + "）";
+            return I18N.get("update.p0039", result.source.label() + "）");
         }
         String dl = result.downloadSourceLabel;
         if (dl != null && !dl.isEmpty()) {
-            return "\n（版本信息来自官方服务器，安装包下载源：" + dl + "）";
+            return I18N.get("update.p0040", dl + "）");
         }
         return "";
     }
@@ -124,10 +126,10 @@ public final class UpdateCoordinator {
         bodyBox.setPadding(new Insets(8, 4, 0, 4));
 
         // 版本信息 + 更新说明（textarea-field 随主题切换深浅色）
-        Label verLabel = new Label("当前版本 " + AppConfig.DISPLAY_VERSION + "   →   最新版本 v" + latest);
+        Label verLabel = new Label(I18N.get("upd.r0006", AppConfig.DISPLAY_VERSION, latest));
         verLabel.getStyleClass().add("modal-text-title");
         TextArea area = new TextArea(body == null || body.trim().isEmpty()
-                ? "新版已发布，点击「立即更新」下载并自动替换。" : body.trim());
+                ? I18N.get("update.t0002") : body.trim());
         area.setEditable(false);
         area.setWrapText(true);
         area.setPrefHeight(130);
@@ -136,13 +138,13 @@ public final class UpdateCoordinator {
         VBox.setVgrow(area, Priority.ALWAYS);
 
         // 勾选框：下次自动更新不再提醒（强制更新不提供跳过）
-        CheckBox dontRemind = new CheckBox("下次自动更新不再提醒");
+        CheckBox dontRemind = new CheckBox(I18N.get("update.t0003"));
         dontRemind.getStyleClass().add("modal-checkbox");
 
         HBox btns = new HBox(10);
         btns.setAlignment(Pos.CENTER_RIGHT);
         if (!forceUpdate) {
-            Button laterBtn = AppIcons.button("clock", "稍后更新");
+            Button laterBtn = AppIcons.button("clock", I18N.get("update.t0004"));
             laterBtn.getStyleClass().add("modal-btn-cancel");
             laterBtn.setOnAction(e -> {
                 host.ui().closeModal();
@@ -156,7 +158,7 @@ public final class UpdateCoordinator {
         // 有直链 → 启动器内下载并自动替换；只有发行版页面 → 浏览器打开手动下载；两者都无 → 不提供按钮
         if (hasDirect || hasPage) {
             updateBtn = AppIcons.button(hasDirect ? "download" : "external-link",
-                    hasDirect ? "立即更新" : "打开发布页");
+                    hasDirect ? I18N.get("update.t0024") : I18N.get("update.t0025"));
             updateBtn.getStyleClass().add("modal-btn-ok");
             updateBtn.setOnAction(e -> {
                 host.ui().closeModal();
@@ -177,14 +179,14 @@ public final class UpdateCoordinator {
         } else {
             bodyBox.getChildren().addAll(verLabel, area, dontRemind, btns);
         }
-        host.ui().modal("发现新版本 v" + latest + (forceUpdate ? "（强制更新）" : ""), bodyBox, 460, forceUpdate ? 290 : 330);
+        host.ui().modal(I18N.get("update.p0041", latest + (forceUpdate ? I18N.get("update.t0026") : "")), bodyBox, 460, forceUpdate ? 290 : 330);
     }
 
     /** 记录「不再提醒」的版本号：该版本在自动检查时不再弹出提示（新版本发布后自动恢复提醒） */
     private void rememberSkipVersion(String latest) {
         host.config().put("SkipUpdateVersion", latest);
         host.saveConfig();
-        host.ui().toast("已记住：v" + latest + " 不再自动提醒更新");
+        host.ui().toast(I18N.get("upd.r0002", latest));
     }
 
     /** 发现新版本面板（集成在启动器内）：展示更新内容，点击「立即更新」下载新版本到启动器目录并自动替换 */
@@ -194,17 +196,17 @@ public final class UpdateCoordinator {
         bodyBox.setPadding(new Insets(8, 4, 0, 4));
 
         StringBuilder text = new StringBuilder();
-        text.append("当前版本: ").append(AppConfig.DISPLAY_VERSION)
-                .append("\n最新版本: v").append(latest);
+        text.append(I18N.get("update.t0027")).append(AppConfig.DISPLAY_VERSION)
+                .append(I18N.get("update.t0028")).append(latest);
         boolean hasDirect = downloadUrl != null && !downloadUrl.trim().isEmpty();
         boolean hasPage = releasePageUrl != null && !releasePageUrl.trim().isEmpty();
         if (hasDirect) {
-            text.append("\n下载地址: ").append(downloadUrl.trim());
+            text.append(I18N.get("update.t0005")).append(downloadUrl.trim());
         } else if (hasPage) {
-            text.append("\n发布页地址: ").append(releasePageUrl.trim());
+            text.append(I18N.get("update.t0006")).append(releasePageUrl.trim());
         }
         if (body != null && !body.trim().isEmpty()) {
-            text.append("\n\n更新内容:\n")
+            text.append(I18N.get("update.t0007"))
                     .append(body.length() > 800 ? body.substring(0, 800) + "..." : body);
         }
         TextArea area = new TextArea(text.toString());
@@ -215,12 +217,12 @@ public final class UpdateCoordinator {
 
         HBox btns = new HBox(10);
         btns.setAlignment(Pos.CENTER_RIGHT);
-        Button closeBtn = AppIcons.button("close", "关闭");
+        Button closeBtn = AppIcons.button("close", I18N.get("update.t0008"));
         closeBtn.getStyleClass().add("modal-btn-cancel");
         closeBtn.setOnAction(e -> host.ui().closeModal());
         btns.getChildren().add(closeBtn);
         if (hasDirect) {
-            Button updateBtn = AppIcons.button("download", "立即更新");
+            Button updateBtn = AppIcons.button("download", I18N.get("update.t0009"));
             updateBtn.getStyleClass().add("modal-btn-ok");
             updateBtn.setOnAction(e -> {
                 host.ui().closeModal();
@@ -228,7 +230,7 @@ public final class UpdateCoordinator {
             });
             btns.getChildren().add(updateBtn);
         } else if (hasPage) {
-            Button pageBtn = AppIcons.button("external-link", "打开发布页");
+            Button pageBtn = AppIcons.button("external-link", I18N.get("update.t0010"));
             pageBtn.getStyleClass().add("modal-btn-ok");
             pageBtn.setOnAction(e -> {
                 host.ui().closeModal();
@@ -237,7 +239,7 @@ public final class UpdateCoordinator {
             btns.getChildren().add(pageBtn);
         }
         bodyBox.getChildren().addAll(area, btns);
-        host.ui().modal("发现新版本 v" + latest + (forceUpdate ? "（强制更新）" : ""), bodyBox, 460, 380);
+        host.ui().modal(I18N.get("update.p0042", latest + (forceUpdate ? I18N.get("update.t0029") : "")), bodyBox, 460, 380);
     }
 
     /**
@@ -246,15 +248,15 @@ public final class UpdateCoordinator {
      */
     private void openReleasePage(String releasePageUrl, String latest) {
         if (releasePageUrl == null || releasePageUrl.trim().isEmpty()) {
-            showErrorDialog("更新失败", "更新包下载地址缺失，请稍后重试或联系官方获取。");
+            showErrorDialog(I18N.get("update.t0030"), I18N.get("update.t0031"));
             return;
         }
         try {
             Desktop.getDesktop().browse(java.net.URI.create(releasePageUrl.trim()));
-            host.ui().toast("已打开发布页 v" + latest + "，请手动下载安装包");
+            host.ui().toast(I18N.get("upd.r0003", latest));
         } catch (Exception ex) {
-            showErrorDialog("更新失败",
-                    "无法打开发布页：" + ex.getMessage() + "\n" + releasePageUrl.trim());
+            showErrorDialog(I18N.get("update.t0032"),
+                    I18N.get("update.p0043", ex.getMessage() + "\n" + releasePageUrl.trim()));
         }
     }
 
@@ -266,7 +268,7 @@ public final class UpdateCoordinator {
     private void startAutoUpdate(String latest, String downloadUrl, String md5) {
         Path exePath = UpdateInstaller.getCurrentExePath();
         if (exePath == null) {
-            showErrorDialog("更新失败", "无法定位启动器程序文件，请手动打开下载地址更新。\n" + downloadUrl);
+            showErrorDialog(I18N.get("update.t0033"), I18N.get("update.p0044", downloadUrl));
             return;
         }
         String exeName = exePath.getFileName().toString();
@@ -274,9 +276,9 @@ public final class UpdateCoordinator {
             // 开发/调试环境（如 IDE 中的 java.exe）：不支持原地替换，回退浏览器下载
             try {
                 Desktop.getDesktop().browse(java.net.URI.create(downloadUrl));
-                host.ui().toast("当前环境不支持自动替换更新，已打开浏览器下载新版本");
+                host.ui().toast(I18N.get("update.t0011"));
             } catch (Exception ex) {
-                host.ui().toast("无法打开下载地址: " + ex.getMessage());
+                host.ui().toast(I18N.get("update.p0045", ex.getMessage()));
             }
             return;
         }
@@ -288,9 +290,9 @@ public final class UpdateCoordinator {
         // 下载进度面板（集成在启动器内）
         VBox progressBody = new VBox(10);
         progressBody.setPadding(new Insets(10, 4, 0, 4));
-        Label dlgTitle = new Label("正在下载新版本 v" + latest + " ...");
+        Label dlgTitle = new Label(I18N.get("update.p0046", latest + " ..."));
         dlgTitle.getStyleClass().add("modal-text-title");
-        Label statusLabel = new Label("连接下载服务器...");
+        Label statusLabel = new Label(I18N.get("update.t0012"));
         statusLabel.setWrapText(true);
         statusLabel.getStyleClass().add("modal-text");
         ProgressBar bar = new ProgressBar(0);
@@ -298,7 +300,7 @@ public final class UpdateCoordinator {
         bar.setMaxWidth(Double.MAX_VALUE);
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
-        Button cancelBtn = AppIcons.button("close", "取消");
+        Button cancelBtn = AppIcons.button("close", I18N.get("update.t0013"));
         cancelBtn.getStyleClass().add("modal-btn-cancel");
         cancelBtn.setOnAction(e -> {
             cancelled.set(true);
@@ -308,7 +310,7 @@ public final class UpdateCoordinator {
         btnRow.setAlignment(Pos.CENTER_RIGHT);
         btnRow.getChildren().add(cancelBtn);
         progressBody.getChildren().addAll(dlgTitle, statusLabel, bar, spacer, btnRow);
-        host.ui().modal("正在更新", progressBody, 460, 230);
+        host.ui().modal(I18N.get("update.t0014"), progressBody, 460, 230);
 
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
@@ -316,7 +318,7 @@ public final class UpdateCoordinator {
                 UpdateDownloader.downloadExe(downloadUrl, newExe, pct -> Platform.runLater(() -> {
                     if (!cancelled.get()) {
                         bar.setProgress(pct / 100.0);
-                        statusLabel.setText("下载中 " + pct + "%");
+                        statusLabel.setText(I18N.get("update.p0047", pct + "%"));
                     }
                 }), cancelled);
                 if (cancelled.get()) {
@@ -325,13 +327,13 @@ public final class UpdateCoordinator {
                 }
                 // MD5 完整性校验（接口提供了 md5 时执行）
                 if (md5 != null && !md5.trim().isEmpty()) {
-                    Platform.runLater(() -> statusLabel.setText("正在校验文件完整性..."));
+                    Platform.runLater(() -> statusLabel.setText(I18N.get("update.t0015")));
                     String actual = UpdateInstaller.md5Of(newExe);
                     if (!actual.equalsIgnoreCase(md5.trim())) {
                         Files.deleteIfExists(newExe);
                         Platform.runLater(() -> {
                             host.ui().closeModal();
-                            showErrorDialog("更新失败", "下载文件校验失败（MD5 不匹配），请重试或手动下载更新。");
+                            showErrorDialog(I18N.get("update.t0034"), I18N.get("update.t0035"));
                         });
                         return;
                     }
@@ -347,20 +349,20 @@ public final class UpdateCoordinator {
                     // 更新就绪面板：立即重启 / 稍后
                     VBox readyBody = new VBox(14);
                     readyBody.setPadding(new Insets(10, 4, 0, 4));
-                    Label readyMsg = new Label("新版本 v" + latest + " 已下载完成。\n重启启动器后将自动完成替换更新，是否立即重启？\n（选择「稍后」，下次关闭启动器时也会自动完成更新）");
+                    Label readyMsg = new Label(I18N.get("upd.r0004", latest));
                     readyMsg.setWrapText(true);
                     readyMsg.getStyleClass().add("modal-text");
                     Region rSpacer = new Region();
                     VBox.setVgrow(rSpacer, Priority.ALWAYS);
                     HBox rBtns = new HBox(10);
                     rBtns.setAlignment(Pos.CENTER_RIGHT);
-                    Button laterBtn = AppIcons.button("clock", "稍后");
+                    Button laterBtn = AppIcons.button("clock", I18N.get("update.t0016"));
                     laterBtn.getStyleClass().add("modal-btn-cancel");
                     laterBtn.setOnAction(e -> {
                         host.ui().closeModal();
-                        host.ui().toast("更新已就绪，重启启动器后自动完成");
+                        host.ui().toast(I18N.get("update.t0017"));
                     });
-                    Button restartBtn = AppIcons.button("refresh", "立即重启");
+                    Button restartBtn = AppIcons.button("refresh", I18N.get("update.t0018"));
                     restartBtn.getStyleClass().add("modal-btn-ok");
                     restartBtn.setOnAction(e -> {
                         host.ui().closeModal();
@@ -368,14 +370,14 @@ public final class UpdateCoordinator {
                     });
                     rBtns.getChildren().addAll(laterBtn, restartBtn);
                     readyBody.getChildren().addAll(readyMsg, rSpacer, rBtns);
-                    host.ui().modal("更新就绪", readyBody, 460, 230);
+                    host.ui().modal(I18N.get("update.t0019"), readyBody, 460, 230);
                 });
             } catch (Exception ex) {
                 try { Files.deleteIfExists(newExe); } catch (Exception ignored) {}
                 try { Files.deleteIfExists(bat); } catch (Exception ignored) {}
                 Platform.runLater(() -> {
                     host.ui().closeModal();
-                    showErrorDialog("更新失败", "下载更新失败：\n" + ex.getMessage() + "\n可手动打开下载地址更新。");
+                    showErrorDialog(I18N.get("update.t0036"), I18N.get("upd.r0005", ex.getMessage()));
                 });
             }
         });

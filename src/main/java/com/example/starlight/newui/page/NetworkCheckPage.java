@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.PageKit;
@@ -32,9 +34,9 @@ public final class NetworkCheckPage {
 
     /** 内置测速目标：与下载源选项一致（名称、探针根地址） */
     private static final String[][] SOURCES = {
-            {"BMCLAPI", "https://bmclapi2.bangbang93.com", "推荐"},
-            {"Mojang", "https://launchermeta.mojang.com", "官方"},
-            {"MCBBS", "https://download.mcbbs.net", "已停服"},
+            {"BMCLAPI", "https://bmclapi2.bangbang93.com", I18N.get("page.t0388")},
+            {"Mojang", "https://launchermeta.mojang.com", I18N.get("page.t0389")},
+            {"MCBBS", "https://download.mcbbs.net", I18N.get("page.t0390")},
     };
 
     public NetworkCheckPage(LauncherContext host) {
@@ -44,25 +46,25 @@ public final class NetworkCheckPage {
     // 网络检测页面 //
 
     public Node build() {
-        VBox root = PageKit.settingsPage(host, "网络检测", "home");
+        VBox root = PageKit.settingsPage(host, I18N.get("page.t0391"), "home");
 
         // 状态卡：下载源 / 延迟 / 连接状态（真实数据，进页面即刷新） //
         VBox statusCard = new VBox(10);
         statusCard.getStyleClass().add("settings-card");
-        Label statusTitle = AppIcons.label("globe", "网络状态");
+        Label statusTitle = AppIcons.label("globe", I18N.get("page.t0392"));
         statusTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: 600; -fx-text-fill: -sl-text;");
 
         String currentSource = NetworkStatusService.currentSourceName();
         Label sourceValue = statValue(currentSource);
         Label latencyValue = statValue("--ms");
-        Label connValue = statValue("检测中...");
+        Label connValue = statValue(I18N.get("page.t0393"));
 
         HBox statusRow = new HBox(20);
         statusRow.setAlignment(Pos.CENTER);
         statusRow.getChildren().addAll(
-                statBlock("下载源", sourceValue),
-                statBlock("延迟", latencyValue),
-                statBlock("连接状态", connValue)
+                statBlock(I18N.get("page.t0668"), sourceValue),
+                statBlock(I18N.get("page.t0669"), latencyValue),
+                statBlock(I18N.get("page.t0670"), connValue)
         );
         statusCard.getChildren().addAll(statusTitle, statusRow);
         root.getChildren().add(statusCard);
@@ -70,7 +72,7 @@ public final class NetworkCheckPage {
         // 下载源测速卡 //
         VBox sourceCard = new VBox(10);
         sourceCard.getStyleClass().add("settings-card");
-        Label sourceTitle = AppIcons.label("antenna", "下载源测速");
+        Label sourceTitle = AppIcons.label("antenna", I18N.get("page.t0394"));
         sourceTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: 600; -fx-text-fill: -sl-text;");
         sourceCard.getChildren().add(sourceTitle);
 
@@ -89,12 +91,12 @@ public final class NetworkCheckPage {
             HBox.setHgrow(url, Priority.ALWAYS);
             Label latency = new Label("--ms");
             latency.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-faint;");
-            Button testBtn = AppIcons.button("gauge", "测速");
+            Button testBtn = AppIcons.button("gauge", I18N.get("page.t0395"));
             testBtn.getStyleClass().add("btn-primary");
             testBtn.setStyle("-fx-padding: 4 12; -fx-font-size: 11px;");
             testBtn.setOnAction(e -> {
                 testBtn.setDisable(true);
-                latency.setText("测试中...");
+                latency.setText(I18N.get("page.t0396"));
                 latency.setStyle("-fx-font-size: 12px; -fx-text-fill: #f59e0b;");
                 NetworkStatusService.testAllAsync().thenAccept(list -> {
                     // 单源按钮复用整体测速（30 秒缓存期内不会重复打网络），再挑出本行的结果
@@ -116,12 +118,12 @@ public final class NetworkCheckPage {
         root.getChildren().add(sourceCard);
 
         // 一键测速 //
-        Button speedTestBtn = AppIcons.button("rocket", "一键网络测速");
+        Button speedTestBtn = AppIcons.button("rocket", I18N.get("page.t0397"));
         speedTestBtn.getStyleClass().add("home-launch-btn");
         speedTestBtn.setMaxWidth(Double.MAX_VALUE);
         speedTestBtn.setOnAction(e -> {
             speedTestBtn.setDisable(true);
-            host.ui().toast("开始网络测速...");
+            host.ui().toast(I18N.get("page.t0398"));
             NetworkStatusService.testAllAsync().thenAccept(list -> Platform.runLater(() -> {
                 speedTestBtn.setDisable(false);
                 SourceResult current = pick(list, NetworkStatusService.currentSourceName());
@@ -131,14 +133,14 @@ public final class NetworkCheckPage {
                 for (int i = 0; i < rowLatencies.size() && i < rowNames.size(); i++) {
                     applyLatency(rowLatencies.get(i), pick(list, rowNames.get(i)[0]));
                 }
-                host.ui().toast("测速完成");
+                host.ui().toast(I18N.get("page.t0399"));
             }));
         });
         root.getChildren().add(speedTestBtn);
 
         // 进入页面即测一次当前下载源（缓存 30 秒内直接复用，不重复打网络）
         latencyValue.setText("--ms");
-        connValue.setText("检测中...");
+        connValue.setText(I18N.get("page.t0400"));
         connValue.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: #f59e0b;");
         NetworkStatusService.testCurrentSourceAsync().thenAccept(r -> Platform.runLater(() ->
                 applyStatusCard(r, latencyValue, connValue)));
@@ -150,7 +152,7 @@ public final class NetworkCheckPage {
     private void applyStatusCard(SourceResult r, Label latencyValue, Label connValue) {
         if (r == null) {
             latencyValue.setText("--ms");
-            connValue.setText("未知");
+            connValue.setText(I18N.get("page.t0401"));
             connValue.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: #6b7280;");
             return;
         }
@@ -158,12 +160,12 @@ public final class NetworkCheckPage {
             latencyValue.setText(r.latencyMs + "ms");
             latencyValue.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: "
                     + latencyColor(r.latencyMs) + ";");
-            connValue.setText("正常");
+            connValue.setText(I18N.get("page.t0402"));
             connValue.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: #22c55e;");
         } else {
             latencyValue.setText("--ms");
             latencyValue.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: #ef4444;");
-            connValue.setText("不可达");
+            connValue.setText(I18N.get("page.t0403"));
             connValue.setStyle("-fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: #ef4444;");
         }
     }
@@ -171,7 +173,7 @@ public final class NetworkCheckPage {
     /** 测速行应用一次结果 */
     private void applyLatency(Label latency, SourceResult r) {
         if (r == null || !r.ok) {
-            latency.setText("不可达");
+            latency.setText(I18N.get("page.t0404"));
             latency.setStyle("-fx-font-size: 12px; -fx-text-fill: #ef4444;");
             return;
         }

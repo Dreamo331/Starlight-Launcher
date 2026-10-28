@@ -1,5 +1,7 @@
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AppDirs;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -70,21 +72,21 @@ public final class FrameGenHostManager {
         @Override
         public String toString() {
             if (!handshaked) {
-                return "未连接";
+                return I18N.get("framegen.t0046");
             }
             if (lastError != null && !lastError.isEmpty()) {
-                return "错误：" + lastError;
+                return I18N.get("framegen.p0135", lastError);
             }
             if (closed) {
-                return "已结束";
+                return I18N.get("framegen.t0047");
             }
             if (!presenting && !running) {
-                return "未启动";
+                return I18N.get("framegen.t0048");
             }
             if (!running) {
-                return "直通中（不插值）";
+                return I18N.get("framegen.t0049");
             }
-            return String.format("%dx%d · %s · 插值 %.2f ms",
+            return String.format(I18N.get("framegen.t0050"),
                     width, height, captureBackend, interpMs);
         }
     }
@@ -161,11 +163,11 @@ public final class FrameGenHostManager {
         }
         Path exe = hostExePath();
         if (!Files.isRegularFile(exe)) {
-            fail("未找到 framegen-host.exe（预期位置：" + exe + "）");
+            fail(I18N.get("framegen.p0136", exe + "）"));
             return false;
         }
         if (gamePid <= 0) {
-            fail("无效的游戏进程 ID：" + gamePid);
+            fail(I18N.get("framegen.p0137", gamePid));
             return false;
         }
 
@@ -181,13 +183,13 @@ public final class FrameGenHostManager {
             pb.redirectErrorStream(true);
             process = pb.start();
         } catch (IOException e) {
-            fail("启动 host 失败：" + e.getMessage());
+            fail(I18N.get("framegen.p0138", e.getMessage()));
             return false;
         }
 
         int port = readPortLine(process);
         if (port <= 0) {
-            fail("host 未报告端口，启动异常");
+            fail(I18N.get("framegen.t0051"));
             destroyProcess();
             return false;
         }
@@ -201,7 +203,7 @@ public final class FrameGenHostManager {
             reader = new BufferedReader(
                     new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8));
         } catch (IOException e) {
-            fail("连接 host 失败：" + e.getMessage());
+            fail(I18N.get("framegen.p0139", e.getMessage()));
             destroyProcess();
             return false;
         }
@@ -323,7 +325,7 @@ public final class FrameGenHostManager {
             if (latest.handshaked && !latest.closed) {
                 HostStatus s = copy(latest);
                 s.running = false;
-                s.lastError = "连接已断开";
+                s.lastError = I18N.get("framegen.t0052");
                 publish(s);
             }
         }

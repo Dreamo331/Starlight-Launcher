@@ -1,5 +1,7 @@
 package com.example.starlight.newui.ui;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.newui.LauncherContext;
 
@@ -127,12 +129,12 @@ public final class LaunchOverlay {
         iconContainer.getChildren().addAll(spinnerContainer, successCheck);
 
         // 标题（随状态切换：正在启动游戏 → 游戏已启动）
-        launchTitleLabel = new Label("正在启动游戏");
+        launchTitleLabel = new Label(I18N.get("ui.t0001"));
         launchTitleLabel.getStyleClass().add("modal-text-title");
         launchTitleLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: 700;");
 
         // 版本信息
-        launchVersionLabel = new Label("版本信息加载中...");
+        launchVersionLabel = new Label(I18N.get("ui.t0002"));
         launchVersionLabel.getStyleClass().add("modal-hint");
 
         // 进度条：HBox 容器背景作为轨道，子 Region 宽度由 prefWidth 控制
@@ -153,13 +155,13 @@ public final class LaunchOverlay {
         progressPane.getChildren().add(launchProgressBar);
 
         // 状态文字
-        launchStatusLabel = new Label("准备中...");
+        launchStatusLabel = new Label(I18N.get("ui.t0003"));
         launchStatusLabel.getStyleClass().add("modal-hint");
         launchStatusLabel.setMinHeight(20);
         launchStatusLabel.setAlignment(Pos.CENTER);
 
         // 取消按钮（与弹窗按钮风格一致）
-        cancelLaunchBtn = AppIcons.button("close", "取消启动");
+        cancelLaunchBtn = AppIcons.button("close", I18N.get("ui.t0004"));
         cancelLaunchBtn.getStyleClass().add("modal-btn-cancel");
         cancelLaunchBtn.setMinWidth(120);
         cancelLaunchBtn.setOnAction(e -> cancel());
@@ -310,12 +312,12 @@ public final class LaunchOverlay {
             progressBarAnim = null;
         }
         launchProgressBar.setPrefWidth(0);
-        launchStatusLabel.setText("准备中...");
+        launchStatusLabel.setText(I18N.get("ui.t0005"));
         spinnerContainer.setVisible(true);
         successCheck.setVisible(false);
         successCheck.setScaleX(0);
         successCheck.setScaleY(0);
-        launchTitleLabel.setText("正在启动游戏");
+        launchTitleLabel.setText(I18N.get("ui.t0006"));
         cancelLaunchBtn.setVisible(true);
         cancelLaunchBtn.setDisable(false);
 
@@ -370,7 +372,7 @@ public final class LaunchOverlay {
         UIGeneralControlClass.stopLaunchingInstance();
 
         isLaunching = false;
-        launchStatusLabel.setText("已取消");
+        launchStatusLabel.setText(I18N.get("ui.t0007"));
 
         Timeline cancelTimer = new Timeline(new KeyFrame(Duration.millis(400), e -> {
             hide();
@@ -427,9 +429,9 @@ public final class LaunchOverlay {
         st.setToY(1.0);
         st.setInterpolator(Interpolator.EASE_BOTH);
         st.play();
-        launchTitleLabel.setText("游戏已启动");
+        launchTitleLabel.setText(I18N.get("ui.t0008"));
         cancelLaunchBtn.setVisible(false);
-        launchStatusLabel.setText("游戏窗口已出现");
+        launchStatusLabel.setText(I18N.get("ui.t0009"));
     }
 
     /** 是否正在启动中（启动动画显示期间） */

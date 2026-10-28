@@ -1,14 +1,18 @@
 package com.example.starlight.newui.page;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.auth.AccountManager.Account;
 import com.example.starlight.config.GameDirManager;
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.launch.LaunchRecord;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.gui.UIGeneralControlClass.LaunchConfig;
 import com.example.starlight.launch.LaunchRecordStore;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
+import com.example.starlight.newui.ui.LaunchPillButton;
 import com.example.starlight.newui.ui.PageKit;
 import com.example.starlight.newui.ui.VersionIconKit;
 import com.example.starlight.util.AvatarGenerator;
@@ -60,8 +64,23 @@ public final class HomePage {
     private Label cpuLabel, memLabel, diskLabel;
     private Region cpuBar, memBar;
 
+    /** 首页当前的启动按钮（每次重建首页都会换新节点） */
+    private LaunchPillButton launchButton;
+    /** 启动状态监听的注销句柄（重建前必须先注销，避免旧按钮被继续驱动） */
+    private Runnable launchStateUnregister;
+
     public HomePage(LauncherContext host) {
         this.host = host;
+    }
+
+    /** 启动状态 → 启动按钮外观（只动按钮，弹窗与启动流程都由 LauncherView 负责） */
+    private void onLaunchStateChanged(LauncherContext.LaunchState state) {
+        if (launchButton == null) return;
+        switch (state) {
+            case STARTED -> launchButton.showLoading();
+            case SUCCEEDED -> launchButton.showSuccess();
+            case FAILED -> launchButton.resetIdle();
+        }
     }
 
     public Node build() {
@@ -98,13 +117,13 @@ public final class HomePage {
         AppIcons.apply(avatarFallback, "avatar", 24, null);
         avatarBox.getChildren().add(avatarFallback);
         avatarBox.setCursor(javafx.scene.Cursor.HAND);
-        avatarBox.setOnMouseClicked(e -> host.switchToSettings("sidebarGameAccount"));
+        avatarBox.setOnMouseClicked(e -> host.switchToSettings("sidebarAccount"));
         loadHomeAvatar(avatarBox, 52);
         VBox nameBox = new VBox(3);
         // 名字列可以被压窄（超长用户名允许省略），但整体不许把右侧按钮挤掉
         nameBox.setMinWidth(0);
         HBox.setHgrow(nameBox, Priority.ALWAYS);
-        Label welcome = new Label(activeFestival != null ? activeFestival.greeting : "欢迎回来");
+        Label welcome = new Label(activeFestival != null ? activeFestival.greeting : I18N.get("page.t0220"));
         welcome.getStyleClass().add("home-welcome");
         if (activeFestival != null) {
             welcome.getStyleClass().add("festival-welcome");
@@ -125,6 +144,12 @@ public final class HomePage {
             typeBadge.getStyleClass().add("home-account-badge");
             typeBadge.setMinWidth(Region.USE_PREF_SIZE);
             typeBadge.setMaxWidth(Region.USE_PREF_SIZE);
+            // 认证方式图标：微软用官方彩色 logo（PNG），离线 / 第三方用 SVG 图标（跟随徽标文字色）
+            AppIcons.apply(typeBadge, switch (homeAccount.type) {
+                case MICROSOFT -> "microsoft";
+                case OFFLINE -> "user";
+                case THIRD_PARTY -> "globe";
+            }, 12, null);
             // 名字下方左对齐显示
             HBox badgeRow = new HBox(typeBadge);
             badgeRow.setAlignment(Pos.CENTER_LEFT);
@@ -136,7 +161,7 @@ public final class HomePage {
         // 最近游玩（从 launcher.json 读取最近3条记录）
         VBox recentCard = new VBox(6);
         recentCard.getStyleClass().add("home-card-left-item");
-        Label recentTitle = new Label("最近游玩");
+        Label recentTitle = new Label(I18N.get("page.t0221"));
         recentTitle.getStyleClass().add("home-recent-title");
         recentCard.getChildren().add(recentTitle);
         // 记录行容器：不足3条时补透明占位行，卡片高度始终稳定为3条记录的样子
@@ -150,7 +175,7 @@ public final class HomePage {
             HBox emptyRow = new HBox();
             emptyRow.getStyleClass().add("home-recent-item");
             emptyRow.setAlignment(Pos.CENTER_LEFT);
-            Label empty = new Label("暂未启动过游戏");
+            Label empty = new Label(I18N.get("page.t0222"));
             empty.setStyle("-fx-text-fill: -sl-text-faint;");
             emptyRow.getChildren().add(empty);
             recentList.getChildren().add(emptyRow);
@@ -174,10 +199,10 @@ public final class HomePage {
                 removeBtn.setCursor(javafx.scene.Cursor.HAND);
                 LaunchRecord finalRec = rec;
                 removeBtn.setOnMouseClicked(e -> host.confirmDelete(
-                        "确定要移除最近游玩记录 \"" + finalRec.version + "\" 吗？", () -> {
+                        I18N.get("hp.r0001", finalRec.version), () -> {
                     LaunchRecordStore.removeIf(r -> r.version.equals(finalRec.version)
                             && java.util.Objects.equals(r.gameDir, finalRec.gameDir));
-                    host.ui().toast("已移除记录: " + finalRec.version);
+                    host.ui().toast(I18N.get("page.p0818", finalRec.version));
                     host.refreshHomePage();
                 }));
                 Label playBtn = new Label();
@@ -198,23 +223,34 @@ public final class HomePage {
         }
         recentCard.getChildren().add(recentList);
 
-        // 启动按钮
+        // 启动按钮：线框胶囊；开始启动后收成圆形加载环，成功后短暂显示对勾再展开
+        // （只改按钮自身外观；启动弹窗与启动流程都在 LauncherView，不受影响）
         VBox launchCard = new VBox();
         launchCard.getStyleClass().add("home-card-left-item");
-        Button launchBtn = activeFestival != null
-                ? AppIcons.button(activeFestival.icon, activeFestival.launchLabel())
-                : AppIcons.button("play", "启动游戏");
-        launchBtn.getStyleClass().add("home-launch-btn");
+        LaunchPillButton launchBtn = new LaunchPillButton(
+                activeFestival != null ? activeFestival.icon : "play",
+                activeFestival != null ? activeFestival.launchLabel() : I18N.get("page.t0223"));
         if (activeFestival != null) launchBtn.getStyleClass().add("festival-active");
-        launchBtn.setMaxWidth(Double.MAX_VALUE);
         launchBtn.setOnAction(e -> host.launchGame());
         if (activeFestival != null) {
             // 节日按钮配色：从节日定义取渐变 + 文字色（内联，避免为每个节日写 CSS）
+            // 常规态是线框胶囊；节日态填满渐变色，所以把线框边框设为透明
             launchBtn.setStyle("-fx-background-color: linear-gradient(to right, "
                     + activeFestival.gradientA + ", " + activeFestival.gradientB + ");"
-                    + " -fx-text-fill: " + activeFestival.buttonText + ";");
+                    + " -fx-text-fill: " + activeFestival.buttonText + ";"
+                    + " -fx-border-color: transparent;");
         }
-        launchCard.getChildren().add(launchBtn);
+        // 首页每次重建都会换一个新按钮：先注销旧监听，再把监听挂到本节点上
+        if (launchStateUnregister != null) {
+            launchStateUnregister.run();
+            launchStateUnregister = null;
+        }
+        launchButton = launchBtn;
+        launchStateUnregister = host.addLaunchStateListener(this::onLaunchStateChanged);
+        // 收成圆形时按钮仍居中：外层 StackPane 负责定位，宽度动画在按钮内部
+        StackPane launchWrap = new StackPane(launchBtn);
+        launchWrap.setAlignment(Pos.CENTER);
+        launchCard.getChildren().add(launchWrap);
         left.getChildren().add(userCard);
         left.getChildren().addAll(recentCard, launchCard);
 
@@ -223,41 +259,34 @@ public final class HomePage {
         right.setPadding(new Insets(0, 4, 0, 0));
         HBox.setHgrow(right, Priority.ALWAYS);
 
-        right.getChildren().add(createHomeCard("system-info", "系统信息", () -> {
-            HBox box = new HBox(12);
-            box.setAlignment(Pos.CENTER);
-            box.getChildren().add(buildSystemStats());
-            Button detailBtn = AppIcons.button("info", "详细信息");
-            detailBtn.getStyleClass().add("btn-primary");
-            detailBtn.setStyle("-fx-padding: 4 10; -fx-font-size: 11px;");
-            detailBtn.setOnAction(e -> host.switchToPage("memory"));
-            box.getChildren().add(detailBtn);
-            return box;
-        }));
+        // 「详细信息」放进标题栏：正文区只保留 CPU/内存/磁盘三项，才能整体居中
+        right.getChildren().add(createHomeCard("system-info", I18N.get("page.t0224"),
+                buildSystemDetailButton(), this::buildSystemStats));
 
         // 快速进入存档（高级设置「主页快速进入存档」开关控制）：位于系统信息卡片下方
         if ("true".equalsIgnoreCase(host.config().getOrDefault("HomeQuickLaunchSave", "false"))) {
-            right.getChildren().add(createHomeCard("gamepad", "快速进入存档", this::buildQuickSaveContent));
+            right.getChildren().add(createHomeCard("gamepad", I18N.get("page.t0225"), this::buildQuickSaveContent));
         }
 
-        right.getChildren().add(createHomeCard("version-select", "版本选择", () -> {
+        right.getChildren().add(createHomeCard("version-select", I18N.get("page.t0226"), () -> {
             HBox ver = new HBox(14);
             ver.setAlignment(Pos.CENTER_LEFT);
             ver.getStyleClass().add("home-ver-card");
             // 图标跟随当前版本：整合包用包图标，其余按加载器（原版用草方块）
-            String curVersion = host.config().getOrDefault("Version", "");
+            // 版本选择真源在当前游戏目录内的 starlight.json
+            String curVersion = SelectedVersion.of(host.config());
             Node versionIcon = curVersion.isBlank()
                     ? versionIconPlaceholder()
                     : VersionIconKit.icon(VersionIconKit.read(
                             GameDirManager.activePath(host.config()), curVersion), 32);
             VBox verInfo = new VBox(2);
             verInfo.getStyleClass().add("home-ver-info");
-            Label verTitle = new Label(host.config().getOrDefault("Version", "未选择"));
+            Label verTitle = new Label(curVersion.isBlank() ? I18N.get("page.t0227") : curVersion);
             verTitle.getStyleClass().add("home-ver-title");
-            Label verDesc = new Label("点击切换版本");
+            Label verDesc = new Label(I18N.get("page.t0228"));
             verDesc.getStyleClass().add("home-ver-desc");
             verInfo.getChildren().addAll(verTitle, verDesc);
-            Button switchBtn = AppIcons.button("refresh", "切换 ");
+            Button switchBtn = AppIcons.button("refresh", I18N.get("page.t0229"));
             switchBtn.getStyleClass().add("btn-primary");
             // 锁固有宽度：不写内联 min-width（会覆盖宽度锁导致「切…」）
             switchBtn.setStyle("-fx-padding: 4 12;");
@@ -269,25 +298,25 @@ public final class HomePage {
             return ver;
         }));
 
-        right.getChildren().add(createHomeCard("gear", "版本设置", () -> {
+        right.getChildren().add(createHomeCard("gear", I18N.get("page.t0230"), () -> {
             HBox setting = new HBox(14);
             setting.setAlignment(Pos.CENTER_LEFT);
             setting.getStyleClass().add("home-ver-card");
             VBox info = new VBox(2);
             info.getStyleClass().add("home-ver-info");
-            // 说明列可被压缩；长 JVM 参数换行显示，右侧按钮锁固有宽度不被挤成「…」
+            // 说明列可被压缩；JVM 参数可能很长，单行省略 + 悬停看全文（不再换行撑高卡片）
             info.setMinWidth(0);
             String maxMem = host.config().getOrDefault("MaxMemory", "4096");
-            Label title = new Label("内存与JVM参数");
+            Label title = new Label(I18N.get("page.t0231"));
             title.getStyleClass().add("home-ver-title");
             // JVM 参数显示真实配置值（首页每次访问实时重建，始终反映最新保存的配置）
             String jvmShow = host.config().getOrDefault("JvmArgs", "");
-            String jvmDesc = (jvmShow == null || jvmShow.trim().isEmpty()) ? "默认" : jvmShow;
-            Label desc = new Label("当前最大内存 " + maxMem + "MB | JVM: " + jvmDesc);
+            String jvmDesc = (jvmShow == null || jvmShow.trim().isEmpty()) ? I18N.get("page.t0232") : jvmShow;
+            Label desc = new Label(I18N.get("page.p0819", maxMem + "MB | JVM: " + jvmDesc));
             desc.getStyleClass().add("home-ver-desc");
-            desc.setWrapText(true);
+            PageKit.cardTooltip(desc);
             info.getChildren().addAll(title, desc);
-            Button setBtn = AppIcons.button("gear", "设置");
+            Button setBtn = AppIcons.button("gear", I18N.get("page.t0233"));
             setBtn.getStyleClass().add("btn-primary");
             setBtn.setMinWidth(Region.USE_PREF_SIZE);
             setBtn.setMaxWidth(Region.USE_PREF_SIZE);
@@ -297,7 +326,7 @@ public final class HomePage {
             return setting;
         }));
 
-        right.getChildren().add(createHomeCard("antenna", "网络连接", () -> {
+        right.getChildren().add(createHomeCard("antenna", I18N.get("page.t0234"), () -> {
             HBox net = new HBox();
             net.setAlignment(Pos.CENTER);
             net.setSpacing(40);
@@ -307,20 +336,20 @@ public final class HomePage {
             // 否则先占位「检测中...」并在后台补测一次（此前这里写死「空闲」，永远不刷新）
             NetworkStatusService.SourceResult cached = NetworkStatusService.isCacheFresh()
                     ? NetworkStatusService.currentSourceCached() : null;
-            statusLabel = createInfoLabel("当前: ", cached != null ? cached.describe() : "检测中...");
-            net.getChildren().addAll(createInfoLabel("下载源: ", source), statusLabel);
+            statusLabel = createInfoLabel(I18N.get("page.t0607"), cached != null ? cached.describe() : I18N.get("page.t0608"));
+            net.getChildren().addAll(createInfoLabel(I18N.get("page.t0235"), source), statusLabel);
             if (cached == null) {
                 NetworkStatusService.testCurrentSourceAsync().thenAccept(r -> javafx.application.Platform.runLater(() ->
-                        statusLabel.setText("当前: " + (r == null ? "未知" : r.describe()))));
+                        statusLabel.setText(I18N.get("page.p0820", (r == null ? I18N.get("page.t0609") : r.describe())))));
             }
             return net;
         }));
 
-        right.getChildren().add(createHomeCard("quick-tools", "快捷工具", () -> {
+        right.getChildren().add(createHomeCard("quick-tools", I18N.get("page.t0236"), () -> {
             HBox tools = new HBox(10);
             tools.setAlignment(Pos.CENTER);
             tools.getStyleClass().add("home-tools-grid");
-            String[][] toolData = {{"memory", "内存"}, {"globe", "网络"}, {"clapper", "截图"}, {"wrench", "设置"}, {"bolt", "帧生成"}, {"view", "色盲辅助"}};
+            String[][] toolData = {{"memory", I18N.get("page.t0237")}, {"globe", I18N.get("page.t0238")}, {"clapper", I18N.get("page.t0239")}, {"wrench", I18N.get("page.t0240")}, {"bolt", I18N.get("page.t0241")}, {"view", I18N.get("page.t0242")}};
             for (String[] t : toolData) {
                 VBox tool = new VBox(4);
                 tool.getStyleClass().add("home-tool-item");
@@ -333,8 +362,10 @@ public final class HomePage {
                 Label label = new Label(t[1]);
                 label.getStyleClass().add("home-tool-label");
                 tool.getChildren().addAll(iconLabel, label);
-                String toolName = t[1];
-                tool.setOnMouseClicked(e -> host.handleQuickTool(toolName));
+                // 调度用稳定 id（t[0] 的图标名），不用显示文案 t[1]：
+                // 界面语言切换后文案会变，用文案当派发键会让所有入口同时失效。
+                String toolId = t[0];
+                tool.setOnMouseClicked(e -> host.handleQuickTool(toolId));
                 tools.getChildren().add(tool);
             }
             return tools;
@@ -358,13 +389,13 @@ public final class HomePage {
         }
         VBox list = new VBox(6);
         if (saves.isEmpty()) {
-            Label empty = new Label("暂无存档");
+            Label empty = new Label(I18N.get("page.t0243"));
             empty.setStyle("-fx-text-fill: -sl-text-dim;");
             list.getChildren().add(empty);
             return list;
         }
         // 标注版本限制：仅当存档属于当前版本且支持 quickPlay（1.20.2+ 且非 Forge/NeoForge）时可直接进入
-        String curVer = host.config().getOrDefault("Version", "");
+        String curVer = SelectedVersion.of(host.config());
         boolean darkTheme = "dark".equals(host.currentTheme());
         for (UIGeneralControlClass.SaveInfo save : saves) {
             // 行结构对齐「最近游玩」卡片：名称在上、版本标注在下，右侧播放按钮
@@ -380,8 +411,8 @@ public final class HomePage {
                     && save.folderName != null && !save.folderName.isBlank()
                     && !save.folderName.contains(" ") && versionSupportsQuickPlay(save.version);
             Label ver = new Label(quick
-                    ? "版本 " + save.version + "（可直接进入）"
-                    : "版本 " + save.version + "（仅启动）");
+                    ? I18N.get("hp.r0002", save.version)
+                    : I18N.get("hp.r0003", save.version));
             ver.getStyleClass().add("home-recent-time");
             // 版本信息黑色提高对比度：浅色主题强制黑色，深色主题跟随 home-recent-time 主题色（白色系）
             if (!darkTheme) {
@@ -403,7 +434,7 @@ public final class HomePage {
     private void quickLaunchSave(UIGeneralControlClass.SaveInfo save) {
         LaunchConfig config = UIGeneralControlClass.getLaunchConfig();
         if (config.version == null || config.version.isEmpty()) {
-            host.ui().toast("请先选择游戏版本");
+            host.ui().toast(I18N.get("page.t0244"));
             host.switchToSettings("sidebarGameDir");
             return;
         }
@@ -488,14 +519,43 @@ public final class HomePage {
 
     /** 带图标的首页卡片：icon 为 {@link AppIcons} 中的图标名，null 表示不显示图标 */
     private VBox createHomeCard(String icon, String title, Supplier<Node> contentSupplier) {
+        return createHomeCard(icon, title, null, contentSupplier);
+    }
+
+    /**
+     * 带标题栏操作的首页卡片：titleAction 非空时与标题同一行、靠右显示（如「系统信息」的详细信息按钮），
+     * 正文区不再被按钮挤占，内容可以独立居中。
+     */
+    private VBox createHomeCard(String icon, String title, Node titleAction, Supplier<Node> contentSupplier) {
         VBox card = new VBox(8);
         card.getStyleClass().add("home-card");
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("home-card-title");
         if (icon != null) AppIcons.apply(titleLabel, icon, 15, null);
         Node content = contentSupplier.get();
-        card.getChildren().addAll(titleLabel, content);
+        if (titleAction == null) {
+            card.getChildren().addAll(titleLabel, content);
+            return card;
+        }
+        HBox header = new HBox(8, titleLabel);
+        header.getStyleClass().add("home-card-header");
+        header.setAlignment(Pos.CENTER_LEFT);
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        header.getChildren().addAll(spacer, titleAction);
+        card.getChildren().addAll(header, content);
         return card;
+    }
+
+    /** 系统信息卡片的「详细信息」按钮：位于标题栏右侧，跳转内存与性能页 */
+    private Button buildSystemDetailButton() {
+        Button detailBtn = AppIcons.button("info", I18N.get("page.t0245"));
+        detailBtn.getStyleClass().add("btn-primary");
+        detailBtn.setStyle("-fx-padding: 3 10; -fx-font-size: 11px;");
+        detailBtn.setMinWidth(Region.USE_PREF_SIZE);
+        detailBtn.setMinHeight(Region.USE_PREF_SIZE);
+        detailBtn.setOnAction(e -> host.switchToPage("memory"));
+        return detailBtn;
     }
 
     private VBox createStatItem(String label, Label valueLabel, Region barFill) {
@@ -506,7 +566,7 @@ public final class HomePage {
         Label lbl = new Label(label);
         lbl.getStyleClass().add("home-stat-label");
         valueLabel.getStyleClass().add("home-stat-value");
-        // 轨道：固定 80px 浅色底槽。HBox 布局不会拉伸子节点，填充段宽度随 prefWidth 动态伸缩
+        // 轨道：80px 浅色底槽（宽度由 CSS 锁死，避免被 VBox 拉伸后填充条只占一部分）
         HBox track = new HBox(barFill);
         track.getStyleClass().add("home-stat-bar");
         item.getChildren().addAll(lbl, valueLabel, track);
@@ -523,7 +583,7 @@ public final class HomePage {
 
     private String getCurrentUsername() {
         Account acc = AccountManager.getCurrentAccount();
-        return acc != null ? acc.name : "未登录";
+        return acc != null ? acc.name : I18N.get("page.t0246");
     }
 
     /**
@@ -572,8 +632,11 @@ public final class HomePage {
 
     public Node buildSystemStats() {
         HBox stats = new HBox(12);
-        stats.setAlignment(Pos.CENTER);
+        // 横向居中 + 顶部对齐：磁盘项没有进度条，居中会把它的文字压到 CPU/内存标签下方
+        stats.setAlignment(Pos.TOP_CENTER);
         stats.getStyleClass().add("home-stats-row");
+        // 撑满卡片宽度，让三项指标整体落在卡片中间（不平铺则只会贴着左侧）
+        stats.setMaxWidth(Double.MAX_VALUE);
         cpuLabel = new Label("0%");
         memLabel = new Label("0%");
         diskLabel = new Label("-- MB/s");
@@ -581,7 +644,7 @@ public final class HomePage {
         memBar = createStatFill();
         stats.getChildren().addAll(
                 createStatItem("CPU", cpuLabel, cpuBar),
-                createStatItem("内存", memLabel, memBar),
+                createStatItem(I18N.get("page.t0247"), memLabel, memBar),
                 createDiskItem()
         );
         return stats;
@@ -595,7 +658,7 @@ public final class HomePage {
         // CSS 应用时覆盖代码 setPrefWidth，导致「读 x / 写 y MB/s」被截断成「…」
         item.getStyleClass().add("home-stat-item");
         item.getStyleClass().add("home-stat-item-disk");
-        Label lbl = new Label("磁盘");
+        Label lbl = new Label(I18N.get("page.t0248"));
         lbl.getStyleClass().add("home-stat-label");
         diskLabel.getStyleClass().add("home-stat-value");
         diskLabel.setStyle("-fx-font-size: 12px;");
@@ -626,13 +689,13 @@ public final class HomePage {
             double read = SystemInfoMonitor.getDiskReadMBps();
             double write = SystemInfoMonitor.getDiskWriteMBps();
             Platform.runLater(() -> {
-                if (cpuLabel != null) cpuLabel.setText(cpu >= 0 ? String.format("%.1f%%", cpu) : "计算中...");
+                if (cpuLabel != null) cpuLabel.setText(cpu >= 0 ? String.format("%.1f%%", cpu) : I18N.get("page.t0249"));
                 if (cpuBar != null) updateStatBar(cpuBar, cpu >= 0 ? cpu : 0);
                 if (memLabel != null) memLabel.setText(mem >= 0 ? String.format("%.1f%%", mem) : "--%");
                 if (memBar != null) updateStatBar(memBar, mem >= 0 ? mem : 0);
                 if (diskLabel != null) {
                     diskLabel.setText(read >= 0 && write >= 0
-                            ? String.format("读 %.1f / 写 %.1f MB/s", read, write)
+                            ? String.format(I18N.get("page.t0250"), read, write)
                             : "-- MB/s");
                 }
             });
@@ -642,7 +705,11 @@ public final class HomePage {
     /** 更新进度条填充宽度与颜色（>85% 红、>60% 黄、其余绿） */
     private void updateStatBar(Region fill, double percent) {
         double pct = Math.max(0, Math.min(100, percent));
-        fill.setPrefWidth(pct / 100.0 * 80);
+        // 按轨道实际宽度换算：轨道被父容器拉伸时，固定 80px 的填充最多只能占到一部分
+        // （CSS 已锁定 80px；这里再兜底，避免以后改样式时进度条又填不满）
+        double trackWidth = fill.getParent() instanceof Region track && track.getWidth() > 0
+                ? track.getWidth() : 80;
+        fill.setPrefWidth(pct / 100.0 * trackWidth);
         fill.getStyleClass().removeAll("warn", "danger");
         if (pct > 85) fill.getStyleClass().add("danger");
         else if (pct > 60) fill.getStyleClass().add("warn");

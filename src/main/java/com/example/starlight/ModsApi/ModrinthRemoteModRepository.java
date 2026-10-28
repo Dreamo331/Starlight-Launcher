@@ -1,5 +1,7 @@
 package com.example.starlight.ModsApi;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.download.source.DownloadProvider;
 import com.example.starlight.newui.AppConfig;
 import com.google.gson.Gson;
@@ -578,7 +580,7 @@ public class ModrinthRemoteModRepository implements RemoteModRepository {
                 return com.example.starlight.util.HttpText.decode(response);
             } else {
                 System.err.println("[ModrinthRepo] HTTP " + response.statusCode()
-                        + (mirror ? " (镜像)" : "") + " for " + url);
+                        + (mirror ? I18N.get("modsapi.t0072") : "") + " for " + url);
                 return null;
             }
         } catch (IOException | InterruptedException e) {

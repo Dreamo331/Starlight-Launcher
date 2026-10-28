@@ -1,5 +1,7 @@
 package com.example.starlight.gui;
 
+
+import com.example.starlight.util.I18N;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -29,6 +31,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
@@ -44,13 +47,14 @@ import com.example.starlight.auth.offline.Skin;
 import com.example.starlight.config.AppDirs;
 import com.example.starlight.config.Endpoints;
 import com.example.starlight.config.GameDirManager;
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.crash.CrashReportParser;
 import com.example.starlight.download.task.AssetDownloader;
+import com.example.starlight.download.DownloadEngineRouter;
 import com.example.starlight.download.DownloadSettings;
 import com.example.starlight.download.task.GameResourceCompleter;
 import com.example.starlight.download.task.LibraryDownloader;
-import com.example.starlight.frp.FrpClient;
 import com.example.starlight.gamebat.MinecraftLauncherBuilder;
 import com.example.starlight.service.GameInstanceRegistry;
 import com.example.starlight.service.GameLauncherService;
@@ -204,16 +208,6 @@ public final class UIGeneralControlClass {
         public final String version;
         public SaveInfo(String worldName, String folderName, String path, String version) {
             this.worldName = worldName; this.folderName = folderName; this.path = path; this.version = version;
-        }
-    }
-
-    /** FRP 隧道状态 */
-    public static class FrpStatus {
-        public final String state;
-        public final int tunnelPort;
-        public final String publicAddress;
-        public FrpStatus(String state, int tunnelPort, String publicAddress) {
-            this.state = state; this.tunnelPort = tunnelPort; this.publicAddress = publicAddress;
         }
     }
 
@@ -415,7 +409,9 @@ public final class UIGeneralControlClass {
         // 版本独立配置：全局 ini + 当前版本覆盖（config.overrides.json）合并后再构造，
         // 账号等运行时字段不参与覆盖，由 applyCurrentAccount / 启动链路注入
         String gameDir = GameDirManager.activePath(ini);
-        String version = ini.getOrDefault("Version", "");
+        // 版本选择的真源是「当前游戏目录内的 starlight.json」，不是 ini 里的 Version
+        // （这条是启动主路径：切目录后必须启动该目录自己记录的版本）
+        String version = SelectedVersion.of(gameDir);
         return getLaunchConfigFor(gameDir, version);
     }
 
@@ -445,7 +441,8 @@ public final class UIGeneralControlClass {
             if (Files.exists(configPath)) oldLines = Files.readAllLines(configPath, StandardCharsets.UTF_8);
 
             String[] launcherKeys = {
-                "GameDir", "Version", "JavaPath", "AutoJava", "JavaPathHistory",
+                // 注意：没有 Version——版本选择存在各游戏目录内的 starlight.json（见 SelectedVersion）
+                "GameDir", "JavaPath", "AutoJava", "JavaPathHistory",
                 "MinMemory", "MaxMemory", "WindowWidth", "WindowHeight",
                 "Fullscreen", "VersionIsolation", "JvmArgs", "GameArgs", "GameLanguage",
                 "PreLaunchCommand", "PostExitCommand",
@@ -481,6 +478,9 @@ public final class UIGeneralControlClass {
                     int eq = line.indexOf('=');
                     if (eq > 0) {
                         String key = line.substring(0, eq).trim();
+                        // 旧版遗留的 Version 行一律丢弃：版本选择真源是游戏目录内的 starlight.json。
+                        // 必须显式丢行——下面 getOrDefault 分支会把缺失键写成字面量 "null"。
+                        if ("Version".equals(key)) continue;
                         seenLauncherKeys.add(key);
                         newLines.add(key + "=" + config.getOrDefault(key, config.get(key)));
                     } else {
@@ -505,9 +505,9 @@ public final class UIGeneralControlClass {
 
             Files.write(configPath, newLines, StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            return ActionResult.ok("配置已保存到: " + configPath.toAbsolutePath());
+            return ActionResult.ok(I18N.get("gui.p0065", configPath.toAbsolutePath()));
         } catch (IOException e) {
-            return ActionResult.fail("保存配置失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0066", e.getMessage()));
         }
     }
 
@@ -521,7 +521,7 @@ public final class UIGeneralControlClass {
     /** 1.6 检查配置是否完备（是否可以快速启动） */
     public static boolean isConfigReady() {
         Map<String, String> cfg = readConfig();
-        return !cfg.getOrDefault("Version", "").isEmpty();
+        return !SelectedVersion.of(cfg).isEmpty();
     }
 
 
@@ -694,17 +694,17 @@ public final class UIGeneralControlClass {
                 boolean autoJavaOn = VersionConfigManager.effectiveAutoJava(
                         readConfig(), config.gameDir, config.version);
                 if (autoJavaOn) {
-                    onProgress.onProgress(5, "正在自动选择 Java...");
+                    onProgress.onProgress(5, I18N.get("gui.t0001"));
                     String autoJava = autoSelectJavaPath(config.version, config.gameDir);
                     if (autoJava != null) {
                         config.javaPath = autoJava;
                         LOG.info("AutoJava selected: {}", autoJava);
-                        LaunchLog.info("选择的 Java：" + autoJava);
-                        onProgress.onProgress(6, "已自动选择 Java: " + autoJava);
+                        LaunchLog.info(I18N.get("gui.p0067", autoJava));
+                        onProgress.onProgress(6, I18N.get("gui.p0068", autoJava));
                     } else {
                         LOG.warn("AutoJava found no suitable Java, falling back to: {}", config.javaPath);
-                        LaunchLog.warn("未找到合适的 Java，使用当前配置");
-                        onProgress.onProgress(6, "未找到合适的 Java，使用当前配置");
+                        LaunchLog.warn(I18N.get("gui.t0002"));
+                        onProgress.onProgress(6, I18N.get("gui.t0003"));
                     }
                 }
 
@@ -712,12 +712,12 @@ public final class UIGeneralControlClass {
                 // 读不到上面 AutoJava 的覆盖结果，不记下来就会显示成配置里那条陈旧路径
                 recordLaunchJavaPath(config.version, config.javaPath);
 
-                onProgress.onProgress(7, "正在读取版本信息...");
-                LaunchLog.info("正在读取版本信息...");
+                onProgress.onProgress(7, I18N.get("gui.t0004"));
+                LaunchLog.info(I18N.get("gui.t0005"));
                 LaunchInfo info = buildLaunchInfo(config);
                 Path jsonPath = info.resolveVersionDir().resolve(config.version + ".json");
                 if (!Files.exists(jsonPath)) {
-                    onResult.onError("版本 JSON 文件不存在: " + jsonPath);
+                    onResult.onError(I18N.get("gui.p0069", jsonPath));
                     return;
                 }
                 String jsonString = Files.readString(jsonPath);
@@ -746,33 +746,34 @@ public final class UIGeneralControlClass {
                 if (!injectedArgs.isEmpty()) {
                     LOG.info("Injected legacy game args: {}", injectedArgs);
                 }
-                onProgress.onProgress(20, "检测到加载器: " + loader);
-                LaunchLog.info("检测到加载器：" + loader);
-                if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
+                onProgress.onProgress(20, I18N.get("gui.p0070", loader));
+                LaunchLog.info(I18N.get("gui.p0071", loader));
+                if (launchCancelled.get()) { onResult.onError(I18N.get("gui.t0006")); return; }
 
                 // 资源准备（并行加速开启时：原生库检查与资源补全同时进行，缩短启动时间） //
                 // 关闭时保持原串行流程：先补全资源（资产+库），再检查原生库
-                onProgress.onProgress(25, "正在准备游戏资源...");
-                LaunchLog.info("正在准备游戏资源...");
+                onProgress.onProgress(25, I18N.get("gui.t0007"));
+                LaunchLog.info(I18N.get("gui.t0008"));
                 if (ParallelLaunchManager.isEnabled()) {
                     boolean prepOk = ParallelLaunchManager.prepare(config.gameDir, config.version, jsonString,
                             (pct, msg) -> onProgress.onProgress(Math.min(25 + (int) (pct * 0.35), 60), msg),
                             launchCancelled);
                     if (!prepOk) {
-                        if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
-                        onResult.onError("原生库准备失败，请检查网络连接或重新安装该版本");
+                        if (launchCancelled.get()) { onResult.onError(I18N.get("gui.t0009")); return; }
+                        onResult.onError(I18N.get("gui.t0010"));
                         return;
                     }
                 } else {
-                    onProgress.onProgress(25, "正在补全资源文件（资产+库）...");
+                    onProgress.onProgress(25, I18N.get("gui.t0011"));
                     GameResourceCompleter.ProgressCallback resourceProgress = (pct, msg) -> {
                         int mapped = 25 + (int) (pct * 0.25);
                         onProgress.onProgress(Math.min(mapped, 50), msg);
                     };
-                    GameResourceCompleter.completeAll(config.gameDir, config.version, resourceProgress,
+                    // 2026-10-21：经分流器调用，设置里选 PCL 引擎时走新引擎
+                    DownloadEngineRouter.completeAll(config.gameDir, config.version, resourceProgress,
                             launchCancelled);
                 }
-                if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
+                if (launchCancelled.get()) { onResult.onError(I18N.get("gui.t0012")); return; }
 
                 BaseLauncher launcher;
                 switch (loader) {
@@ -780,8 +781,13 @@ public final class UIGeneralControlClass {
                     case LoaderDetector.FABRIC, LoaderDetector.QUILT -> launcher = new FabricLauncher(info);
                     case LoaderDetector.FORGE_LEGACY  -> launcher = new ForgeLegacyLauncher(info);
                     case LoaderDetector.FORGE_MODERN, LoaderDetector.NEOFORGE -> launcher = new ForgeModernLauncher(info);
-                    default -> { onResult.onError("未知加载器类型: " + loader); return; }
+                    default -> { onResult.onError(I18N.get("gui.p0072", loader)); return; }
                 }
+
+                // 取消判定器：把「取消启动」标志位交给基类，由它负责两件事 ——
+                // ① 进程在「检查点已过、还没起来」的窗口期起来时立即补杀；
+                // ② 退出日志与归因不再把强制结束误报成「游戏异常退出 (代码: 1)」
+                launcher.setCancelChecker(launchCancelled::get);
 
                 // 方案一：在 initLogging() 之前采集已有日志文件 //
                 // 确保 initLogging() 创建的新日志文件不会被过滤掉
@@ -801,28 +807,28 @@ public final class UIGeneralControlClass {
                     existingLogs = java.util.Collections.emptySet();
                 }
 
-                onProgress.onProgress(50, "正在初始化路径...");
-                LaunchLog.info("正在初始化路径...");
+                onProgress.onProgress(50, I18N.get("gui.t0013"));
+                LaunchLog.info(I18N.get("gui.t0014"));
                 launcher.initPaths();
                 launcher.initLogging(Paths.get(LOG_DIR));
                 launcher.setVersionJson(versionJson);
 
-                onProgress.onProgress(60, "正在处理原生库文件...");
-                LaunchLog.info("正在解压 Natives 文件");
+                onProgress.onProgress(60, I18N.get("gui.t0015"));
+                LaunchLog.info(I18N.get("gui.t0016"));
                 boolean nativesOk = NativesManager.checkAndCompleteNatives(config.gameDir, config.version, jsonString, false);
                 if (!nativesOk) {
-                    onResult.onError("原生库准备失败，请检查网络连接或重新安装该版本");
+                    onResult.onError(I18N.get("gui.t0017"));
                     return;
                 }
                 boolean processOk = launcher.processNatives();
                 if (!processOk) {
-                    onResult.onError("原生库处理失败，无法启动游戏");
+                    onResult.onError(I18N.get("gui.t0018"));
                     return;
                 }
-                if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
+                if (launchCancelled.get()) { onResult.onError(I18N.get("gui.t0019")); return; }
 
                 // 应用游戏内设置（语言 / 全屏 → options.txt；取该版本合并后的有效值） //
-                LaunchLog.info("正在应用版本设置（语言 / 全屏）...");
+                LaunchLog.info(I18N.get("gui.t0020"));
                 Map<String, String> launchEffective = VersionConfigManager.buildEffectiveIni(
                         readConfig(), config.gameDir, config.version);
                 String langCode = launchEffective.getOrDefault("GameLanguage", "");
@@ -839,8 +845,8 @@ public final class UIGeneralControlClass {
                 // 离线皮肤资源包（PCL2 风格：自定义皮肤以资源包覆盖默认贴图，
                 // 无需本地皮肤服务器 / authlib-injector）
                 if (currentAccount != null && currentAccount.type == AccountManager.AccountType.OFFLINE) {
-                    onProgress.onProgress(75, "正在应用离线皮肤...");
-                    LaunchLog.info("正在应用离线皮肤...");
+                    onProgress.onProgress(75, I18N.get("gui.t0021"));
+                    LaunchLog.info(I18N.get("gui.t0022"));
                     try {
                         Skin skin = currentAccount.getSkin();
                         VanillaVersion vanilla = VanillaVersion.resolve(
@@ -849,7 +855,7 @@ public final class UIGeneralControlClass {
                                 config.gameDir, config.version, config.versionIsolation, vanilla);
                     } catch (Exception e) {
                         LOG.warn("Failed to apply offline skin resource pack: {}", e.getMessage());
-                        LaunchLog.warn("离线皮肤资源包应用失败：" + e.getMessage());
+                        LaunchLog.warn(I18N.get("gui.p0073", e.getMessage()));
                     }
                     // 披风：本地 Yggdrasil 档案服务器 + authlib-injector（仅当配置了披风；
                     // 无披风保持纯 PCL2 机制）。原版/纯 OptiFine 客户端只从会话档案读披风。
@@ -882,7 +888,8 @@ public final class UIGeneralControlClass {
                             // buildLaunchInfo 已把 jvmArgs 快照进 info（披风服务器启动之前），
                             // 注入参数必须同步回 info，否则 Forge Legacy / Vanilla 启动器读到的是
                             // 不含 -javaagent 的旧列表（日志显示有、实际进程没有）
-                            info.setJvmArgs(java.util.Arrays.asList(config.jvmArgs.split("\\s+")));
+                            info.setJvmArgs(com.example.starlight.startmc.LaunchInfo
+                                    .splitCommandLine(config.jvmArgs));
                             // 1.17+ 本地玩家皮肤/披风直注入：SkinManager 对本地玩家直接取
                             // Session profile 属性（--profileProperties），不走会话档案查询
                             java.util.List<String> pp = OfflineSkinManager.profilePropertiesArgs(
@@ -892,52 +899,52 @@ public final class UIGeneralControlClass {
                                 if (info.getGameArgs() != null) ga.addAll(info.getGameArgs());
                                 ga.addAll(pp);
                                 info.setGameArgs(ga);
-                                LaunchLog.info("已注入 --profileProperties（本地玩家皮肤/披风直传）");
+                                LaunchLog.info(I18N.get("gui.t0023"));
                             }
-                            LaunchLog.info("已启用本地披风服务器：" + capeServer.getApiBase());
+                            LaunchLog.info(I18N.get("gui.p0074", capeServer.getApiBase()));
                         }
                     } catch (Exception e) {
                         LOG.warn("Failed to start local cape server: {}", e.getMessage());
-                        LaunchLog.warn("披风服务器启动失败：" + e.getMessage());
+                        LaunchLog.warn(I18N.get("gui.p0075", e.getMessage()));
                     }
                 }
 
-                onProgress.onProgress(80, "正在启动 Minecraft " + config.version + " ...");
+                onProgress.onProgress(80, I18N.get("gui.p0076", config.version + " ..."));
                 long startTime = System.currentTimeMillis();
                 // 崩溃报告新鲜度过滤用「本次启动开始时间」；这里回填到快照里
                 markLaunchSnapshotStartTime(startTime);
 
                 // 启动参数区块（PCL 标准：参数获取开始 / 分隔线 / 每行一个参数） //
-                LaunchLog.info("=================== 启动参数开始 ===================");
+                LaunchLog.info(I18N.get("gui.t0024"));
                 if (versionJson != null && versionJson.has("mainClass")) {
                     LaunchLog.info(versionJson.get("mainClass").getAsString());
                 }
                 LaunchLog.info("Java：" + config.javaPath);
-                LaunchLog.info("最小内存：" + config.minMemory + " MB");
-                LaunchLog.info("最大内存：" + config.maxMemory + " MB");
-                LaunchLog.info("游戏版本：" + config.version);
-                LaunchLog.info("游戏目录：" + config.gameDir);
-                LaunchLog.info("版本隔离：" + (config.versionIsolation ? "是" : "否"));
+                LaunchLog.info(I18N.get("gui.p0077", config.minMemory + " MB"));
+                LaunchLog.info(I18N.get("gui.p0078", config.maxMemory + " MB"));
+                LaunchLog.info(I18N.get("gui.p0079", config.version));
+                LaunchLog.info(I18N.get("gui.p0080", config.gameDir));
+                LaunchLog.info(I18N.get("gui.p0081", (config.versionIsolation ? I18N.get("gui.t0061") : I18N.get("gui.t0062"))));
                 if (config.windowWidth > 0 && config.windowHeight > 0) {
-                    LaunchLog.info("窗口大小：" + config.windowWidth + " x " + config.windowHeight);
+                    LaunchLog.info(I18N.get("gui.p0082", config.windowWidth + " x " + config.windowHeight));
                 }
                 // 进程微调（高级设置）：只有真的设置了才占日志行，默认值不打扰
                 if (config.windowTitle != null && !config.windowTitle.isBlank()) {
-                    LaunchLog.info("窗口标题：" + config.windowTitle);
+                    LaunchLog.info(I18N.get("gui.p0083", config.windowTitle));
                 }
                 if (config.processPriority != null && !"normal".equalsIgnoreCase(config.processPriority)) {
-                    LaunchLog.info("进程优先级：" + com.example.starlight.util.GameProcessTweaks
-                            .priorityLabel(config.processPriority));
+                    LaunchLog.info(I18N.get("gui.p0084", com.example.starlight.util.GameProcessTweaks
+                            .priorityLabel(config.processPriority)));
                 }
                 if (config.jvmArgs != null && !config.jvmArgs.isEmpty()) {
-                    LaunchLog.info("JVM 参数：" + config.jvmArgs);
+                    LaunchLog.info(I18N.get("gui.p0085", config.jvmArgs));
                 }
                 if (config.gameArgs != null && !config.gameArgs.isEmpty()) {
-                    LaunchLog.info("游戏参数：" + config.gameArgs);
+                    LaunchLog.info(I18N.get("gui.p0086", config.gameArgs));
                 }
-                LaunchLog.info("=================== 启动参数结束 ===================");
+                LaunchLog.info(I18N.get("gui.t0025"));
 
-                if (launchCancelled.get()) { onResult.onError("启动已取消"); return; }
+                if (launchCancelled.get()) { onResult.onError(I18N.get("gui.t0026")); return; }
 
                 // 注册进程回调：登记到实例表（「关闭游戏进程」弹窗据此列出所有实例）
                 launcher.setOnProcessStarted(process -> {
@@ -945,7 +952,7 @@ public final class UIGeneralControlClass {
                     gamePidRef[0] = process.pid();
                     GameInstanceRegistry.register(new GameInstanceRegistry.Instance(
                             process.pid(), config.version, config.gameDir, config.userName, loader, startTime));
-                    LaunchLog.info("已启动游戏进程：" + config.javaPath + "（PID " + process.pid() + "）");
+                    LaunchLog.info(I18N.get("gui.p0087", config.javaPath + "（PID " + process.pid() + "）"));
                 });
 
                 // 游戏窗口检测线程（在 launcher.launch() 之前启动） //
@@ -972,12 +979,22 @@ public final class UIGeneralControlClass {
                     final java.util.concurrent.atomic.AtomicInteger lastContentLen = new java.util.concurrent.atomic.AtomicInteger(0);
 
                     ASYNC_POOL.submit(() -> {
+                        // 唯一上报入口：取消后一律不再上报「游戏已启动」。
+                        // 否则取消启动会在 25~60 秒后补一次该回调，导致首页按钮补一个对勾、
+                        // 写一条假的「最近游玩」、误拉起色盲辅助，甚至按可见性策略隐藏/关闭启动器。
+                        // 声明在 try 之外：超时/异常兜底那一次也要走同一个入口。
+                        final Runnable signalGameStarted = () -> {
+                            if (launchCancelled.get()) return;
+                            onGameStarted.run();
+                        };
                         try {
                             try { Thread.sleep(1500); } catch (InterruptedException e) {
                                 Thread.currentThread().interrupt(); return;
                             }
 
                             while (System.currentTimeMillis() < deadline) {
+                                // 用户已取消：检测线程没必再等（原来会一直轮询到 25~60 秒超时才退出）
+                                if (launchCancelled.get()) return;
                                 // Phase 1: 等待新 Java 进程出现
                                 if (!processFound.get()) {
                                     boolean found = ProcessHandle.allProcesses().anyMatch(p -> {
@@ -1032,7 +1049,7 @@ public final class UIGeneralControlClass {
                                                         : newContent.contains("Starting up SoundSystem") ? "SoundSystem started"
                                                         : "Textures loaded";
                                                 System.out.println("[UIGeneralControlClass] Game ready signal detected (" + reason + "), closing splash");
-                                                onGameStarted.run();
+                                                signalGameStarted.run();
                                                 return;
                                             }
                                         }
@@ -1042,14 +1059,14 @@ public final class UIGeneralControlClass {
                                 // 后备方案 A：进程检测成功后 25 秒强制关闭
                                 if (processFound.get() && System.currentTimeMillis() > processFoundTime.get() + 25_000) {
                                     System.out.println("[UIGeneralControlClass] Game process started 25s ago, force-closing splash");
-                                    onGameStarted.run();
+                                    signalGameStarted.run();
                                     return;
                                 }
 
                                 // 后备方案 B：日志文件已找到但无就绪信号
                                 if (logFile != null && System.currentTimeMillis() > deadline - 20_000) {
                                     System.out.println("[UIGeneralControlClass] No ready signal in log, force-closing splash before timeout");
-                                    onGameStarted.run();
+                                    signalGameStarted.run();
                                     return;
                                 }
 
@@ -1061,7 +1078,8 @@ public final class UIGeneralControlClass {
                         } catch (Exception e) {
                             System.err.println("[UIGeneralControlClass] Game window detection thread error: " + e.getMessage());
                         }
-                        onGameStarted.run();
+                        // 超时 / 异常兜底：同样走唯一上报入口，取消后不再补报「游戏已启动」
+                        signalGameStarted.run();
                     });
                 }
 
@@ -1072,23 +1090,24 @@ public final class UIGeneralControlClass {
                 LocalCapeProxy capeProxyDone = capeProxyRef.getAndSet(null);
                 if (capeProxyDone != null) capeProxyDone.stop();
                 long elapsed = (System.currentTimeMillis() - startTime) / 1000;
-                onProgress.onProgress(100, "游戏已退出，运行时长: " + elapsed + "秒");
+                onProgress.onProgress(100, I18N.get("uigc.r0001", elapsed));
 
                 // 启动结束日志（PCL 标准：~ 基础参数 ~ / ~ 登录参数 ~ / 开始启动结束处理） //
-                LaunchLog.info("~ 基础参数 ~");
-                LaunchLog.info("游戏版本：" + config.version);
-                LaunchLog.info("分配的内存：" + config.maxMemory + " MB");
-                LaunchLog.info("MC 文件夹：" + config.gameDir);
-                LaunchLog.info("版本隔离：" + (config.versionIsolation ? "是" : "否"));
-                LaunchLog.info("Java 信息：" + config.javaPath);
+                LaunchLog.info(I18N.get("gui.t0027"));
+                LaunchLog.info(I18N.get("gui.p0088", config.version));
+                LaunchLog.info(I18N.get("gui.p0089", config.maxMemory + " MB"));
+                LaunchLog.info(I18N.get("gui.p0090", config.gameDir));
+                LaunchLog.info(I18N.get("gui.p0091", (config.versionIsolation ? I18N.get("gui.t0063") : I18N.get("gui.t0064"))));
+                LaunchLog.info(I18N.get("gui.p0092", config.javaPath));
                 LaunchLog.info("");
-                LaunchLog.info("~ 登录参数 ~");
-                LaunchLog.info("玩家用户名：" + (config.userName == null ? "" : config.userName));
+                LaunchLog.info(I18N.get("gui.t0028"));
+                LaunchLog.info(I18N.get("gui.p0093", (config.userName == null ? "" : config.userName)));
                 LaunchLog.info("AccessToken：" + LaunchLog.mask(config.accessToken));
                 LaunchLog.info("UUID：" + LaunchLog.mask(config.uuid));
+                // i18n-lock: 不要翻译此行中文——解析启动日志输出，翻译即功能失效
                 LaunchLog.info("登录方式：" + ("msa".equalsIgnoreCase(config.userType) ? "正版" : "离线"));
                 LaunchLog.info("");
-                LaunchLog.info("开始启动结束处理");
+                LaunchLog.info(I18N.get("gui.t0029"));
                 LaunchLog.info("游戏已退出，运行时长：" + elapsed + "秒");
 
                 // 读「是否被用户主动关闭」要在注销之前：注销后实例对象就查不到了。
@@ -1102,11 +1121,14 @@ public final class UIGeneralControlClass {
                 unregisterGameInstance(gamePid);
 
                 // 查找错误日志（传入启动开始时间，排除启动前遗留的旧日志）
+                // 取消启动不算崩溃：不查错误日志，否则会把无关的旧 error log 挂到这次结果上
+                //（崩溃诊断面板虽已被抑制，但结果对象里的脏数据会留着误导后续诊断）
+                boolean cancelledByUser = stoppedByUser || launcher.isCancelledByUser();
                 String errorLog = null;
-                if (exitCode != 0) {
+                if (exitCode != 0 && !cancelledByUser) {
                     errorLog = findLatestErrorLog(config.gameDir, startTime);
                 }
-                onResult.onSuccess(new LaunchResult(exitCode, elapsed, errorLog, startTime, stoppedByUser));
+                onResult.onSuccess(new LaunchResult(exitCode, elapsed, errorLog, startTime, cancelledByUser));
 
             } catch (JsonSyntaxException | IOException | InterruptedException e) {
                 LocalYggdrasilServer capeServerErr = capeServerRef.getAndSet(null);
@@ -1114,8 +1136,8 @@ public final class UIGeneralControlClass {
                 LocalCapeProxy capeProxyErr = capeProxyRef.getAndSet(null);
                 if (capeProxyErr != null) capeProxyErr.stop();
                 unregisterGameInstance(gamePidRef[0]);
-                LaunchLog.error("错误：" + e.getMessage());
-                onResult.onError("启动失败: " + e.getMessage());
+                LaunchLog.error(I18N.get("gui.p0094", e.getMessage()));
+                onResult.onError(I18N.get("gui.p0095", e.getMessage()));
             }
         });
     }
@@ -1136,17 +1158,17 @@ public final class UIGeneralControlClass {
             try (PrintWriter writer = new PrintWriter(batchPath, "UTF-8")) {
                 writer.println("chcp 65001>nul");
                 writer.println("@echo off");
-                writer.println("title 启动 - " + config.version);
-                writer.println("echo 游戏正在启动，请稍候。");
+                writer.println(I18N.get("gui.p0096", config.version));
+                writer.println(I18N.get("gui.t0030"));
                 writer.println("cd /D \"" + config.gameDir + "\"");
                 writer.println();
                 writer.println(cmd);
                 writer.println();
                 writer.println("pause");
             }
-            return ActionResult.ok("启动脚本已生成", new File(batchPath).getAbsolutePath());
+            return ActionResult.ok(I18N.get("gui.t0031"), new File(batchPath).getAbsolutePath());
         } catch (Exception e) {
-            return ActionResult.fail("生成启动脚本失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0097", e.getMessage()));
         }
     }
 
@@ -1167,7 +1189,7 @@ public final class UIGeneralControlClass {
     public static void stopLaunchingInstance() {
         // 进程还没起来时会走启动流程里的取消检查点（launchCancelled）
         launchCancelled.set(true);
-        LaunchLog.info("已取消启动");
+        LaunchLog.info(I18N.get("gui.t0032"));
         long pid = launchingPid;
         if (pid > 0) {
             // 先标记「用户主动结束」，否则非 0 退出码会被当成崩溃
@@ -1207,10 +1229,10 @@ public final class UIGeneralControlClass {
                 if (result != null) {
                     callback.onSuccess(result);
                 } else {
-                    callback.onError("登录似乎已完成，但无法读取保存的登录信息");
+                    callback.onError(I18N.get("gui.t0033"));
                 }
             } catch (Exception e) {
-                callback.onError("微软登录失败: " + e.getMessage());
+                callback.onError(I18N.get("gui.p0098", e.getMessage()));
             }
         });
     }
@@ -1237,7 +1259,7 @@ public final class UIGeneralControlClass {
                         : new MicrosoftAuthResult("", "", "", ""));
                 }
             } catch (Exception e) {
-                callback.onError("令牌刷新失败: " + e.getMessage());
+                callback.onError(I18N.get("gui.p0099", e.getMessage()));
             }
         });
     }
@@ -1449,6 +1471,7 @@ public final class UIGeneralControlClass {
                                 }
                             }
                         }
+                        // i18n-lock: 不要翻译此行中文——解析启动日志输出，翻译即功能失效
                         if (chunk.contains("ERROR") || chunk.contains("失败") || chunk.contains("完成")) {
                             onProgress.onProgress(lastPercent < 0 ? 50 : lastPercent, chunk.trim());
                         }
@@ -1463,11 +1486,11 @@ public final class UIGeneralControlClass {
                 JavaInstall.main(args.toArray(String[]::new));
 
                 captured.flush();
-                onProgress.onProgress(100, "安装完成");
-                onResult.onSuccess("JDK " + version + " 安装完成");
+                onProgress.onProgress(100, I18N.get("gui.t0034"));
+                onResult.onSuccess(I18N.get("uigc.r0002", version));
 
             } catch (Exception e) {
-                onResult.onError("安装失败: " + e.getMessage());
+                onResult.onError(I18N.get("gui.p0100", e.getMessage()));
             } finally {
                 // 恢复默认输出，避免影响后续调用
                 JavaInstall.setOutput(System.out);
@@ -1530,7 +1553,7 @@ public final class UIGeneralControlClass {
     public static List<SaveInfo> listSaves() {
         Map<String, String> cfg = readConfig();
         String gameDir = cfg.getOrDefault("GameDir", ".minecraft");
-        String version = cfg.getOrDefault("Version", "");
+        String version = SelectedVersion.of(gameDir);
         if (version.isEmpty()) return Collections.emptyList();
         return listSaves(gameDir, version);
     }
@@ -1544,7 +1567,7 @@ public final class UIGeneralControlClass {
     public static List<SaveInfo> listRecentSaves(int limit) {
         Map<String, String> cfg = readConfig();
         String gameDir = cfg.getOrDefault("GameDir", ".minecraft");
-        String version = cfg.getOrDefault("Version", "");
+        String version = SelectedVersion.of(gameDir);
         boolean versionIsolation = "true".equalsIgnoreCase(cfg.getOrDefault("VersionIsolation", "false"));
 
         List<File> roots = new ArrayList<>();
@@ -1577,67 +1600,6 @@ public final class UIGeneralControlClass {
         return saves;
     }
 
-    // Ⅵ.  FRP 隧道管理 //
-    private static FrpClient frpClientInstance = null;
-
-    /**
-     * 6.1 启动 FRP 隧道（异步）
-     * @param localAddress  本地 MC 地址，如 "127.0.0.1:25565"
-     */
-    public static void startFrpAsync(String localAddress, ResultCallback<FrpStatus> callback) {
-        if (frpClientInstance != null) {
-            callback.onError("FRP 隧道已在运行中");
-            return;
-        }
-        ASYNC_POOL.submit(() -> {
-            try {
-                FrpClient client = new FrpClient(localAddress);
-                frpClientInstance = client;
-
-                final boolean[] connected = {false};
-                client.setCallback(new FrpClient.ConnectionCallback() {
-                    @Override public void onStateChange(FrpClient.State state) {}
-                    @Override public void onError(String error) {
-                        if (!connected[0]) {
-                            frpClientInstance = null;
-                            callback.onError("FRP 连接失败: " + error);
-                        }
-                    }
-                    @Override public void onConnected(int tunnelPort) {
-                        connected[0] = true;
-                        callback.onSuccess(new FrpStatus("已连接", tunnelPort,
-                            Endpoints.frpControlHost() + ":" + tunnelPort));
-                    }
-                    @Override public void onDisconnected() {
-                        frpClientInstance = null;
-                        if (connected[0]) {
-                            callback.onError("FRP 隧道已断开");
-                        }
-                    }
-                });
-                client.connect();
-
-            } catch (Exception e) {
-                frpClientInstance = null;
-                callback.onError("FRP 启动失败: " + e.getMessage());
-            }
-        });
-    }
-
-    /** 6.2 断开 FRP 隧道 */
-    public static void stopFrp() {
-        if (frpClientInstance != null) {
-            frpClientInstance.disconnect();
-            frpClientInstance = null;
-        }
-    }
-
-    /** 6.3 检查 FRP 是否正在运行 */
-    public static boolean isFrpRunning() {
-        return frpClientInstance != null;
-    }
-
-
     // Ⅶ.  日志管理（上传 + 二维码） //
 
     /** 7.1 上传日志并生成二维码 */
@@ -1652,10 +1614,10 @@ public final class UIGeneralControlClass {
             File outputFile = new File(fileName);
             ImageIO.write(qrImage, "png", outputFile);
 
-            return ActionResult.ok("上传成功",
+            return ActionResult.ok(I18N.get("gui.t0035"),
                 new LogUploadResult(resultUrl, qrImage, outputFile.getAbsolutePath()));
         } catch (WriterException | IOException e) {
-            return ActionResult.fail("上传失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0101", e.getMessage()));
         }
     }
 
@@ -1664,9 +1626,9 @@ public final class UIGeneralControlClass {
         try {
             if (serverUrl == null || serverUrl.isEmpty()) serverUrl = DEFAULT_SERVER_URL;
             String resultUrl = sendlogs.uploadLogFile(logFilePath, serverUrl);
-            return ActionResult.ok("上传成功", resultUrl);
+            return ActionResult.ok(I18N.get("gui.t0036"), resultUrl);
         } catch (IOException e) {
-            return ActionResult.fail("上传失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0102", e.getMessage()));
         }
     }
 
@@ -1756,14 +1718,14 @@ public final class UIGeneralControlClass {
                                           ResultCallback<AIAnalysisResult> callback) {
         ASYNC_POOL.submit(() -> {
             try {
-                onProgress.onProgress(10, "正在读取日志文件...");
+                onProgress.onProgress(10, I18N.get("gui.t0037"));
                 File logFile = new File(logFilePath);
                 if (!logFile.exists()) {
-                    callback.onError("文件不存在: " + logFilePath);
+                    callback.onError(I18N.get("gui.p0103", logFilePath));
                     return;
                 }
 
-                onProgress.onProgress(30, "正在调用 AI 分析...");
+                onProgress.onProgress(30, I18N.get("gui.t0038"));
                 String logContent = Files.readString(logFile.toPath(), StandardCharsets.UTF_8);
                 String question = """
                                   \u8bf7\u8be6\u7ec6\u9605\u8bfb\u8fd9\u4e2aMinecraft\u9519\u8bef\u65e5\u5fd7\uff0c\u6709\u4ec0\u4e48\u95ee\u9898\uff0c\u56de\u7b54\u8bf7\u4ee5json\u683c\u5f0f\uff0c\u76f4\u63a5\u7ed9\u6211json\u5185\u5bb9\uff0c\u683c\u5f0f\u4e25\u683c\u6309\u7167json\u6587\u4ef6\u7684\u683c\u5f0f\uff0c\u6709zh-cn\u5b57\u6bb5\uff08\u662f\u4e2d\u6587\u9519\u8bef\u539f\u56e0\u663e\u793a\uff09\uff0c\u8fd8\u8981\u6709\u82f1\u6587\u7684\u9519\u8bef\u539f\u56e0\u663e\u793a
@@ -1774,7 +1736,7 @@ public final class UIGeneralControlClass {
                 String response = LongCatChat.chat(question);
                 response = removeMarkdownCodeBlocks(response);
 
-                onProgress.onProgress(80, "正在解析分析结果...");
+                onProgress.onProgress(80, I18N.get("gui.t0039"));
 
                 // 尝试从 JSON 中提取中英文原因
                 String chineseReason = "";
@@ -1790,11 +1752,11 @@ public final class UIGeneralControlClass {
                 String outputPath = "ai_response.json";
                 exportResponseToJson(response, outputPath, 4);
 
-                onProgress.onProgress(100, "分析完成");
+                onProgress.onProgress(100, I18N.get("gui.t0040"));
                 callback.onSuccess(new AIAnalysisResult(response, chineseReason, englishReason));
 
             } catch (IOException e) {
-                callback.onError("AI 分析失败: " + e.getMessage());
+                callback.onError(I18N.get("gui.p0104", e.getMessage()));
             }
         });
     }
@@ -1802,7 +1764,7 @@ public final class UIGeneralControlClass {
     /** 8.2 同步 AI 分析（返回原始 JSON 字符串） */
     public static ActionResult aiAnalyzeLogSync(String logFilePath) {
         File logFile = new File(logFilePath);
-        if (!logFile.exists()) return ActionResult.fail("文件不存在");
+        if (!logFile.exists()) return ActionResult.fail(I18N.get("gui.t0041"));
         try {
             String logContent = Files.readString(logFile.toPath(), StandardCharsets.UTF_8);
             String question = """
@@ -1812,9 +1774,9 @@ public final class UIGeneralControlClass {
                               """ + logContent;
             String response = LongCatChat.chat(question);
             response = removeMarkdownCodeBlocks(response);
-            return ActionResult.ok("分析完成", response);
+            return ActionResult.ok(I18N.get("gui.t0042"), response);
         } catch (IOException e) {
-            return ActionResult.fail("分析失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0105", e.getMessage()));
         }
     }
 
@@ -1850,8 +1812,8 @@ public final class UIGeneralControlClass {
         Path modsDir = Paths.get(gameDir, "mods");
         Path versionModsDir = version.isEmpty() ? null : Paths.get(gameDir, "versions", version, "mods");
 
-        if (Files.isDirectory(modsDir)) scanModDir(modsDir, "[全局]", mods);
-        if (versionModsDir != null && Files.isDirectory(versionModsDir)) scanModDir(versionModsDir, "[版本]", mods);
+        if (Files.isDirectory(modsDir)) scanModDir(modsDir, I18N.get("gui.t0043"), mods);
+        if (versionModsDir != null && Files.isDirectory(versionModsDir)) scanModDir(versionModsDir, I18N.get("gui.t0044"), mods);
 
         mods.sort(Comparator.comparing(m -> m.name));
         return mods;
@@ -1867,14 +1829,14 @@ public final class UIGeneralControlClass {
                 String newName = fname.substring(0, fname.length() - 9);
                 newPath = path.resolveSibling(newName);
                 Files.move(path, newPath);
-                return ActionResult.ok("已启用: " + newName);
+                return ActionResult.ok(I18N.get("gui.p0106", newName));
             } else {
                 newPath = path.resolveSibling(fname + ".disabled");
                 Files.move(path, newPath);
-                return ActionResult.ok("已禁用: " + fname);
+                return ActionResult.ok(I18N.get("gui.p0107", fname));
             }
         } catch (IOException e) {
-            return ActionResult.fail("操作失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0108", e.getMessage()));
         }
     }
 
@@ -1963,9 +1925,9 @@ public final class UIGeneralControlClass {
     public static ActionResult readConfigFileContent(String filePath) {
         try {
             String content = Files.readString(Paths.get(filePath), StandardCharsets.UTF_8);
-            return ActionResult.ok("读取成功", content);
+            return ActionResult.ok(I18N.get("gui.t0045"), content);
         } catch (IOException e) {
-            return ActionResult.fail("读取失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0109", e.getMessage()));
         }
     }
 
@@ -2007,17 +1969,17 @@ public final class UIGeneralControlClass {
                                                ResultCallback<Boolean> onResult) {
         ASYNC_POOL.submit(() -> {
             try {
-                onProgress.onProgress(10, "正在读取版本 JSON...");
+                onProgress.onProgress(10, I18N.get("gui.t0046"));
                 Path jsonPath = Paths.get(gameDir, "versions", version, version + ".json");
                 if (!Files.exists(jsonPath)) {
-                    onResult.onError("版本 JSON 文件不存在");
+                    onResult.onError(I18N.get("gui.t0047"));
                     return;
                 }
 
                 String jsonStr = Files.readString(jsonPath, StandardCharsets.UTF_8);
                 JsonObject versionJson = new Gson().fromJson(jsonStr, JsonObject.class);
 
-                onProgress.onProgress(30, "正在初始化启动器...");
+                onProgress.onProgress(30, I18N.get("gui.t0048"));
                 LaunchInfo info = new LaunchInfo();
                 info.setGameDirPath(Path.of(gameDir));
                 info.setVersion(version);
@@ -2031,21 +1993,21 @@ public final class UIGeneralControlClass {
                 launcher.initPaths();
                 launcher.setVersionJson(versionJson);
 
-                onProgress.onProgress(60, "正在下载并提取原生库...");
+                onProgress.onProgress(60, I18N.get("gui.t0049"));
                 boolean ok = launcher.processNatives();
                 if (!ok) {
-                    onResult.onError("原生库提取失败，无法继续补全");
+                    onResult.onError(I18N.get("gui.t0050"));
                     return;
                 }
 
-                onProgress.onProgress(90, "正在清理多余文件...");
+                onProgress.onProgress(90, I18N.get("gui.t0051"));
                 runNativeCleanup(gameDir, version);
 
-                onProgress.onProgress(100, "原生库补全完成");
+                onProgress.onProgress(100, I18N.get("gui.t0052"));
                 onResult.onSuccess(true);
 
             } catch (JsonSyntaxException | IOException e) {
-                onResult.onError("原生库补全失败: " + e.getMessage());
+                onResult.onError(I18N.get("gui.p0110", e.getMessage()));
             }
         });
     }
@@ -2073,7 +2035,7 @@ public final class UIGeneralControlClass {
     /** 12.2 修改 options.txt 中的某个值 */
     public static ActionResult updateOptionsTxt(String gameDir, String key, String newValue) {
         Path optFile = Paths.get(gameDir, "options.txt");
-        if (!Files.exists(optFile)) return ActionResult.fail("options.txt 不存在");
+        if (!Files.exists(optFile)) return ActionResult.fail(I18N.get("gui.t0053"));
 
         try {
             List<String> lines = Files.readAllLines(optFile, StandardCharsets.UTF_8);
@@ -2090,9 +2052,9 @@ public final class UIGeneralControlClass {
                 lines.add(key + ":" + newValue);
             }
             Files.write(optFile, lines, StandardCharsets.UTF_8);
-            return ActionResult.ok("已更新: " + key + " = " + newValue);
+            return ActionResult.ok(I18N.get("gui.p0111", key + " = " + newValue));
         } catch (IOException e) {
-            return ActionResult.fail("写入失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0112", e.getMessage()));
         }
     }
 
@@ -2128,7 +2090,7 @@ public final class UIGeneralControlClass {
                 for (String key : profObj.keySet()) {
                     JsonObject prof = profObj.getAsJsonObject(key);
                     String name = prof.has("name") ? prof.get("name").getAsString() : key;
-                    String lastVer = prof.has("lastVersionId") ? prof.get("lastVersionId").getAsString() : "(未设置)";
+                    String lastVer = prof.has("lastVersionId") ? prof.get("lastVersionId").getAsString() : I18N.get("gui.t0054");
                     profiles.put(name, lastVer);
                 }
             }
@@ -2146,7 +2108,7 @@ public final class UIGeneralControlClass {
     public static ActionResult openInExplorer(String path) {
         try {
             File file = new File(path);
-            if (!file.exists()) return ActionResult.fail("路径不存在: " + path);
+            if (!file.exists()) return ActionResult.fail(I18N.get("gui.p0113", path));
             String os = System.getProperty("os.name").toLowerCase();
             if (os.contains("win")) {
                 Runtime.getRuntime().exec(new String[]{"explorer.exe", "/select,", file.getAbsolutePath()});
@@ -2155,9 +2117,9 @@ public final class UIGeneralControlClass {
             } else {
                 Runtime.getRuntime().exec(new String[]{"xdg-open", file.getParent()});
             }
-            return ActionResult.ok("已打开");
+            return ActionResult.ok(I18N.get("gui.t0055"));
         } catch (IOException e) {
-            return ActionResult.fail("打开失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0114", e.getMessage()));
         }
     }
 
@@ -2165,7 +2127,7 @@ public final class UIGeneralControlClass {
     public static ActionResult openDirectory(String path) {
         try {
             File dir = new File(path);
-            if (!dir.isDirectory()) return ActionResult.fail("不是目录: " + path);
+            if (!dir.isDirectory()) return ActionResult.fail(I18N.get("gui.p0115", path));
             String os = System.getProperty("os.name").toLowerCase();
             if (os.contains("win")) {
                 Runtime.getRuntime().exec(new String[]{"explorer.exe", dir.getAbsolutePath()});
@@ -2174,9 +2136,9 @@ public final class UIGeneralControlClass {
             } else {
                 Runtime.getRuntime().exec(new String[]{"xdg-open", dir.getAbsolutePath()});
             }
-            return ActionResult.ok("已打开目录");
+            return ActionResult.ok(I18N.get("gui.t0056"));
         } catch (IOException e) {
-            return ActionResult.fail("打开失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0116", e.getMessage()));
         }
     }
 
@@ -2191,9 +2153,9 @@ public final class UIGeneralControlClass {
             } else {
                 Runtime.getRuntime().exec(new String[]{"xdg-open", url});
             }
-            return ActionResult.ok("已打开浏览器");
+            return ActionResult.ok(I18N.get("gui.t0057"));
         } catch (IOException e) {
-            return ActionResult.fail("打开失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("gui.p0117", e.getMessage()));
         }
     }
 
@@ -2218,7 +2180,7 @@ public final class UIGeneralControlClass {
                 (pct, msg) -> { if (progress != null) progress.onProgress(pct, msg); };
             boolean ok = VersionManifest.downloadVersion(versionId, gameDir, adapter);
             if (ok && onResult != null) onResult.onSuccess(true);
-            else if (!ok && onResult != null) onResult.onError("下载版本失败: " + versionId);
+            else if (!ok && onResult != null) onResult.onError(I18N.get("gui.p0118", versionId));
         });
     }
 
@@ -2232,7 +2194,7 @@ public final class UIGeneralControlClass {
                 (pct, msg) -> { if (progress != null) progress.onProgress(pct, msg); };
             boolean ok = AssetDownloader.downloadAssetIndex(assetId, gameDir, adapter);
             if (ok && onResult != null) onResult.onSuccess(true);
-            else if (!ok && onResult != null) onResult.onError("下载资源索引失败");
+            else if (!ok && onResult != null) onResult.onError(I18N.get("gui.t0058"));
         });
     }
 
@@ -2244,7 +2206,7 @@ public final class UIGeneralControlClass {
                 (pct, msg) -> { if (progress != null) progress.onProgress(pct, msg); };
             boolean ok = AssetDownloader.downloadAssets(gameDir, adapter);
             if (ok && onResult != null) onResult.onSuccess(true);
-            else if (!ok && onResult != null) onResult.onError("下载资源文件失败");
+            else if (!ok && onResult != null) onResult.onError(I18N.get("gui.t0059"));
         });
     }
 
@@ -2262,14 +2224,14 @@ public final class UIGeneralControlClass {
                                                    ResultCallback<Boolean> onResult) {
         ASYNC_POOL.submit(() -> {
             try {
-                boolean ok = GameResourceCompleter.completeAll(gameDir, versionId,
+                boolean ok = DownloadEngineRouter.completeAll(gameDir, versionId,
                     (pct, msg) -> { if (onProgress != null) onProgress.onProgress(pct, msg); });
                 if (onResult != null) {
                     if (ok) onResult.onSuccess(true);
                     else onResult.onSuccess(false);
                 }
             } catch (Exception e) {
-                if (onResult != null) onResult.onError("资源补全失败: " + e.getMessage());
+                if (onResult != null) onResult.onError(I18N.get("gui.p0119", e.getMessage()));
             }
         });
     }
@@ -2372,7 +2334,7 @@ public final class UIGeneralControlClass {
                 Account account = AccountManager.loginMicrosoftSync();
                 callback.onSuccess(account);
             } catch (Exception e) {
-                callback.onError("微软登录失败: " + e.getMessage());
+                callback.onError(I18N.get("gui.p0120", e.getMessage()));
             }
         });
     }
@@ -2384,7 +2346,7 @@ public final class UIGeneralControlClass {
                 Account account = AccountManager.refreshMicrosoftSync(refreshToken);
                 callback.onSuccess(account);
             } catch (Exception e) {
-                callback.onError("令牌刷新失败: " + e.getMessage());
+                callback.onError(I18N.get("gui.p0121", e.getMessage()));
             }
         });
     }
@@ -2397,7 +2359,7 @@ public final class UIGeneralControlClass {
                 Account account = AccountManager.loginThirdPartySync(authServer, email, password);
                 callback.onSuccess(account);
             } catch (Exception e) {
-                callback.onError("第三方登录失败: " + e.getMessage());
+                callback.onError(I18N.get("gui.p0122", e.getMessage()));
             }
         });
     }
@@ -2492,7 +2454,8 @@ public final class UIGeneralControlClass {
         // 固定传 false，确保核心启动器不再向游戏命令追加 --fullscreen，保持纯 options.txt 行为
         info.setFullscreen(false);
         info.setVersionIsolation(c.versionIsolation);
-        if (!c.jvmArgs.isEmpty())  info.setJvmArgs(Arrays.asList(c.jvmArgs.split("\\s+")));
+        // 按引号分组切分：-javaagent/-D 里可能含带空格的 Windows 用户目录路径
+        info.setJvmArgs(com.example.starlight.startmc.LaunchInfo.splitCommandLine(c.jvmArgs));
         if (!c.gameArgs.isEmpty()) info.setGameArgs(Arrays.asList(c.gameArgs.split("\\s+")));
         if (!c.preLaunchCommand.isEmpty()) info.setPreLaunchCommand(c.preLaunchCommand);
         if (!c.postExitCommand.isEmpty())  info.setPostExitCommand(c.postExitCommand);
@@ -2720,18 +2683,37 @@ public final class UIGeneralControlClass {
                                            ProgressCallback progress,
                                            ResultCallback<Boolean> onResult,
                                            String folderName) {
+        installLoaderAsync(mcVersion, loaderType, loaderVersion, gameDir, javaPath,
+                progress, onResult, folderName, null);
+    }
+
+    /**
+     * 一键安装加载器（异步，支持取消）。
+     *
+     * <p>{@code cancel} 置位后：库文件下载立即中断、安装器子进程被强杀，
+     * 结果回调会尽快到达（{@code onError}），调用方据此清理未完成的版本目录。
+     *
+     * @param folderName 自定义版本文件夹名（null/空使用标准目录；仅 Fabric 支持）
+     * @param cancel     取消标志（可为 null 表示不可取消）
+     */
+    public static void installLoaderAsync(String mcVersion, String loaderType,
+                                           String loaderVersion, String gameDir,
+                                           String javaPath,
+                                           ProgressCallback progress,
+                                           ResultCallback<Boolean> onResult,
+                                           String folderName, AtomicBoolean cancel) {
         ASYNC_POOL.submit(() -> {
             try {
                 LoaderInstallEngine.ProgressCallback adapter = (pct, msg) -> {
                     if (progress != null) progress.onProgress(pct, msg);
                 };
                 boolean ok = LoaderInstallEngine.installLoader(
-                    mcVersion, loaderType, loaderVersion, gameDir, javaPath, adapter, folderName);
+                    mcVersion, loaderType, loaderVersion, gameDir, javaPath, adapter, folderName, cancel);
                 if (ok && onResult != null) onResult.onSuccess(true);
-                else if (!ok && onResult != null) onResult.onError("加载器安装失败");
+                else if (!ok && onResult != null) onResult.onError(I18N.get("gui.t0060"));
             } catch (Throwable t) {
                 // 兜底：确保回调必达，避免调用方 latch 等待超时或按钮永久禁用
-                if (onResult != null) onResult.onError("加载器安装异常: " + t.getMessage());
+                if (onResult != null) onResult.onError(I18N.get("gui.p0123", t.getMessage()));
             }
         });
     }

@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.auth.offline;
 
+
+import com.example.starlight.util.I18N;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.slf4j.Logger;
@@ -57,7 +59,7 @@ public final class LocalYggdrasilServer {
             g.initialize(2048, new SecureRandom("starlight-skin-2026".getBytes(StandardCharsets.UTF_8)));
             return g.generateKeyPair();
         } catch (Exception e) {
-            LOG.warn("生成纹理签名密钥失败：{}", e.getMessage());
+            LOG.warn(I18N.get("offline.t0021"), e.getMessage());
             return null;
         }
     }
@@ -72,7 +74,7 @@ public final class LocalYggdrasilServer {
             sig.update(payload.getBytes(StandardCharsets.UTF_8));
             return java.util.Base64.getEncoder().encodeToString(sig.sign());
         } catch (Exception e) {
-            LOG.warn("纹理签名失败：{}", e.getMessage());
+            LOG.warn(I18N.get("offline.t0022"), e.getMessage());
             return null;
         }
     }
@@ -121,7 +123,7 @@ public final class LocalYggdrasilServer {
     public static LocalYggdrasilServer startRaw(byte[] skinPng, byte[] capePng,
                                                 String uuid, String username, boolean slim) {
         if (capePng == null) {
-            LOG.info("未检测到披风，跳过本地档案服务器（保持纯 PCL2 机制）");
+            LOG.info(I18N.get("offline.t0023"));
             return null;
         }
         try {
@@ -142,11 +144,11 @@ public final class LocalYggdrasilServer {
             http.createContext("/", s::handleMetadata);
             http.start();
             current = s; // 状态查询：同一时刻至多一个游戏会话在用，后启动覆盖前者
-            LOG.info("本地 Yggdrasil 档案服务器已启动：{}（玩家 {}，皮肤 {}，披风 {}）",
-                    s.apiBase, username, skinPng != null ? "有" : "无", "有");
+            LOG.info(I18N.get("offline.t0050"),
+                    s.apiBase, username, skinPng != null ? I18N.get("offline.t0051") : I18N.get("offline.t0052"), I18N.get("offline.t0053"));
             return s;
         } catch (IOException e) {
-            LOG.warn("本地 Yggdrasil 档案服务器启动失败：{}", e.getMessage());
+            LOG.warn(I18N.get("offline.t0024"), e.getMessage());
             return null;
         }
     }
@@ -203,7 +205,7 @@ public final class LocalYggdrasilServer {
         if (stopped) return;
         stopped = true;
         server.stop(0);
-        LOG.info("本地 Yggdrasil 档案服务器已停止：{}", apiBase);
+        LOG.info(I18N.get("offline.t0025"), apiBase);
     }
 
     /** 是否仍在运行（未 stop 过即视为运行中） */
@@ -217,32 +219,32 @@ public final class LocalYggdrasilServer {
         String uuidPart = path.substring(path.lastIndexOf('/') + 1);
         String uri = ex.getRequestURI().toString();
         if (uuidPart.equalsIgnoreCase(uuid)) {
-            LOG.info("收到会话档案请求：{}（匹配本地玩家 {}），完整URI={}", uuidPart, username, uri);
+            LOG.info(I18N.get("offline.t0026"), uuidPart, username, uri);
             byte[] body = buildProfileJson().getBytes(StandardCharsets.UTF_8);
             respond(ex, 200, "application/json", body);
         } else {
-            LOG.info("收到会话档案请求：{}（未知 UUID，透传 Mojang）", uuidPart);
+            LOG.info(I18N.get("offline.t0027"), uuidPart);
             proxyToMojang(ex, uuidPart);
         }
     }
 
     private void handleSkin(HttpExchange ex) throws IOException {
         if (skinPng == null) {
-            LOG.info("收到皮肤贴图请求：无皮肤（404）");
+            LOG.info(I18N.get("offline.t0028"));
             respond(ex, 404, "text/plain", "no skin".getBytes(StandardCharsets.UTF_8));
             return;
         }
-        LOG.info("收到皮肤贴图请求：{} 字节，完整URI={}", skinPng.length, ex.getRequestURI().toString());
+        LOG.info(I18N.get("offline.t0029"), skinPng.length, ex.getRequestURI().toString());
         respond(ex, 200, "image/png", skinPng);
     }
 
     private void handleCape(HttpExchange ex) throws IOException {
         if (capePng == null) {
-            LOG.info("收到披风贴图请求：无披风（404）");
+            LOG.info(I18N.get("offline.t0030"));
             respond(ex, 404, "text/plain", "no cape".getBytes(StandardCharsets.UTF_8));
             return;
         }
-        LOG.info("收到披风贴图请求：{} 字节，完整URI={}", capePng.length, ex.getRequestURI().toString());
+        LOG.info(I18N.get("offline.t0031"), capePng.length, ex.getRequestURI().toString());
         respond(ex, 200, "image/png", capePng);
     }
 
@@ -325,7 +327,7 @@ public final class LocalYggdrasilServer {
             respond(ex, resp.statusCode(),
                     resp.headers().firstValue("Content-Type").orElse("application/json"), resp.body());
         } catch (Exception e) {
-            LOG.debug("透传 Mojang sessionserver 失败（{}）：{}", uuidPart, e.getMessage());
+            LOG.debug(I18N.get("offline.t0032"), uuidPart, e.getMessage());
             try {
                 respond(ex, 204, "application/json", new byte[0]);
             } catch (IOException ignored) {
@@ -352,7 +354,7 @@ public final class LocalYggdrasilServer {
         try {
             return SkinTexture.toPngBytes(texture.getImage());
         } catch (Exception e) {
-            LOG.debug("贴图转 PNG 失败：{}", e.getMessage());
+            LOG.debug(I18N.get("offline.t0033"), e.getMessage());
             return null;
         }
     }

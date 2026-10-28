@@ -8,6 +8,8 @@
 
 package com.example.starlight.log;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.Endpoints;
 
 import com.google.gson.JsonArray;
@@ -100,7 +102,7 @@ public class sendlogs {
     public static UploadResult uploadLogBundleEx(String serverUrl, String mainContent, String mainName,
                                                  List<LogFileEntry> extraFiles) throws IOException {
         if (mainContent == null || mainContent.isEmpty()) {
-            throw new IOException("日志内容为空，无法上传");
+            throw new IOException(I18N.get("log.t0001"));
         }
         JsonObject payload = new JsonObject();
         payload.addProperty("source", SOURCE_ID);
@@ -129,7 +131,7 @@ public class sendlogs {
     /** 撤回（删除）已上传的日志。id 必填；token 为空时仅尝试无鉴权删除 */
     public static boolean deleteLog(String id, String token) throws IOException {
         if (id == null || id.trim().isEmpty()) {
-            throw new IOException("缺少日志 ID，无法删除");
+            throw new IOException(I18N.get("log.t0002"));
         }
         URL url = new URL("https://api.logshare.cn/v1/log/" + id.trim());
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -157,8 +159,8 @@ public class sendlogs {
                 }
             }
             if (!isLogNotFound(body)) {
-                throw new IOException("删除失败, HTTP " + responseCode
-                        + (body.isEmpty() ? "" : ": " + brief(body)));
+                throw new IOException(I18N.get("log.p0005", responseCode
+                        + (body.isEmpty() ? "" : ": " + brief(body))));
             }
             return true;
         } finally {
@@ -201,14 +203,14 @@ public class sendlogs {
             int responseCode = conn.getResponseCode();
             InputStream raw = responseCode >= 400 ? conn.getErrorStream() : conn.getInputStream();
             if (raw == null) {
-                throw new IOException("服务器无响应, HTTP " + responseCode);
+                throw new IOException(I18N.get("log.p0006", responseCode));
             }
             String encoding = conn.getHeaderField("Content-Encoding");
             try (InputStream in = encoding != null && encoding.toLowerCase(Locale.ROOT).contains("gzip")
                     ? new GZIPInputStream(raw) : raw) {
                 String responseBody = readAll(in);
                 if (responseCode >= 400) {
-                    throw new IOException("上传失败, HTTP " + responseCode + ": " + brief(responseBody));
+                    throw new IOException(I18N.get("log.p0007", responseCode + ": " + brief(responseBody)));
                 }
                 return parseUploadResult(responseBody);
             }
@@ -224,15 +226,15 @@ public class sendlogs {
     /** 解析服务器返回：优先取 url / shortUrl，其次按 id 拼默认短链 */
     private static UploadResult parseUploadResult(String responseBody) throws IOException {
         if (responseBody == null || responseBody.trim().isEmpty()) {
-            throw new IOException("服务器返回空响应");
+            throw new IOException(I18N.get("log.t0003"));
         }
         String trimmed = responseBody.trim();
         try {
             JsonObject obj = JsonParser.parseString(trimmed).getAsJsonObject();
             if (obj.has("success") && !obj.get("success").getAsBoolean()) {
                 String err = obj.has("error") && !obj.get("error").isJsonNull()
-                        ? obj.get("error").getAsString() : "未知错误";
-                throw new IOException("上传被服务器拒绝: " + err);
+                        ? obj.get("error").getAsString() : I18N.get("log.t0004");
+                throw new IOException(I18N.get("log.p0008", err));
             }
             String id = obj.has("id") && !obj.get("id").isJsonNull()
                     ? obj.get("id").getAsString() : null;
@@ -261,7 +263,7 @@ public class sendlogs {
         if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
             return new UploadResult(null, trimmed, null);
         }
-        throw new IOException("无法解析服务器返回的链接: " + brief(responseBody));
+        throw new IOException(I18N.get("log.p0009", brief(responseBody)));
     }
 
     /** 解析上传端点：显式参数 > 配置 > 默认 */
@@ -317,6 +319,7 @@ public class sendlogs {
         }
         String t = body.trim();
         String lower = t.toLowerCase(Locale.ROOT);
+        // i18n-lock: 不要翻译此行中文——日志服务端错误文本，翻译即功能失效
         if (lower.contains("not found") || lower.contains("不存在")) {
             return true;
         }

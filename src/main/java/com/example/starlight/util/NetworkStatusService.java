@@ -1,5 +1,7 @@
 package com.example.starlight.util;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.main.ConfigManager;
 import com.example.starlight.newui.AppConfig;
 
@@ -50,8 +52,8 @@ public final class NetworkStatusService {
 
         /** 供状态文案使用的简短描述 */
         public String describe() {
-            if (!ok) return "不可达";
-            return "在线 · " + latencyMs + "ms";
+            if (!ok) return I18N.get("util.t0021");
+            return I18N.get("util.p0048", latencyMs + "ms");
         }
     }
 

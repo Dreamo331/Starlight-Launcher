@@ -1,5 +1,7 @@
 package com.example.starlight.newui;
 
+
+import com.example.starlight.util.I18N;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -170,7 +172,7 @@ public final class MarkdownRenderer {
 
     /** 把 Markdown 渲染为 HTML 片段 */
     public static String toHtml(String markdown) {        if (markdown == null || markdown.isBlank()) {
-            return "<p class=\"md-empty\">该资源没有提供详细描述。</p>";
+            return I18N.get("newui.t0078");
         }
         // 统一换行符并去掉零宽字符（Modrinth 正文里偶尔混入）
         String text = markdown.replace("\r\n", "\n").replace("\r", "\n").replace("\u200b", "");

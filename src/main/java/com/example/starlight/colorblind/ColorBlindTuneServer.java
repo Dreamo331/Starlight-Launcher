@@ -1,5 +1,7 @@
 package com.example.starlight.colorblind;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.main.ConfigManager;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -168,7 +170,7 @@ public final class ColorBlindTuneServer {
             } catch (Throwable t) {
                 System.err.println("[ColorBlind] 调节网页请求处理失败 (" + path + "): " + t);
                 try {
-                    sendJson(exchange, 500, "{\"ok\":false,\"message\":\"服务器内部错误\"}");
+                    sendJson(exchange, 500, I18N.get("colorblind.t0050"));
                 } catch (IOException ignored) {
                 }
             }
@@ -218,10 +220,10 @@ public final class ColorBlindTuneServer {
             updates.put(ColorBlindOverlayManager.KEY_WINDOW, sanitizeWindow(body.get("window").getAsString()));
         }
         if (updates.isEmpty()) {
-            return "没有需要保存的改动";
+            return I18N.get("colorblind.t0051");
         }
         ConfigManager.saveClientConfig(updates);
-        return "配置已保存";
+        return I18N.get("colorblind.t0052");
     }
 
     /** 窗口标题清洗：去掉换行（ini 单行值）并限制长度 */

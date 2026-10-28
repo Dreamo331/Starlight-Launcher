@@ -1,5 +1,7 @@
 package com.example.starlight.listjava;
 
+
+import com.example.starlight.util.I18N;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -40,7 +42,7 @@ public class FindAllJavaWindows {
 
         public JavaEntry(String homePath, String version, String vendor, boolean isJDK) {
             this.homePath = homePath;
-            this.version = version != null ? version : "未知";
+            this.version = version != null ? version : I18N.get("listjava.t0001");
             this.majorVersion = parseMajorVersion(this.version);
             this.vendor = vendor;
             this.isJDK = isJDK;
@@ -168,12 +170,12 @@ public class FindAllJavaWindows {
         final boolean isJDK;
 
         JavaInfo(String version, String vendor, boolean isJDK) {
-            this.version = version != null ? version : "未知";
+            this.version = version != null ? version : I18N.get("listjava.t0002");
             this.vendor = vendor;
             this.isJDK = isJDK;
         }
 
-        static final JavaInfo UNKNOWN = new JavaInfo("未知", null, false);
+        static JavaInfo unknown() { return new JavaInfo(I18N.get("listjava.t0003"), null, false); }
     }
 
     /**
@@ -181,7 +183,7 @@ public class FindAllJavaWindows {
      * 优先读取 release 文件（更可靠），降级到 java -version。
      */
     private static JavaInfo getJavaInfo(String javaHome) {
-        if (javaHome == null) return JavaInfo.UNKNOWN;
+        if (javaHome == null) return JavaInfo.unknown();
 
         // 检测 JDK / JRE
         Path javacPath = Paths.get(javaHome, "bin", "javac.exe");

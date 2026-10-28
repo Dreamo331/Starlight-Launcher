@@ -1,6 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
 import com.example.starlight.config.AiConfig;
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.newui.ai.AiModelPickerDialog;
 import com.example.starlight.newui.ai.AiProviders;
 import com.example.starlight.newui.ui.AppIcons;
@@ -13,6 +14,7 @@ import com.example.starlight.modfile.ModFileFormatter;
 import com.example.starlight.newui.ui.PageKit;
 import com.example.starlight.service.ParallelLaunchManager;
 import com.example.starlight.service.SilentLoginManager;
+import com.example.starlight.util.I18N;
 import com.example.starlight.download.VerifySettings;
 import com.example.starlight.util.GameProcessTweaks;
 
@@ -60,14 +62,14 @@ public final class AdvancedPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(host, "高级设置");
+        VBox root = PageKit.settingsPage(host, I18N.get("advanced.t0001"));
 
         // 分区 1：启动选项（默认展开，重构 §6.6 验收） //
         VBox startupBox = new VBox(12,
                 gpuCard(),
                 preheatCard());
-        root.getChildren().add(section("startup", "启动选项",
-                "高性能显卡 / JVM 预热", startupBox, true));
+        root.getChildren().add(section("startup", I18N.get("advanced.t0002"),
+                I18N.get("advanced.t0003"), startupBox, true));
 
         // 分区 2：窗口（默认展开） //
         VBox windowBox = new VBox(12,
@@ -76,8 +78,8 @@ public final class AdvancedPage {
                 windowTitleCard(),
                 priorityCard(),
                 visibilityCard());
-        root.getChildren().add(section("window", "窗口",
-                "尺寸 / 全屏 / 标题 / 优先级 / 可见性", windowBox, true));
+        root.getChildren().add(section("window", I18N.get("advanced.t0004"),
+                I18N.get("advanced.t0005"), windowBox, true));
 
         // 分区 3：游戏默认值（全局默认，可被版本独立设置覆盖） //
         VBox defaultsBox = new VBox(12,
@@ -87,8 +89,8 @@ public final class AdvancedPage {
                 gameArgsCard(),
                 preLaunchCard(),
                 postExitCard());
-        root.getChildren().add(section("defaults", "游戏默认值",
-                "语言 / 隔离 / 参数 / 启动前后命令", defaultsBox, false));
+        root.getChildren().add(section("defaults", I18N.get("advanced.t0006"),
+                I18N.get("advanced.t0007"), defaultsBox, false));
 
         // 分区 4：性能与校验 //
         VBox perfBox = new VBox(12,
@@ -97,27 +99,27 @@ public final class AdvancedPage {
                 streamingSha1Card(),
                 fastVerifyCard(),
                 stateCacheCard());
-        root.getChildren().add(section("perf", "性能与校验",
-                "并行准备 / 文件校验策略", perfBox, false));
+        root.getChildren().add(section("perf", I18N.get("advanced.t0008"),
+                I18N.get("advanced.t0009"), perfBox, false));
 
         // 分区 5：社区资源 //
         VBox communityBox = new VBox(12,
                 fileNameFormatCard(),
                 modDisplayStyleCard(),
                 ignoreQuiltCard());
-        root.getChildren().add(section("community", "社区资源",
-                "文件名格式 / Mod 管理样式", communityBox, false));
+        root.getChildren().add(section("community", I18N.get("advanced.t0010"),
+                I18N.get("advanced.t0011"), communityBox, false));
 
         // 分区 6：登录 //
         VBox loginBox = new VBox(12, loginModeCard());
-        root.getChildren().add(section("login", "登录",
-                "静默登录时机", loginBox, false));
+        root.getChildren().add(section("login", I18N.get("advanced.t0012"),
+                I18N.get("advanced.t0013"), loginBox, false));
 
         // 分区 7：AI 配置 //
         VBox aiBox = new VBox(12);
         addAiConfigCards(aiBox);
-        root.getChildren().add(section("ai", "AI 配置",
-                "服务商 / API / 模型（崩溃日志诊断用）", aiBox, false));
+        root.getChildren().add(section("ai", I18N.get("advanced.t0014"),
+                I18N.get("advanced.t0015"), aiBox, false));
 
         return root;
     }
@@ -142,13 +144,12 @@ public final class AdvancedPage {
             UIGeneralControlClass.ASYNC_POOL.submit(() -> {
                 boolean ok = com.example.starlight.util.MemoryOptimizer.setGpuPreference(javaPath, on);
                 Platform.runLater(() -> host.ui().toast(on
-                        ? (ok ? "已登记「使用高性能显卡」" : "登记失败（仅 Windows 支持，或 Java 路径无效）")
-                        : (ok ? "已恢复系统自动选择显卡" : "恢复失败")));
+                        ? (ok ? I18N.get("advanced.t0016") : I18N.get("advanced.t0017"))
+                        : (ok ? I18N.get("advanced.t0018") : I18N.get("advanced.t0019"))));
             });
         });
-        return PageKit.settingsCard("使用高性能显卡",
-                "在 Windows 显卡设置中把 Java 进程登记为「高性能」，避免笔记本用核显跑游戏"
-                        + "（需要 Java 路径为完整路径才生效）", gpuToggle);
+        return PageKit.settingsCard(I18N.get("advanced.t0020"),
+                I18N.get("advanced.t0109"), gpuToggle);
     }
 
     private Node preheatCard() {
@@ -156,14 +157,14 @@ public final class AdvancedPage {
         preheatToggle.setOnAction(e -> {
             host.config().put("JvmPreheat", String.valueOf(preheatToggle.isSelected()));
             host.saveConfig();
-            host.ui().toast("JVM 预热启动: " + (preheatToggle.isSelected() ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("advanced.k0004", (preheatToggle.isSelected() ? I18N.get("advanced.t0021") : I18N.get("advanced.t0022"))));
             if (preheatToggle.isSelected()) host.preheatJvmAsync();
         });
-        VBox preheatBox = new VBox(4, preheatToggle,
-                PageKit.hintLabel("空闲时预加载 JVM，加速游戏首次启动（占用约 100MB 内存）"));
-        return PageKit.settingsCard("JVM 预热启动",
-                "启动器启动后在后台跑一次轻量 JVM，把运行时与类库读进系统缓存，"
-                        + "让游戏首次启动更快；关闭启动器即回收", preheatBox);
+        // 卡片说明已经讲了「空闲时预加载 JVM、约 100MB 内存」，
+        // 右侧不再重复挂一条 hint：英文变长后它会被挤成一列竖排文字（历史样式问题）
+        VBox preheatBox = new VBox(4, preheatToggle);
+        return PageKit.settingsCard(I18N.get("advanced.t0024"),
+                I18N.get("advanced.t0110"), preheatBox);
     }
 
     // —— 窗口 —— //
@@ -179,18 +180,18 @@ public final class AdvancedPage {
         TextField heightField = new TextField(curH);
         heightField.getStyleClass().add("input-field");
         heightField.setPrefWidth(100);
-        Button saveWin = AppIcons.button("save", "保存");
+        Button saveWin = AppIcons.button("save", I18N.get("advanced.t0025"));
         saveWin.getStyleClass().add("btn-primary");
         saveWin.setOnAction(e -> {
             host.config().put("WindowWidth", widthField.getText());
             host.config().put("WindowHeight", heightField.getText());
             host.saveConfig();
-            host.ui().toast("窗口大小已保存");
+            host.ui().toast(I18N.get("advanced.t0026"));
         });
-        HBox winRow = new HBox(10, new Label("宽:"), widthField, xLabel, new Label("高:"), heightField, saveWin);
+        HBox winRow = new HBox(10, new Label(I18N.get("advanced.t0027")), widthField, xLabel, new Label(I18N.get("advanced.t0028")), heightField, saveWin);
         winRow.setAlignment(Pos.CENTER_LEFT);
-        return PageKit.settingsCard("窗口大小",
-                "游戏窗口初始尺寸；单个版本可在「版本独立设置」覆盖", winRow);
+        return PageKit.settingsCard(I18N.get("advanced.t0029"),
+                I18N.get("advanced.t0030"), winRow);
     }
 
     private Node fullscreenCard() {
@@ -198,9 +199,9 @@ public final class AdvancedPage {
         fullscreenToggle.setOnAction(e -> {
             host.config().put("Fullscreen", String.valueOf(fullscreenToggle.isSelected()));
             host.saveConfig();
-            host.ui().toast("全屏模式: " + (fullscreenToggle.isSelected() ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("advanced.k0005", (fullscreenToggle.isSelected() ? I18N.get("advanced.t0031") : I18N.get("advanced.t0032"))));
         });
-        return PageKit.settingsCard("全屏模式", "以全屏模式启动游戏", fullscreenToggle);
+        return PageKit.settingsCard(I18N.get("advanced.t0033"), I18N.get("advanced.t0034"), fullscreenToggle);
     }
 
     private Node windowTitleCard() {
@@ -210,7 +211,7 @@ public final class AdvancedPage {
         titleField.setPrefWidth(300);
         titleField.setMinWidth(200);
         titleField.setMaxWidth(Double.MAX_VALUE);
-        titleField.setPromptText("例如：Minecraft-{version}；留空 = 保持游戏默认标题");
+        titleField.setPromptText(I18N.get("advanced.t0035"));
         // 实时预览：输入时按当前版本/玩家名展开变量，用户不用保存再启动游戏来验证写法
         Label previewLabel = new Label();
         previewLabel.getStyleClass().add("settings-card-desc");
@@ -219,16 +220,16 @@ public final class AdvancedPage {
         previewLabel.setManaged(false);
         Runnable updatePreview = () -> {
             String expanded = GameProcessTweaks.expandTitle(titleField.getText(),
-                    host.config().getOrDefault("Version", ""),
+                    SelectedVersion.of(host.config()),
                     host.config().getOrDefault("UserName", ""));
             boolean show = !expanded.isEmpty();
-            previewLabel.setText(show ? "实际效果: " + expanded : "");
+            previewLabel.setText(show ? I18N.get("advanced.k0006", expanded) : "");
             previewLabel.setVisible(show);
             previewLabel.setManaged(show);
         };
         titleField.textProperty().addListener((obs, old, now) -> updatePreview.run());
         updatePreview.run();
-        Button saveTitle = AppIcons.button("save", "保存");
+        Button saveTitle = AppIcons.button("save", I18N.get("advanced.t0036"));
         saveTitle.getStyleClass().add("btn-primary");
         Runnable commitTitle = () -> {
             // 模板原样保存（变量在启动时才展开），只做规范化（去换行 / 限长）
@@ -237,11 +238,11 @@ public final class AdvancedPage {
             host.config().put(GameProcessTweaks.CONFIG_WINDOW_TITLE, value);
             host.saveConfig();
             String expanded = GameProcessTweaks.expandTitle(value,
-                    host.config().getOrDefault("Version", ""),
+                    SelectedVersion.of(host.config()),
                     host.config().getOrDefault("UserName", ""));
             host.ui().toast(value.isEmpty()
-                    ? "已恢复游戏默认窗口标题"
-                    : "游戏窗口标题已保存: " + expanded);
+                    ? I18N.get("advanced.t0037")
+                    : I18N.get("advanced.k0001", expanded));
             updatePreview.run();
         };
         saveTitle.setOnAction(e -> commitTitle.run());
@@ -251,12 +252,8 @@ public final class AdvancedPage {
         titleRow.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(titleField, Priority.ALWAYS);
         VBox titleBox = new VBox(8, titleRow, previewLabel);
-        return PageKit.settingsCardStacked("自定义游戏窗口标题",
-                "游戏窗口标题改成任意文字（仅 Windows 生效，下次启动游戏时应用）。"
-                        + "支持变量：" + GameProcessTweaks.VAR_VERSION + " = 游戏版本名、"
-                        + GameProcessTweaks.VAR_USERNAME + " = 玩家名，例如 Minecraft-{version}。"
-                        + "注意：改标题后按标题匹配游戏窗口的功能要跟着改 —— "
-                        + "「色盲辅助 → 游戏窗口标题」默认抓 Minecraft，标题里没有这个词就抓不到窗口",
+        return PageKit.settingsCardStacked(I18N.get("advanced.t0038"),
+                I18N.get("advanced.p0115", GameProcessTweaks.VAR_VERSION, GameProcessTweaks.VAR_USERNAME),
                 titleBox);
     }
 
@@ -274,11 +271,10 @@ public final class AdvancedPage {
             if (val == null) return;
             host.config().put(GameProcessTweaks.CONFIG_PRIORITY, GameProcessTweaks.priorityValueOf(val));
             host.saveConfig();
-            host.ui().toast("游戏进程优先级: " + val + "（下次启动游戏时应用）");
+            host.ui().toast(I18N.get("advanced.p0116", val));
         });
-        return PageKit.settingsCard("进程优先级",
-                "给游戏进程分配更多（或更少）的 CPU 时间。切到「高」可缓解大型整合包加载卡顿；"
-                        + "「实时」会抢占系统关键线程，可能让鼠标键盘卡顿，不建议长期使用。仅下次启动游戏时应用",
+        return PageKit.settingsCard(I18N.get("advanced.t0039"),
+                I18N.get("advanced.t0111"),
                 priorityCombo);
     }
 
@@ -296,12 +292,10 @@ public final class AdvancedPage {
             if (val == null) return;
             host.config().put(LauncherVisibility.KEY, LauncherVisibility.valueOfLabel(val));
             host.saveConfig();
-            host.ui().toast("启动器可见性: " + val);
+            host.ui().toast(I18N.get("advanced.k0002", val));
         });
-        return PageKit.settingsCard("启动器可见性",
-                "游戏窗口出现后启动器怎么处理：保持不变 / 立即关闭 / 隐藏并在游戏退出后自动关闭或重新打开 / 最小化。"
-                        + "选「立即关闭」或「隐藏后自动关闭」时启动器会真的退出（游戏继续运行不受影响），"
-                        + "想再看启动器的话重新打开即可",
+        return PageKit.settingsCard(I18N.get("advanced.t0040"),
+                I18N.get("advanced.t0112"),
                 visibilityCombo);
     }
 
@@ -309,7 +303,7 @@ public final class AdvancedPage {
 
     private Node gameLangCard() {
         ComboBox<String> gameLangCombo = new ComboBox<>();
-        String playerFollow = "不修改（跟随游戏内设置）";
+        String playerFollow = I18N.get("advanced.t0041");
         gameLangCombo.getItems().add(playerFollow);
         gameLangCombo.getItems().addAll(GameLanguage.LANGUAGE_MAP.keySet());
         String curGameLang = host.config().getOrDefault("GameLanguage", "");
@@ -323,10 +317,10 @@ public final class AdvancedPage {
             boolean follow = playerFollow.equals(val);
             host.config().put("GameLanguage", follow ? "" : GameLanguage.getCodeByDisplayName(val));
             host.saveConfig();
-            host.ui().toast("游戏语言: " + (follow ? "不修改" : val));
+            host.ui().toast(I18N.get("advanced.k0007", (follow ? I18N.get("advanced.t0042") : val)));
         });
-        return PageKit.settingsCard("游戏语言",
-                "启动前写入游戏 options.txt 的 lang 字段；单个版本可在「版本独立设置」页覆盖", gameLangCombo);
+        return PageKit.settingsCard(I18N.get("advanced.t0043"),
+                I18N.get("advanced.t0044"), gameLangCombo);
     }
 
     private Node versionIsolationCard() {
@@ -334,9 +328,9 @@ public final class AdvancedPage {
         viToggle.setOnAction(e -> {
             host.config().put("VersionIsolation", String.valueOf(viToggle.isSelected()));
             host.saveConfig();
-            host.ui().toast("版本隔离: " + (viToggle.isSelected() ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("advanced.k0008", (viToggle.isSelected() ? I18N.get("advanced.t0045") : I18N.get("advanced.t0046"))));
         });
-        return PageKit.settingsCard("版本隔离", "每个版本使用独立的游戏目录（全局默认）", viToggle);
+        return PageKit.settingsCard(I18N.get("advanced.t0047"), I18N.get("advanced.t0048"), viToggle);
     }
 
     private Node quickSaveCard() {
@@ -344,12 +338,12 @@ public final class AdvancedPage {
         quickSaveToggle.setOnAction(e -> {
             host.config().put("HomeQuickLaunchSave", String.valueOf(quickSaveToggle.isSelected()));
             host.saveConfig();
-            host.ui().toast("主页快速进入存档: " + (quickSaveToggle.isSelected() ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("advanced.k0009", (quickSaveToggle.isSelected() ? I18N.get("advanced.t0049") : I18N.get("advanced.t0050"))));
             // 立即重建主页（当前停留在主页时原地刷新）
             host.refreshHomePage();
         });
-        return PageKit.settingsCard("主页快速进入存档",
-                "在主页显示存档列表，点击即可启动游戏并快速进入对应存档（1.20.2+ 直接进存档，旧版本仅启动游戏）",
+        return PageKit.settingsCard(I18N.get("advanced.t0051"),
+                I18N.get("advanced.t0052"),
                 quickSaveToggle);
     }
 
@@ -358,15 +352,15 @@ public final class AdvancedPage {
         TextField gameArgsField = new TextField(curGameArgs);
         gameArgsField.getStyleClass().add("input-field");
         gameArgsField.setPrefWidth(300);
-        Button saveGameArgs = AppIcons.button("save", "保存");
+        Button saveGameArgs = AppIcons.button("save", I18N.get("advanced.t0053"));
         saveGameArgs.getStyleClass().add("btn-primary");
         saveGameArgs.setOnAction(e -> {
             host.config().put("GameArgs", gameArgsField.getText());
             host.saveConfig();
-            host.ui().toast("游戏参数已保存");
+            host.ui().toast(I18N.get("advanced.t0054"));
         });
         HBox gameArgsRow = new HBox(10, gameArgsField, saveGameArgs);
-        return PageKit.settingsCard("游戏参数", "传递给 Minecraft 的额外参数（全局默认）", gameArgsRow);
+        return PageKit.settingsCard(I18N.get("advanced.t0055"), I18N.get("advanced.t0056"), gameArgsRow);
     }
 
     private Node preLaunchCard() {
@@ -374,15 +368,15 @@ public final class AdvancedPage {
         TextField preField = new TextField(curPre);
         preField.getStyleClass().add("input-field");
         preField.setPrefWidth(300);
-        Button savePre = AppIcons.button("save", "保存");
+        Button savePre = AppIcons.button("save", I18N.get("advanced.t0057"));
         savePre.getStyleClass().add("btn-primary");
         savePre.setOnAction(e -> {
             host.config().put("PreLaunchCommand", preField.getText());
             host.saveConfig();
-            host.ui().toast("启动前命令已保存");
+            host.ui().toast(I18N.get("advanced.t0058"));
         });
         HBox preRow = new HBox(10, preField, savePre);
-        return PageKit.settingsCard("启动前命令", "游戏启动前执行的系统命令（全局默认）", preRow);
+        return PageKit.settingsCard(I18N.get("advanced.t0059"), I18N.get("advanced.t0060"), preRow);
     }
 
     private Node postExitCard() {
@@ -390,15 +384,15 @@ public final class AdvancedPage {
         TextField postField = new TextField(curPost);
         postField.getStyleClass().add("input-field");
         postField.setPrefWidth(300);
-        Button savePost = AppIcons.button("save", "保存");
+        Button savePost = AppIcons.button("save", I18N.get("advanced.t0061"));
         savePost.getStyleClass().add("btn-primary");
         savePost.setOnAction(e -> {
             host.config().put("PostExitCommand", postField.getText());
             host.saveConfig();
-            host.ui().toast("退出后命令已保存");
+            host.ui().toast(I18N.get("advanced.t0062"));
         });
         HBox postRow = new HBox(10, postField, savePost);
-        return PageKit.settingsCard("退出后命令", "游戏退出后执行的系统命令（全局默认）", postRow);
+        return PageKit.settingsCard(I18N.get("advanced.t0063"), I18N.get("advanced.t0064"), postRow);
     }
 
     // —— 性能与校验 —— //
@@ -408,10 +402,10 @@ public final class AdvancedPage {
         parallelToggle.setOnAction(e -> {
             host.config().put(ParallelLaunchManager.CONFIG_KEY, String.valueOf(parallelToggle.isSelected()));
             host.saveConfig();
-            host.ui().toast("并行资源准备: " + (parallelToggle.isSelected() ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("advanced.k0010", (parallelToggle.isSelected() ? I18N.get("advanced.t0065") : I18N.get("advanced.t0066"))));
         });
-        return PageKit.settingsCard("并行资源准备",
-                "启动时同时补全原生库与游戏资源，缩短启动等待时间", parallelToggle);
+        return PageKit.settingsCard(I18N.get("advanced.t0067"),
+                I18N.get("advanced.t0068"), parallelToggle);
     }
 
     private Node parallelVerifyCard() {
@@ -419,10 +413,10 @@ public final class AdvancedPage {
         parallelVerifyToggle.setOnAction(e -> {
             host.config().put(VerifySettings.KEY_PARALLEL, String.valueOf(parallelVerifyToggle.isSelected()));
             host.saveConfig();
-            host.ui().toast("并行文件校验: " + (parallelVerifyToggle.isSelected() ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("advanced.k0011", (parallelVerifyToggle.isSelected() ? I18N.get("advanced.t0069") : I18N.get("advanced.t0070"))));
         });
-        return PageKit.settingsCard("并行文件校验",
-                "多线程校验已存在的资源文件，加快启动校验速度", parallelVerifyToggle);
+        return PageKit.settingsCard(I18N.get("advanced.t0071"),
+                I18N.get("advanced.t0072"), parallelVerifyToggle);
     }
 
     private Node streamingSha1Card() {
@@ -430,10 +424,10 @@ public final class AdvancedPage {
         streamingSha1Toggle.setOnAction(e -> {
             host.config().put(VerifySettings.KEY_STREAMING, String.valueOf(streamingSha1Toggle.isSelected()));
             host.saveConfig();
-            host.ui().toast("流式哈希校验: " + (streamingSha1Toggle.isSelected() ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("advanced.k0012", (streamingSha1Toggle.isSelected() ? I18N.get("advanced.t0073") : I18N.get("advanced.t0074"))));
         });
-        return PageKit.settingsCard("流式哈希校验",
-                "分块读取计算文件哈希，降低大文件内存占用", streamingSha1Toggle);
+        return PageKit.settingsCard(I18N.get("advanced.t0075"),
+                I18N.get("advanced.t0076"), streamingSha1Toggle);
     }
 
     private Node fastVerifyCard() {
@@ -441,10 +435,10 @@ public final class AdvancedPage {
         fastVerifyToggle.setOnAction(e -> {
             host.config().put(VerifySettings.KEY_FAST, String.valueOf(fastVerifyToggle.isSelected()));
             host.saveConfig();
-            host.ui().toast("快速校验: " + (fastVerifyToggle.isSelected() ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("advanced.k0013", (fastVerifyToggle.isSelected() ? I18N.get("advanced.t0077") : I18N.get("advanced.t0078"))));
         });
-        return PageKit.settingsCard("快速校验（跳过哈希）",
-                "文件大小一致即视为完整，不计算哈希；下载时仍做完整性校验", fastVerifyToggle);
+        return PageKit.settingsCard(I18N.get("advanced.t0079"),
+                I18N.get("advanced.t0080"), fastVerifyToggle);
     }
 
     private Node stateCacheCard() {
@@ -452,33 +446,54 @@ public final class AdvancedPage {
         stateCacheToggle.setOnAction(e -> {
             host.config().put(VerifySettings.KEY_STATE_CACHE, String.valueOf(stateCacheToggle.isSelected()));
             host.saveConfig();
-            host.ui().toast("校验状态缓存: " + (stateCacheToggle.isSelected() ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("advanced.k0014", (stateCacheToggle.isSelected() ? I18N.get("advanced.t0081") : I18N.get("advanced.t0082"))));
         });
-        return PageKit.settingsCard("校验状态缓存",
-                "记住上次校验通过且之后未被修改的文件，二次补全不再重复计算哈希，可大幅加快启动校验"
-                        + "（仅在「快速校验」关闭时生效；关闭本项则每次都完整校验）", stateCacheToggle);
+        return PageKit.settingsCard(I18N.get("advanced.t0083"),
+                I18N.get("advanced.t0113"), stateCacheToggle);
     }
 
     // —— 登录 —— //
 
     private Node loginModeCard() {
+        // 下拉项直接承载配置值（MODE_LAUNCH / MODE_STARTUP），显示名走 cellFactory。
+        // 旧实现存的是展示文案，再用中文 equals 反推配置值——界面语言一换就永远不成立，
+        // 静默登录模式会被悄悄写成另一个值，且不报任何错。
         ComboBox<String> loginModeCombo = new ComboBox<>();
-        loginModeCombo.getItems().addAll("启动游戏时静默登录", "开启启动器静默登录");
+        loginModeCombo.getItems().addAll(SilentLoginManager.MODE_LAUNCH, SilentLoginManager.MODE_STARTUP);
+        loginModeCombo.setCellFactory(cb -> silentLoginCell());
+        loginModeCombo.setButtonCell(silentLoginCell());
         String curLoginMode = host.config().getOrDefault(SilentLoginManager.CONFIG_KEY, SilentLoginManager.MODE_LAUNCH);
-        loginModeCombo.setValue(SilentLoginManager.MODE_LAUNCH.equalsIgnoreCase(curLoginMode)
-                ? "启动游戏时静默登录" : "开启启动器静默登录");
+        loginModeCombo.setValue(SilentLoginManager.MODE_STARTUP.equalsIgnoreCase(curLoginMode)
+                ? SilentLoginManager.MODE_STARTUP : SilentLoginManager.MODE_LAUNCH);
         loginModeCombo.getStyleClass().add("select-field");
         loginModeCombo.setOnAction(e -> {
             String val = loginModeCombo.getValue();
             if (val == null) return;
-            boolean startupMode = "开启启动器静默登录".equals(val);
+            boolean startupMode = SilentLoginManager.MODE_STARTUP.equalsIgnoreCase(val);
             host.config().put(SilentLoginManager.CONFIG_KEY,
                     startupMode ? SilentLoginManager.MODE_STARTUP : SilentLoginManager.MODE_LAUNCH);
             host.saveConfig();
-            host.ui().toast("静默登录时机: " + (startupMode ? "开启启动器时" : "启动游戏时"));
+            host.ui().toast(I18N.get("advanced.toastSilentLoginTiming",
+                    I18N.get(startupMode ? "advanced.silentLoginStartup" : "advanced.silentLoginAtLaunch")));
         });
-        return PageKit.settingsCard("静默登录时机",
-                "微软账号令牌过期时自动静默刷新：启动游戏时刷新，或开启启动器时提前刷新（启动更快）", loginModeCombo);
+        return PageKit.settingsCard(I18N.get("advanced.silentLoginTiming"),
+                I18N.get("advanced.silentLoginTimingDesc"), loginModeCombo);
+    }
+
+    /** 静默登录模式下拉的显示单元：值仍是配置值，只把值渲染成当前语言的文案 */
+    private javafx.scene.control.ListCell<String> silentLoginCell() {
+        return new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                setText(I18N.get(SilentLoginManager.MODE_STARTUP.equalsIgnoreCase(item)
+                        ? "advanced.silentLoginStartup" : "advanced.silentLoginAtLaunch"));
+            }
+        };
     }
 
     // —— 社区资源 —— //
@@ -492,25 +507,46 @@ public final class AdvancedPage {
         fileNameFormat.setOnAction(e -> {
             host.config().put("ModFileNameFormat", fileNameFormat.getValue());
             host.saveConfig();
-            host.ui().toast("文件名格式已保存");
+            host.ui().toast(I18N.get("advanced.t0084"));
         });
-        return PageKit.settingsCard("文件名格式",
-                "下载模组时写入磁盘的文件名格式（示例：「" + ModFileFormatter.FILENAME_SAMPLE + "」）", fileNameFormat);
+        return PageKit.settingsCard(I18N.get("advanced.t0085"),
+                I18N.get("advanced.k0015", ModFileFormatter.filenameSample() + "」）"), fileNameFormat);
     }
 
     private Node modDisplayStyleCard() {
+        // 下拉项承载**稳定 style key**（配置值），显示名由 cellFactory 翻译。
+        // 旧实现把中文文案直接当配置值：界面语言一变，配置里存的旧中文值
+        // 与可选项对不上，用户设置会静默丢失。normalizeStyle 负责兼容历史值。
         ComboBox<String> modDisplayStyle = new ComboBox<>();
-        modDisplayStyle.getItems().addAll(ModFileFormatter.DISPLAY_STYLES);
-        modDisplayStyle.setValue(host.config().getOrDefault("ModDisplayStyle", ModFileFormatter.DISPLAY_STYLES[0]));
+        modDisplayStyle.getItems().addAll(ModFileFormatter.DISPLAY_STYLE_KEYS);
+        modDisplayStyle.setValue(ModFileFormatter.normalizeStyle(
+                host.config().getOrDefault("ModDisplayStyle", ModFileFormatter.DISPLAY_STYLE_KEYS[0])));
+        modDisplayStyle.setCellFactory(cb -> displayStyleCell());
+        modDisplayStyle.setButtonCell(displayStyleCell());
         modDisplayStyle.getStyleClass().add("select-field");
         modDisplayStyle.setPrefWidth(PageKit.SETTINGS_CONTROL_WIDTH);
         modDisplayStyle.setOnAction(e -> {
             host.config().put("ModDisplayStyle", modDisplayStyle.getValue());
             host.saveConfig();
-            host.ui().toast("Mod 管理样式已保存");
+            host.ui().toast(I18N.get("advanced.t0086"));
         });
-        return PageKit.settingsCard("Mod 管理样式",
-                "模组列表里标题显示译名还是文件名，详情页显示另一种", modDisplayStyle);
+        return PageKit.settingsCard(I18N.get("advanced.t0087"),
+                I18N.get("advanced.t0088"), modDisplayStyle);
+    }
+
+    /** Mod 显示样式下拉的显示单元：值仍是 style key，只把 key 渲染成当前语言的文案 */
+    private static javafx.scene.control.ListCell<String> displayStyleCell() {
+        return new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                setText(I18N.get(ModFileFormatter.styleLabelKey(item)));
+            }
+        };
     }
 
     private Node ignoreQuiltCard() {
@@ -518,10 +554,10 @@ public final class AdvancedPage {
         ignoreQuiltToggle.setOnAction(e -> {
             host.config().put("IgnoreQuiltLoader", String.valueOf(ignoreQuiltToggle.isSelected()));
             host.saveConfig();
-            host.ui().toast("忽略 Quilt: " + (ignoreQuiltToggle.isSelected() ? "开启" : "关闭"));
+            host.ui().toast(I18N.get("advanced.k0016", (ignoreQuiltToggle.isSelected() ? I18N.get("advanced.t0089") : I18N.get("advanced.t0090"))));
         });
-        return PageKit.settingsCard("在显示 Mod 加载器时忽略 Quilt",
-                "开启后模组详情页与筛选里不再显示 Quilt 加载器", ignoreQuiltToggle);
+        return PageKit.settingsCard(I18N.get("advanced.t0091"),
+                I18N.get("advanced.t0092"), ignoreQuiltToggle);
     }
 
     // —— AI 配置 —— //
@@ -575,45 +611,44 @@ public final class AdvancedPage {
                     markAiChipSelected(chips.get(i), chipIds.get(i).equals(p.id()));
                 }
                 host.saveConfig();
-                host.ui().toast("已选择 " + p.name() + "，接着填 API Key 即可");
+                host.ui().toast(I18N.get("advanced.p0117", p.name()));
             });
             markAiChipSelected(chip, p.id().equalsIgnoreCase(curProvider));
             providerRow.getChildren().add(chip);
         }
         VBox providerBox = new VBox(8, providerRow, PageKit.hintLabel(
-                "点图标自动填入 API 地址与推荐模型，再贴自己的 API Key 就能用；"
-                        + "地址随时可以手动改（中转站、本地推理服务都行）"));
-        root.getChildren().add(PageKit.settingsCardStacked("服务商预设",
-                "内置 " + AiProviders.ALL.size() + " 家常见服务商（图标取自启动器内置 logo）", providerBox));
+                I18N.get("advanced.t0114")));
+        root.getChildren().add(PageKit.settingsCardStacked(I18N.get("advanced.t0093"),
+                I18N.get("advanced.p0118", AiProviders.ALL.size()), providerBox));
 
         // 2. API 地址 //
-        Button saveAiApi = AppIcons.button("save", "保存");
+        Button saveAiApi = AppIcons.button("save", I18N.get("advanced.t0094"));
         saveAiApi.getStyleClass().add("btn-primary");
         saveAiApi.setOnAction(e -> {
             host.config().put(AiConfig.KEY_BASE_URL, urlField.getText().trim());
             host.saveConfig();
-            host.ui().toast("AI API 地址已保存");
+            host.ui().toast(I18N.get("advanced.t0095"));
         });
         HBox aiApiRow = new HBox(10, urlField, saveAiApi);
         aiApiRow.setAlignment(Pos.CENTER_LEFT);
-        root.getChildren().add(PageKit.settingsCard("API 地址",
-                "OpenAI 兼容接口基址（不含 /chat/completions），例如 https://api.deepseek.com/v1", aiApiRow));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("advanced.t0096"),
+                I18N.get("advanced.t0097"), aiApiRow));
 
         // 3. API Key //
-        Button saveAiApiKey = AppIcons.button("save", "保存");
+        Button saveAiApiKey = AppIcons.button("save", I18N.get("advanced.t0098"));
         saveAiApiKey.getStyleClass().add("btn-primary");
         saveAiApiKey.setOnAction(e -> {
             host.config().put(AiConfig.KEY_API_KEY, keyField.getText().trim());
             host.saveConfig();
-            host.ui().toast("AI API Key 已保存");
+            host.ui().toast(I18N.get("advanced.t0099"));
         });
         HBox aiapiKeyRow = new HBox(10, keyField, saveAiApiKey);
         aiapiKeyRow.setAlignment(Pos.CENTER_LEFT);
         root.getChildren().add(PageKit.settingsCard("API Key",
-                "服务商控制台申请的密钥：只写在本机 starlight-client.ini，只会发给你填写的接口地址", aiapiKeyRow));
+                I18N.get("advanced.t0100"), aiapiKeyRow));
 
         // 4. 模型（内置伪弹窗选择，支持在线获取模型列表） //
-        Button pickModel = AppIcons.button("list", "选择模型");
+        Button pickModel = AppIcons.button("list", I18N.get("advanced.t0101"));
         pickModel.getStyleClass().add("btn-primary");
         pickModel.setMinWidth(Region.USE_PREF_SIZE);
         pickModel.setOnAction(e -> AiModelPickerDialog.show(host,
@@ -627,22 +662,22 @@ public final class AdvancedPage {
                     AiProviders.Provider match = AiProviders.matchByBaseUrl(urlField.getText());
                     if (match != null) host.config().put(AiConfig.KEY_PROVIDER, match.id());
                     host.saveConfig();
-                    host.ui().toast("已选择模型: " + picked);
+                    host.ui().toast(I18N.get("advanced.k0003", picked));
                 }));
 
-        Button saveAiModel = AppIcons.button("save", "保存");
+        Button saveAiModel = AppIcons.button("save", I18N.get("advanced.t0102"));
         saveAiModel.getStyleClass().add("btn-primary");
         saveAiModel.setOnAction(e -> {
             host.config().put(AiConfig.KEY_MODEL, modelField.getText().trim());
             host.saveConfig();
-            host.ui().toast("AI 模型已保存");
+            host.ui().toast(I18N.get("advanced.t0103"));
         });
 
         HBox modelRow = new HBox(10, modelField, pickModel, saveAiModel);
         modelRow.setAlignment(Pos.CENTER_LEFT);
         VBox modelBox = new VBox(8, modelRow, PageKit.hintLabel(aiConfigSummary()));
-        root.getChildren().add(PageKit.settingsCardStacked("模型",
-                "「AI 分析错误脚本」（崩溃日志诊断）时调用的模型；不确定就点「选择模型」在线获取列表",
+        root.getChildren().add(PageKit.settingsCardStacked(I18N.get("advanced.t0104"),
+                I18N.get("advanced.t0105"),
                 modelBox));
     }
 
@@ -680,7 +715,7 @@ public final class AdvancedPage {
         chip.setMinWidth(84);
         chip.getStyleClass().add("theme-option");   // 复用主题选择器的悬停 / 主题色样式
         chip.setCursor(Cursor.HAND);
-        Tooltip.install(chip, new Tooltip(p.name() + "\n" + p.baseUrl() + "\n推荐模型：" + p.defaultModel()));
+        Tooltip.install(chip, new Tooltip(I18N.get("advanced.r0001", p.name(), p.baseUrl(), p.defaultModel())));
         return chip;
     }
 
@@ -701,15 +736,15 @@ public final class AdvancedPage {
         String url = host.config().getOrDefault(AiConfig.KEY_BASE_URL, "").trim();
         String model = host.config().getOrDefault(AiConfig.KEY_MODEL, "").trim();
         if (url.isEmpty() && model.isEmpty()) {
-            return "默认留空：不配置就不会启用 AI 诊断，也不会把任何日志发出去";
+            return I18N.get("advanced.t0106");
         }
         if (url.isEmpty()) {
-            return "还差 API 地址：点上方的服务商图标可以一键填入";
+            return I18N.get("advanced.t0107");
         }
         if (model.isEmpty()) {
-            return "还差模型：点「选择模型」挑一个，或直接手打模型名";
+            return I18N.get("advanced.t0108");
         }
-        return "已配置：" + url + " · " + model + "（崩溃诊断时会把日志发送给该服务商）";
+        return I18N.get("advanced.p0119", url, model);
     }
 
 }

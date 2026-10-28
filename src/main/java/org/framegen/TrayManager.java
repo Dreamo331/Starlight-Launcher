@@ -5,6 +5,8 @@
  */
 package org.framegen;
 
+
+import com.example.starlight.util.I18N;
 import java.awt.AWTException;
 import java.awt.Color;
 import java.awt.Font;
@@ -55,7 +57,7 @@ public class TrayManager {
         try {
             this.tray = SystemTray.getSystemTray();
             Image image = this.createTrayIcon();
-            this.trayIcon = new TrayIcon(image, "Starlight 帧生成器", this.createPopupMenu());
+            this.trayIcon = new TrayIcon(image, I18N.get("framegen.t0082"), this.createPopupMenu());
             this.trayIcon.setImageAutoSize(true);
             this.trayIcon.addMouseListener(new MouseAdapter(){
                 @Override
@@ -69,7 +71,7 @@ public class TrayManager {
             this.tray.add(this.trayIcon);
             this.active = true;
             System.out.println("[FrameGenTray] 托盘图标已添加");
-            this.trayIcon.displayMessage("Starlight 帧生成器", "帧生成系统托盘已启用（可在启动器页面关闭）", TrayIcon.MessageType.INFO);
+            this.trayIcon.displayMessage(I18N.get("framegen.t0124"), I18N.get("framegen.t0125"), TrayIcon.MessageType.INFO);
 
             this.tooltipTimer = new Timer(3000, actionEvent -> this.updateTooltip());
             this.tooltipTimer.start();
@@ -133,8 +135,8 @@ public class TrayManager {
      * AWT 托盘弹出菜单若使用默认字体（不含中文字形），中文会渲染成“方块”。
      */
     private static Font resolveMenuFont() {
-        String test = "帧生成倍率中文测试";
-        String[] preferred = {"Microsoft YaHei UI", "Microsoft YaHei", "微软雅黑", "PingFang SC", "SimHei", "黑体", "SimSun", "宋体"};
+        String test = I18N.get("framegen.t0083");
+        String[] preferred = {"Microsoft YaHei UI", "Microsoft YaHei", I18N.get("framegen.t0126"), "PingFang SC", "SimHei", I18N.get("framegen.t0127"), "SimSun", I18N.get("framegen.t0128")};
         for (String name : preferred) {
             try {
                 Font f = new Font(name, Font.PLAIN, 12);
@@ -185,7 +187,7 @@ public class TrayManager {
     private PopupMenu createPopupMenu() {
         PopupMenu popupMenu = new PopupMenu();
 
-        MenuItem menuItemOpen = new MenuItem("打开帧生成器页面");
+        MenuItem menuItemOpen = new MenuItem(I18N.get("framegen.t0084"));
         menuItemOpen.addActionListener(actionEvent -> {
             if (this.openPageAction != null) {
                 this.openPageAction.run();
@@ -194,9 +196,9 @@ public class TrayManager {
         popupMenu.add(menuItemOpen);
         popupMenu.addSeparator();
 
-        Menu menu = new Menu("帧生成倍率");
+        Menu menu = new Menu(I18N.get("framegen.t0085"));
         int[] nArray = new int[]{0, 2, 4, 6, 8};
-        String[] stringArray = new String[]{"关闭", "2x", "4x", "6x", "8x"};
+        String[] stringArray = new String[]{I18N.get("framegen.t0086"), "2x", "4x", "6x", "8x"};
         for (int i = 0; i < nArray.length; ++i) {
             int n = nArray[i];
             MenuItem menuItem = new MenuItem(stringArray[i]);
@@ -206,9 +208,9 @@ public class TrayManager {
         popupMenu.add(menu);
         popupMenu.addSeparator();
 
-        MenuItem menuItemAbout = new MenuItem("关于");
+        MenuItem menuItemAbout = new MenuItem(I18N.get("framegen.t0087"));
         menuItemAbout.addActionListener(actionEvent -> this.showMessage(
-                "关于", "Starlight 帧生成器（已整合进启动器）\n自动监听 Minecraft 进程，支持 2x/4x/6x/8x 帧生成", TrayIcon.MessageType.INFO));
+                I18N.get("framegen.t0129"), I18N.get("framegen.t0130"), TrayIcon.MessageType.INFO));
         popupMenu.add(menuItemAbout);
 
         // 关键：为菜单及所有子项设置可显示中文的字体，避免文字渲染成方块
@@ -220,10 +222,10 @@ public class TrayManager {
         if (this.trayIcon == null) {
             return;
         }
-        String string = this.monitor.isGameDetected() ? "游戏运行中" : "等待游戏";
+        String string = this.monitor.isGameDetected() ? I18N.get("framegen.t0131") : I18N.get("framegen.t0132");
         int n = this.controller.getCurrentMultiplier();
-        Object object = n == 0 ? "未启用" : n + "x";
-        this.trayIcon.setToolTip("Starlight 帧生成器 | " + string + " | 帧生成: " + (String)object);
+        Object object = n == 0 ? I18N.get("framegen.t0088") : n + "x";
+        this.trayIcon.setToolTip(I18N.get("tray.r0001", string, (String) object));
     }
 
     private Image createTrayIcon() {

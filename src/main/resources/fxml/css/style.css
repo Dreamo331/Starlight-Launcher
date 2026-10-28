@@ -56,6 +56,13 @@
     -sl-ok: #16a34a;          /* 正常 / 已启用 */
     -sl-idle: #6b7280;        /* 未启用 / 待机 */
     -sl-track: rgba(0,0,0,0.10);  /* 进度条轨道底色（跟随主题，深色下自动换成浅色） */
+
+    /* 首页「启动游戏」线框胶囊按钮（浅色：白底细边框 + 深石板灰字） */
+    -sl-launch-border: #cbd5e1;
+    -sl-launch-text: #334155;
+    -sl-launch-hover-border: #94a3b8;
+    -sl-launch-hover-text: #0f172a;
+    -sl-launch-hover-bg: #f1f5f9;
 }
 
 .root.light {
@@ -65,6 +72,12 @@
     -sl-ok: #16a34a;
     -sl-idle: #6b7280;
     -sl-track: rgba(0,0,0,0.10);
+
+    -sl-launch-border: #cbd5e1;
+    -sl-launch-text: #334155;
+    -sl-launch-hover-border: #94a3b8;
+    -sl-launch-hover-text: #0f172a;
+    -sl-launch-hover-bg: #f1f5f9;
 }
 
 .root.dark {
@@ -74,6 +87,13 @@
     -sl-ok: #4ade80;
     -sl-idle: #64748b;
     -sl-track: rgba(255,255,255,0.14);
+
+    /* 深色主题：细边框换成浅色半透明，字色 #cbd5e1，悬停提亮 */
+    -sl-launch-border: rgba(255,255,255,0.26);
+    -sl-launch-text: #cbd5e1;
+    -sl-launch-hover-border: rgba(255,255,255,0.55);
+    -sl-launch-hover-text: #f8fafc;
+    -sl-launch-hover-bg: rgba(255,255,255,0.06);
 }
 
 /* ===================================================================
@@ -443,6 +463,63 @@
     -fx-text-fill: #3b82f6;
 }
 
+/* ===== 顶部导航：搜索胶囊 =====
+ * 收起态只有一颗放大镜，点一下展开成输入框、失焦自动收回（宽度动画在 NavSearchPill 里做）。
+ * 配色与设置页「游戏目录」的搜索胶囊同源（.gamedir-search），只是挂在不参与页签布局的浮层上。 */
+.nav-search {
+    -fx-background-color: #f8fafc;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    /* 光标不写在这里：代码里按展开态切 HAND / TEXT，CSS 会把它盖回去 */
+}
+
+.nav-search:hover {
+    -fx-border-color: #cbd5e1;
+}
+
+.nav-search.expanded {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #3b82f6;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.22), 9, 0.0, 0, 0);
+}
+
+.nav-search-icon {
+    -fx-padding: 0;
+    -fx-text-fill: #64748b;
+}
+
+.nav-search.expanded .nav-search-icon {
+    -fx-text-fill: #3b82f6;
+}
+
+.nav-search-input {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-text-fill: #0f172a;
+    -fx-prompt-text-fill: #94a3b8;
+    -fx-font-size: 13px;
+    -fx-padding: 0;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* 展开态右侧的 Bing 标识：透明底，hover 才垫一层淡蓝，告诉用户「这里能点」 */
+.nav-search-bing {
+    -fx-background-color: transparent;
+    -fx-background-radius: 999;
+    -fx-border-width: 0;
+    -fx-padding: 1;
+    -fx-cursor: hand;
+}
+
+.nav-search-bing:hover {
+    -fx-background-color: rgba(59,130,246,0.12);
+}
+
 /* ===== 主布局 ===== */
 .main-body {
     -fx-background-color: transparent;
@@ -693,21 +770,109 @@
     -fx-opacity: 1;
 }
 
+/* 启动游戏：极简线框胶囊（透明底 + 细边框 + 深色字；圆角 = 高度一半，全胶囊） */
 .home-launch-btn {
-    -fx-background-color: #3b82f6;
-    -fx-text-fill: white;
-    -fx-font-size: 14px;
-    -fx-font-weight: 700;
+    -fx-background-color: transparent;
+    -fx-background-radius: 999;
+    -fx-border-color: -sl-launch-border;
+    -fx-border-width: 1.5;
+    -fx-border-radius: 999;
+    -fx-text-fill: -sl-launch-text;
+    -fx-font-size: 15px;
+    -fx-font-weight: 500;
     -fx-padding: 14 0;
-    -fx-background-radius: 10;
+    -fx-graphic-text-gap: 8;
     -fx-cursor: hand;
-    -fx-letter-spacing: 0.5px;
+    -fx-letter-spacing: 1px;
 }
 
+/* 悬停只做线框加深 + 文字加深，不位移、不加阴影 */
 .home-launch-btn:hover {
-    -fx-background-color: #2563eb;
-    -fx-translate-y: -2px;
-    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.4), 20, 0, 0, 6);
+    -fx-background-color: -sl-launch-hover-bg;
+    -fx-border-color: -sl-launch-hover-border;
+    -fx-text-fill: -sl-launch-hover-text;
+}
+
+.home-launch-btn:pressed {
+    -fx-background-color: -sl-launch-hover-bg;
+    -fx-border-color: -sl-launch-hover-border;
+    -fx-text-fill: -sl-launch-hover-text;
+    -fx-opacity: 0.88;
+}
+
+/* ===== 启动按钮的状态动效（收圈 / 加载环 / 对勾，逻辑见 LaunchPillButton） ===== */
+
+/* 文案与图标：颜色跟着主题走；悬停加深；启动中 / 成功时按钮收成圆形，文案本来就淡出 */
+.home-launch-caption {
+    -fx-text-fill: -sl-launch-text;
+    -fx-font-size: 15px;
+    -fx-font-weight: 500;
+}
+
+.home-launch-btn:hover .home-launch-caption {
+    -fx-text-fill: -sl-launch-hover-text;
+}
+
+.home-launch-btn.is-loading .home-launch-caption,
+.home-launch-btn.is-success .home-launch-caption {
+    -fx-text-fill: -sl-launch-text;
+}
+
+/* 加载环 / 对勾只定线宽，颜色由 Java 绑定到按钮的 -fx-text-fill（跟随主题与状态） */
+.home-launch-ring-track,
+.home-launch-ring {
+    -fx-fill: transparent;
+    -fx-stroke-width: 2;
+}
+
+.home-launch-ring {
+    -fx-stroke-line-cap: round;
+}
+
+.home-launch-check {
+    -fx-fill: transparent;
+    -fx-stroke-width: 2;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+
+.home-launch-btn.is-loading {
+    -fx-cursor: default;
+}
+
+/* 启动中不响应悬停变色：线框保持不动，只转加载环 */
+.home-launch-btn.is-loading:hover {
+    -fx-background-color: transparent;
+    -fx-border-color: -sl-launch-border;
+    -fx-text-fill: -sl-launch-text;
+}
+
+/* 成功：绿色线框 + 绿色对勾（停留 1.2s 后由 Java 展开回胶囊） */
+.home-launch-btn.is-success,
+.home-launch-btn.is-success:hover {
+    -fx-background-color: rgba(16,185,129,0.05);
+    -fx-border-color: #10b981;
+    -fx-text-fill: #10b981;
+    -fx-cursor: default;
+}
+
+/* 高对比度：线框与文字必须够黑（深色下够白），细边框保留 1.5px */
+.root.high-contrast .home-launch-btn {
+    -fx-border-color: #0f172a;
+    -fx-text-fill: #0f172a;
+}
+
+.root.high-contrast.dark .home-launch-btn {
+    -fx-border-color: #f8fafc;
+    -fx-text-fill: #f8fafc;
+}
+
+.root.high-contrast .home-launch-btn .home-launch-caption {
+    -fx-text-fill: #0f172a;
+}
+
+.root.high-contrast.dark .home-launch-btn .home-launch-caption {
+    -fx-text-fill: #f8fafc;
 }
 
 /* ===== 节日主题：问候语加重显示；颜色由 HomePage 按节日内联设置 ===== */
@@ -721,6 +886,16 @@
     -fx-text-fill: #1f2937;
     -fx-opacity: 0.8;
     -fx-padding: 0 0 8 0;
+}
+
+/* 卡片标题栏：标题靠左、操作按钮靠右同一行；标题去掉底部留白，由标题栏统一控制间距 */
+.home-card-header {
+    -fx-alignment: center-left;
+    -fx-spacing: 8;
+}
+
+.home-card-header .home-card-title {
+    -fx-padding: 0;
 }
 
 .home-stats-row {
@@ -751,8 +926,12 @@
     -fx-text-fill: #1f2937;
 }
 
+/* 轨道宽度必须锁死：VBox 默认把子节点拉伸到指标列宽，轨道变宽后填充段仍按 80px 换算，
+   100% 时也只能填到 80/100，看起来永远「加载不满」 */
 .home-stat-bar {
     -fx-pref-width: 80px;
+    -fx-min-width: 80px;
+    -fx-max-width: 80px;
     -fx-min-height: 4px;
     -fx-max-height: 4px;
     -fx-background-color: rgba(0,0,0,0.1);
@@ -1470,6 +1649,26 @@
     -fx-font-weight: 700;
 }
 
+/* 高对比：搜索胶囊描边加粗、图标与文字纯黑 */
+.root.high-contrast .nav-search {
+    -fx-background-color: #ffffff;
+    -fx-border-color: rgba(0,0,0,0.55);
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast .nav-search.expanded {
+    -fx-border-color: #000000;
+}
+
+.root.high-contrast .nav-search-icon {
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .nav-search-input {
+    -fx-text-fill: #000000;
+    -fx-prompt-text-fill: #333333;
+}
+
 .root.high-contrast .settings-card-desc,
 .root.high-contrast .home-ver-desc,
 .root.high-contrast .home-recent-time,
@@ -1565,6 +1764,26 @@
     -fx-text-fill: #ffffff;
 }
 
+/* 高对比深色：搜索胶囊黑底白描边 */
+.root.high-contrast.dark .nav-search {
+    -fx-background-color: #000000;
+    -fx-border-color: rgba(255,255,255,0.60);
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast.dark .nav-search.expanded {
+    -fx-border-color: #ffffff;
+}
+
+.root.high-contrast.dark .nav-search-icon {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .nav-search-input {
+    -fx-text-fill: #ffffff;
+    -fx-prompt-text-fill: #cccccc;
+}
+
 .root.high-contrast.dark .settings-card-desc,
 .root.high-contrast.dark .home-ver-desc,
 .root.high-contrast.dark .home-recent-time,
@@ -1624,6 +1843,39 @@
 
 .root.dark .tab-item:hover {
     -fx-background-color: rgba(255,255,255,0.06);
+}
+
+/* 深色态搜索胶囊：收起是低调的半透明玻璃，展开才亮蓝描边 */
+.root.dark .nav-search {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+
+.root.dark .nav-search:hover {
+    -fx-border-color: rgba(255,255,255,0.22);
+}
+
+.root.dark .nav-search.expanded {
+    -fx-background-color: #102a44;
+    -fx-border-color: #60a5fa;
+    -fx-effect: dropshadow(gaussian, rgba(96,165,250,0.30), 10, 0.0, 0, 0);
+}
+
+.root.dark .nav-search-icon {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .nav-search.expanded .nav-search-icon {
+    -fx-text-fill: #60a5fa;
+}
+
+.root.dark .nav-search-input {
+    -fx-text-fill: #ffffff;
+    -fx-prompt-text-fill: #94a3b8;
+}
+
+.root.dark .nav-search-bing:hover {
+    -fx-background-color: rgba(96,165,250,0.22);
 }
 
 /* 顶部导航深色态：收缩背景层与页签水波纹 */
@@ -4772,4 +5024,1756 @@
 }
 .root.dark .skin-config-scroll .scroll-bar .thumb {
     -fx-background-color: rgba(148,163,184,0.30);
+}
+
+/* ===================================================================
+ * 账户页（设置 → 账户）：按 references/html/2.0.html 重做
+ * 结构：问候标题 + 搜索/筛选（可折叠）→ 卡片壳（列表/详情/登录方式/微软/离线/第三方/加载）
+ *      → 「添加新的账户」（可折叠）→ 条款。
+ * 文字色尽量走 -sl-* 变量（自动跟随深浅主题），只有背景/边框/渐变需要额外写深色覆盖。
+ * =================================================================== */
+
+.account-page-column { }
+
+/* 卡片正上方的问候标题（无账号：选择或注册一个账号；有账号：你好，<名字>） */
+.account-greeting {
+    -fx-font-size: 21px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -sl-text;
+    -fx-padding: 0 0 2 0;
+}
+
+/* 搜索框：图标叠在输入框左侧 */
+.account-search-box { }
+.account-search-field {
+    -fx-padding: 0 14 0 40;
+    -fx-pref-height: 36;
+}
+
+/* 类型筛选 chip */
+.account-filters { }
+.filter-chip {
+    -fx-background-color: rgba(255,255,255,0.75);
+    -fx-text-fill: -sl-text-dim;
+    -fx-font-size: 12.5px;
+    -fx-padding: 5 12;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: rgba(0,0,0,0.08);
+    -fx-border-width: 1;
+    -fx-cursor: hand;
+}
+.filter-chip:hover { -fx-background-color: #f3f4f6; -fx-text-fill: -sl-text; }
+.filter-chip:selected {
+    -fx-background-color: #3b82f6;
+    -fx-border-color: #3b82f6;
+    -fx-text-fill: white;
+}
+.filter-chip:selected:hover { -fx-background-color: #2f6fdd; -fx-border-color: #2f6fdd; }
+
+/* ===== 卡片壳 ===== */
+.account-card-shell {
+    -fx-background-color: rgba(255,255,255,0.55);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 10, 0, 0, 2);
+}
+
+/* ===== 列表 ===== */
+.account-list-pane { }
+.account-list-scroll { -fx-background-color: transparent; }
+.account-rows { -fx-background-color: transparent; }
+
+.account-row {
+    -fx-padding: 11 16;
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-border-width: 0 0 1 0;
+    -fx-background-radius: 0;
+}
+.account-row:hover { -fx-background-color: rgba(0,0,0,0.03); }
+/* 行尾：默认只有箭头，悬停整行时箭头让位、操作按钮淡入（对齐 HTML 的 .actions / .chevron） */
+.account-row-actions { -fx-opacity: 0; }
+.account-row-with-actions:hover .account-row-actions { -fx-opacity: 1; }
+.account-row-with-actions:hover .account-row-arrow { -fx-opacity: 0; }
+
+.account-row-name { -fx-font-size: 14px; -fx-font-weight: 500; -fx-text-fill: -sl-text; }
+.account-row-desc { -fx-font-size: 12px; -fx-text-fill: -sl-text-faint; }
+
+/* 「当前使用中」绿标 */
+.account-status-tag {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #047857;
+    -fx-background-color: #ecfdf5;
+    -fx-background-radius: 999;
+    -fx-padding: 1 8;
+}
+
+/* 空态 */
+.account-empty-state {
+    -fx-font-size: 13px;
+    -fx-text-fill: -sl-text-faint;
+    -fx-padding: 36 20;
+    -fx-alignment: center;
+    -fx-max-width: infinity;
+}
+
+/* 列表滚动渐隐遮罩 */
+.account-fade-top, .account-fade-bottom {
+    -fx-min-height: 24;
+    -fx-pref-height: 24;
+    -fx-max-height: 24;
+    -fx-max-width: infinity;
+}
+.account-fade-top { -fx-background-color: linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,0)); }
+.account-fade-bottom { -fx-background-color: linear-gradient(to top, rgba(255,255,255,0.95), rgba(255,255,255,0)); }
+
+/* ===== 圆形头像（底色按账号类型） ===== */
+.account-avatar {
+    -fx-min-width: 38;
+    -fx-min-height: 38;
+    -fx-max-width: 38;
+    -fx-max-height: 38;
+    -fx-background-radius: 0;
+    -fx-alignment: center;
+    -fx-font-size: 14px;
+    -fx-font-weight: 500;
+    -fx-background-color: #f3f4f6;
+    -fx-text-fill: #4b5563;
+}
+.account-avatar-ms { -fx-background-color: #e0f2fe; -fx-text-fill: #0284c7; }
+.account-avatar-offline { -fx-background-color: #f3f4f6; -fx-text-fill: #4b5563; }
+.account-avatar-third { -fx-background-color: #fef3c7; -fx-text-fill: #d97706; }
+.account-avatar-add { -fx-background-color: #f3f4f6; -fx-text-fill: #9ca3af; }
+.account-avatar-lg {
+    -fx-min-width: 60;
+    -fx-min-height: 60;
+    -fx-max-width: 60;
+    -fx-max-height: 60;
+    -fx-font-size: 22px;
+}
+
+/* 头像容器：不加圆角遮罩（真实头像按原始方形显示，字母占位同样方形） */
+.account-avatar-box { -fx-background-radius: 0; }
+
+/* ===== 图标按钮 ===== */
+.account-icon-btn {
+    -fx-background-color: white;
+    -fx-border-color: rgba(0,0,0,0.08);
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 5;
+    -fx-cursor: hand;
+    -fx-text-fill: #6b7280;
+}
+.account-icon-btn:hover { -fx-background-color: #f3f4f6; -fx-text-fill: #111827; }
+.account-icon-btn.switch { -fx-text-fill: #3b82f6; }
+.account-icon-btn.switch:hover { -fx-background-color: #eff6ff; -fx-text-fill: #2563eb; }
+.account-icon-btn.danger:hover { -fx-background-color: #fef2f2; -fx-text-fill: #ef4444; -fx-border-color: #fca5a5; }
+
+/* ===== 面板头 ===== */
+.pane-header {
+    -fx-padding: 12 16;
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-border-width: 0 0 1 0;
+}
+.pane-header-clickable { -fx-background-color: transparent; }
+.pane-header-clickable:hover { -fx-background-color: rgba(0,0,0,0.03); }
+.pane-title { -fx-font-size: 15px; -fx-font-weight: 600; -fx-text-fill: -sl-text; }
+.back-arrow { -fx-text-fill: -sl-text-dim; }
+
+/* ===== 登录方式卡片 ===== */
+.method-list { }
+.method-card {
+    -fx-padding: 14 16;
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-border-width: 0 0 1 0;
+}
+.method-card:hover { -fx-background-color: rgba(0,0,0,0.03); }
+.method-icon {
+    -fx-min-width: 42;
+    -fx-min-height: 42;
+    -fx-max-width: 42;
+    -fx-max-height: 42;
+    -fx-background-radius: 10;
+    -fx-alignment: center;
+    /* 只留图标、去掉底板：背景透明，颜色仍按登录方式区分 */
+    -fx-background-color: transparent;
+    -fx-text-fill: #4b5563;
+}
+.method-icon.ms { -fx-text-fill: #0284c7; }
+.method-icon.third { -fx-text-fill: #d97706; }
+.method-icon.offline { -fx-text-fill: #4b5563; }
+.method-title { -fx-font-size: 15px; -fx-font-weight: 500; -fx-text-fill: -sl-text; }
+.method-desc { -fx-font-size: 12.5px; -fx-text-fill: -sl-text-faint; }
+.method-chevron { -fx-opacity: 0.9; }
+
+/* ===== 详情 ===== */
+.detail-body { -fx-padding: 18 16; }
+.detail-hero { }
+.detail-name { -fx-font-size: 19px; -fx-font-weight: 600; -fx-text-fill: -sl-text; }
+.detail-type { -fx-font-size: 13px; -fx-text-fill: -sl-text-faint; }
+.detail-list {
+    -fx-background-color: rgba(255,255,255,0.4);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
+.detail-row {
+    -fx-padding: 11 14;
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-border-width: 0 0 1 0;
+}
+.detail-row .k { -fx-font-size: 13px; -fx-text-fill: -sl-text-faint; }
+.detail-row .v { -fx-font-size: 13px; -fx-text-fill: -sl-text; }
+.detail-row .v.mono {
+    -fx-font-family: "Consolas", "Menlo", "Monaco", monospace;
+    -fx-font-size: 12px;
+}
+.detail-row .v.status-on { -fx-text-fill: #16a34a; -fx-font-weight: 500; }
+.detail-row .v.status-off { -fx-text-fill: -sl-text-dim; }
+
+/* ===== 表单 ===== */
+.form-body { -fx-padding: 16; }
+.account-field { }
+.account-field-label { -fx-font-size: 12.5px; -fx-text-fill: -sl-text-dim; }
+.account-field-error { -fx-font-size: 12px; -fx-text-fill: #ef4444; }
+.input-field.invalid {
+    -fx-border-color: #ef4444;
+    -fx-effect: dropshadow(gaussian, rgba(239,68,68,0.18), 6, 0, 0, 0);
+}
+.form-actions { -fx-padding: 2 0 0 0; }
+.link-btn {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-text-fill: -sl-text-dim;
+    -fx-font-size: 12.5px;
+    -fx-padding: 6 4;
+    -fx-cursor: hand;
+    -fx-underline: true;
+}
+.link-btn:hover { -fx-text-fill: -sl-text; }
+
+/* 蓝色实心主按钮（HTML 的 .primary-btn；与本项目 .btn-primary 的白底按钮区分开） */
+.primary-btn {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-font-weight: 500;
+    -fx-padding: 0 18;
+    -fx-pref-height: 40;
+    -fx-background-radius: 10;
+    -fx-border-color: transparent;
+    -fx-cursor: hand;
+}
+.primary-btn:hover { -fx-background-color: #2f6fdd; }
+.primary-btn:disabled { -fx-opacity: 0.5; }
+.primary-btn.btn-sm { -fx-pref-height: 36; -fx-font-size: 13px; -fx-padding: 0 18; }
+
+/* ===== 长按按钮（取消类操作） ===== */
+.hold-btn {
+    -fx-background-color: white;
+    -fx-border-color: rgba(0,0,0,0.08);
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-pref-height: 40;
+    -fx-padding: 0 12;
+    -fx-cursor: hand;
+}
+.hold-btn:hover { -fx-border-color: rgba(0,0,0,0.16); }
+.hold-btn:holding { -fx-border-color: #fca5a5; }
+.hold-label { -fx-font-size: 13.5px; -fx-text-fill: -sl-text-dim; }
+.hold-btn:holding .hold-label { -fx-text-fill: #ef4444; }
+.hold-fill { -fx-background-color: rgba(239,68,68,0.16); -fx-background-radius: 10; }
+
+/* ===== 微软登录：链接 + 圆环 + 设备码 ===== */
+.ms-body { -fx-padding: 16; }
+.ms-top { }
+.link-label { -fx-font-size: 12px; -fx-text-fill: -sl-text-faint; }
+.login-link { -fx-font-size: 13.5px; -fx-text-fill: #3b82f6; }
+.ring-wrap { }
+.ring-time {
+    -fx-font-size: 17px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -sl-text;
+}
+.ring-hint { -fx-font-size: 10px; -fx-text-fill: -sl-text-faint; }
+
+.device-code-box {
+    -fx-background-color: rgba(0,0,0,0.03);
+    -fx-border-color: rgba(0,0,0,0.08);
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 12 14;
+}
+.device-code {
+    -fx-font-family: "Consolas", "Menlo", "Monaco", monospace;
+    -fx-font-size: 20px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -sl-text;
+}
+.copy-btn {
+    -fx-background-color: white;
+    -fx-border-color: rgba(0,0,0,0.08);
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-text-fill: #6b7280;
+    -fx-font-size: 12.5px;
+    -fx-padding: 5 12;
+    -fx-cursor: hand;
+}
+.copy-btn:hover { -fx-background-color: #f3f4f6; }
+.copy-btn.copied { -fx-text-fill: #10b981; -fx-border-color: #a7f3d0; -fx-background-color: #ecfdf5; }
+.ms-actions { }
+.ms-status { -fx-font-size: 12.5px; -fx-text-fill: -sl-text-dim; }
+.ms-status.error { -fx-text-fill: #ef4444; }
+
+/* ===== 「添加新的账户」按钮（卡片下方独立一块） ===== */
+.add-account {
+    -fx-background-color: rgba(255,255,255,0.55);
+    -fx-border-color: rgba(0,0,0,0.06);
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-padding: 9 16;
+}
+.add-account:hover { -fx-background-color: rgba(255,255,255,0.8); -fx-border-color: rgba(0,0,0,0.12); }
+.add-account-text { -fx-font-size: 14px; -fx-font-weight: 500; -fx-text-fill: -sl-text; }
+
+/* ===== 加载面板与全屏遮罩 ===== */
+.loading-body { -fx-padding: 34 18; }
+.loading-text { -fx-font-size: 13.5px; -fx-text-fill: -sl-text-faint; }
+.account-page-loader {
+    -fx-background-color: rgba(252,252,252,0.9);
+}
+.page-loader-inner { }
+.page-loader-title { -fx-font-size: 15px; -fx-font-weight: 500; -fx-text-fill: -sl-text; }
+.page-loader-desc { -fx-font-size: 12.5px; -fx-text-fill: -sl-text-faint; }
+
+.account-page-footer {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -sl-text-faint;
+    -fx-padding: 0;
+}
+
+/* 条款：正文唯一真源是仓库 docs/ 下的文件，这里只给两个可点的蓝色文档名（点开用浏览器查看） */
+.account-footer-plain { -fx-font-size: 11.5px; -fx-text-fill: -sl-text-faint; }
+.account-footer-link {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #3b82f6;
+    -fx-underline: true;
+    -fx-cursor: hand;
+}
+.account-footer-link:hover { -fx-text-fill: #2563eb; }
+
+/* ===== 深色主题覆盖（文字色已走 -sl-* 变量，这里只补背景/边框/渐变） ===== */
+.root.dark .account-card-shell,
+.root.dark .add-account {
+    -fx-background-color: rgba(0,0,0,0.2);
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+.root.dark .add-account:hover { -fx-background-color: rgba(0,0,0,0.32); -fx-border-color: rgba(255,255,255,0.16); }
+.root.dark .account-row { -fx-border-color: rgba(255,255,255,0.08); }
+.root.dark .account-row:hover,
+.root.dark .method-card:hover,
+.root.dark .pane-header-clickable:hover { -fx-background-color: rgba(255,255,255,0.06); }
+.root.dark .account-fade-top { -fx-background-color: linear-gradient(to bottom, rgba(30,41,59,0.95), rgba(30,41,59,0)); }
+.root.dark .account-fade-bottom { -fx-background-color: linear-gradient(to top, rgba(30,41,59,0.95), rgba(30,41,59,0)); }
+.root.dark .account-icon-btn,
+.root.dark .copy-btn,
+.root.dark .hold-btn {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.14);
+    -fx-text-fill: #cbd5e1;
+}
+.root.dark .account-icon-btn:hover,
+.root.dark .copy-btn:hover { -fx-background-color: rgba(255,255,255,0.16); -fx-text-fill: white; }
+.root.dark .account-icon-btn.danger:hover {
+    -fx-background-color: rgba(239,68,68,0.18);
+    -fx-text-fill: #fca5a5;
+    -fx-border-color: rgba(252,165,165,0.5);
+}
+.root.dark .pane-header,
+.root.dark .method-card,
+.root.dark .detail-row { -fx-border-color: rgba(255,255,255,0.08); }
+.root.dark .detail-list {
+    -fx-background-color: rgba(0,0,0,0.18);
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+.root.dark .device-code-box {
+    -fx-background-color: rgba(0,0,0,0.25);
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+.root.dark .filter-chip {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.14);
+}
+.root.dark .filter-chip:hover { -fx-background-color: rgba(255,255,255,0.14); -fx-text-fill: white; }
+.root.dark .filter-chip:selected { -fx-background-color: #3b82f6; -fx-border-color: #3b82f6; -fx-text-fill: white; }
+.root.dark .account-page-loader { -fx-background-color: rgba(13,33,55,0.9); }
+.root.dark .account-footer-link { -fx-text-fill: #60a5fa; }
+.root.dark .account-footer-link:hover { -fx-text-fill: #93c5fd; }
+
+/* ===================================================================
+ * 设置 → 游戏目录（版式/交互对齐 references/html/Contents.html）
+ *
+ * 参考稿是固定浅色页面；这里只复刻结构、尺寸与动效，颜色全部走启动器主题，
+ * 深色与高对比度在同一段里成组覆盖（与项目其它页面同一套规则）。
+ * 动效由 GameDirPage 用 JavaFX Transition 驱动，样式表不写 transition/scale。
+ * =================================================================== */
+.gamedir-panel {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 24, 0.02, 0, 8);
+}
+
+/* ---------- 顶部标题栏 ---------- */
+.gamedir-header {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent #f1f5f9 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.gamedir-panel.is-detail .gamedir-header:hover,
+.gamedir-panel.is-add .gamedir-header:hover {
+    -fx-background-color: #f8fafc;
+}
+
+.gamedir-header-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #0f172a;
+}
+
+.gamedir-back-top {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 4 8;
+    -fx-font-size: 18px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #0f172a;
+    -fx-cursor: hand;
+}
+
+/* ---------- 胶囊搜索 ---------- */
+.gamedir-search {
+    -fx-background-color: #f8fafc;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-cursor: hand;
+}
+
+.gamedir-search:hover {
+    -fx-border-color: #cbd5e1;
+}
+
+.gamedir-search.expanded {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #3b82f6;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.22), 9, 0.0, 0, 0);
+}
+
+.gamedir-search-icon {
+    -fx-padding: 0;
+    -fx-text-fill: #64748b;
+}
+
+.gamedir-search.expanded .gamedir-search-icon {
+    -fx-text-fill: #3b82f6;
+}
+
+.gamedir-search-input {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-text-fill: #0f172a;
+    -fx-prompt-text-fill: #94a3b8;
+    -fx-font-size: 13px;
+    -fx-padding: 0 2 0 0;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+.gamedir-search-clear {
+    -fx-background-color: #cbd5e1;
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 11px;
+    -fx-padding: 0;
+    -fx-background-radius: 999;
+    -fx-border-width: 0;
+    -fx-alignment: center;
+    -fx-cursor: hand;
+}
+
+.gamedir-search-clear:hover {
+    -fx-background-color: #94a3b8;
+}
+
+/* ---------- 添加按钮 / 通用按钮 ---------- */
+.gamedir-add-btn {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #0f172a;
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-padding: 0 14;
+    -fx-pref-height: 32;
+    -fx-background-radius: 6;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-cursor: hand;
+}
+
+.gamedir-add-btn:hover {
+    -fx-background-color: #f8fafc;
+    -fx-border-color: #cbd5e1;
+}
+
+/* ---------- 当前路径摘要栏 ---------- */
+.gamedir-summary {
+    -fx-background-color: #f8fafc;
+    -fx-border-color: transparent transparent #f1f5f9 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.gamedir-summary-icon {
+    -fx-padding: 0;
+    -fx-text-fill: #94a3b8;
+}
+
+.gamedir-summary-path {
+    -fx-font-size: 13px;
+    -fx-text-fill: #64748b;
+}
+
+/* ---------- 列表与行 ---------- */
+.gamedir-list-view,
+.gamedir-list,
+.gamedir-list-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+
+.gamedir-list-scroll {
+    -fx-padding: 0;
+}
+
+.gamedir-list-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+
+.gamedir-list-host {
+    -fx-background-color: transparent;
+}
+
+.gamedir-item {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent #f1f5f9 transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-cursor: hand;
+}
+
+.gamedir-item-last {
+    -fx-border-width: 0;
+}
+
+.gamedir-item.editing {
+    -fx-cursor: default;
+}
+
+.gamedir-item-hover {
+    -fx-background-color: #f8fafc;
+}
+
+.gamedir-item-selected {
+    -fx-background-color: rgba(59,130,246,0.04);
+}
+
+.gamedir-new-highlight {
+    -fx-background-color: rgba(59,130,246,0.15);
+}
+
+.gamedir-item-accent {
+    -fx-background-color: #3b82f6;
+    -fx-background-radius: 0 2 2 0;
+}
+
+.gamedir-radio {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1.5;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+}
+
+.gamedir-item:hover .gamedir-radio {
+    -fx-border-color: #94a3b8;
+}
+
+.gamedir-item.selected .gamedir-radio {
+    -fx-background-color: #3b82f6;
+    -fx-border-color: #3b82f6;
+}
+
+.gamedir-radio-dot {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 999;
+}
+
+.gamedir-item-info {
+    -fx-spacing: 3;
+}
+
+.gamedir-item-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #0f172a;
+}
+
+.gamedir-item-desc {
+    -fx-font-size: 12px;
+    -fx-text-fill: #64748b;
+}
+
+.gamedir-status {
+    -fx-padding: 0;
+}
+
+.gamedir-badge {
+    -fx-alignment: center-left;
+}
+
+.gamedir-badge-text {
+    -fx-font-size: 11px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #16a34a;
+}
+
+.gamedir-badge-dot {
+    -fx-background-color: #22c55e;
+    -fx-background-radius: 999;
+}
+
+.gamedir-actions {
+    -fx-padding: 0;
+}
+
+.gamedir-icon-btn {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+    -fx-text-fill: #94a3b8;
+    -fx-cursor: hand;
+}
+
+.gamedir-icon-btn:hover {
+    -fx-background-color: rgba(0,0,0,0.05);
+    -fx-text-fill: #0f172a;
+}
+
+.gamedir-icon-btn-danger:hover {
+    -fx-background-color: #fef2f2;
+    -fx-text-fill: #ef4444;
+}
+
+/* ---------- 行内重命名 ---------- */
+.gamedir-edit-label {
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #64748b;
+}
+
+.gamedir-edit-input {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #0f172a;
+    -fx-font-size: 13px;
+    -fx-padding: 0 12;
+    -fx-background-radius: 6;
+    -fx-border-color: #3b82f6;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.22), 8, 0.0, 0, 0);
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+.gamedir-edit-input.gamedir-error {
+    -fx-border-color: #ef4444;
+    -fx-effect: dropshadow(gaussian, rgba(239,68,68,0.22), 8, 0.0, 0, 0);
+}
+
+.gamedir-edit-save {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-padding: 0 16;
+    -fx-pref-height: 34;
+    -fx-background-radius: 6;
+    -fx-border-width: 0;
+    -fx-cursor: hand;
+}
+
+.gamedir-edit-save:hover {
+    -fx-background-color: #2563eb;
+}
+
+.gamedir-edit-cancel {
+    -fx-background-color: #f1f5f9;
+    -fx-text-fill: #64748b;
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-padding: 0 16;
+    -fx-pref-height: 34;
+    -fx-background-radius: 6;
+    -fx-border-width: 0;
+    -fx-cursor: hand;
+}
+
+.gamedir-edit-cancel:hover {
+    -fx-background-color: #e2e8f0;
+    -fx-text-fill: #333333;
+}
+
+/* ---------- 空状态 ---------- */
+.gamedir-empty {
+    -fx-background-color: transparent;
+}
+
+.gamedir-empty-icon {
+    -fx-padding: 0;
+    -fx-text-fill: #cbd5e1;
+}
+
+.gamedir-empty-text {
+    -fx-font-size: 13px;
+    -fx-text-fill: #64748b;
+    -fx-text-alignment: center;
+}
+
+/* ---------- 详情视图 ---------- */
+.gamedir-detail {
+    -fx-background-color: transparent;
+}
+
+.gamedir-detail-header-card {
+    -fx-background-color: linear-gradient(to bottom right, #ffffff, #f8fafc);
+    -fx-border-color: #f1f5f9;
+    -fx-border-width: 1;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-padding: 24;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.03), 8, 0.0, 0, 2);
+}
+
+.gamedir-detail-icon-wrap {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 16;
+    -fx-border-color: rgba(59,130,246,0.10);
+    -fx-border-width: 1;
+    -fx-border-radius: 16;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.16), 12, 0.0, 0, 4);
+}
+
+.gamedir-detail-icon {
+    -fx-padding: 0;
+    -fx-text-fill: #3b82f6;
+}
+
+.gamedir-detail-title {
+    -fx-font-size: 20px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #0f172a;
+}
+
+.gamedir-detail-badge {
+    -fx-padding: 2 10;
+    -fx-background-color: #f0fdf4;
+    -fx-background-radius: 999;
+    -fx-border-color: #bbf7d0;
+    -fx-border-width: 1;
+    -fx-border-radius: 999;
+    -fx-alignment: center-left;
+}
+
+.gamedir-detail-badge-dot {
+    -fx-background-color: #22c55e;
+    -fx-background-radius: 999;
+}
+
+.gamedir-detail-badge-text {
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #16a34a;
+}
+
+.gamedir-detail-badge.gamedir-detail-badge-inactive {
+    -fx-background-color: #f1f5f9;
+    -fx-border-color: #e2e8f0;
+}
+
+.gamedir-detail-badge.gamedir-detail-badge-inactive .gamedir-detail-badge-dot {
+    -fx-background-color: #94a3b8;
+}
+
+.gamedir-detail-badge.gamedir-detail-badge-inactive .gamedir-detail-badge-text {
+    -fx-text-fill: #64748b;
+}
+
+.gamedir-detail-path-card {
+    -fx-background-color: #f8fafc;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 16;
+}
+
+.gamedir-detail-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #64748b;
+}
+
+.gamedir-detail-path {
+    -fx-font-family: "Consolas", "Menlo", "Monaco", monospace;
+    -fx-font-size: 13px;
+    -fx-text-fill: #475569;
+}
+
+.gamedir-detail-grid-item {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #f1f5f9;
+    -fx-border-width: 1;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
+
+.gamedir-detail-grid-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #64748b;
+}
+
+.gamedir-detail-grid-value {
+    -fx-font-size: 16px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #0f172a;
+}
+
+.gamedir-detail-grid-value-time {
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+}
+
+/* ---------- 添加视图 ---------- */
+.gamedir-add {
+    -fx-background-color: transparent;
+}
+
+.gamedir-form-group {
+    -fx-spacing: 8;
+}
+
+.gamedir-form-label {
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #0f172a;
+}
+
+.gamedir-input {
+    -fx-background-color: #f8fafc;
+    -fx-text-fill: #0f172a;
+    -fx-prompt-text-fill: #94a3b8;
+    -fx-font-size: 14px;
+    -fx-padding: 0 14;
+    -fx-background-radius: 8;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+.gamedir-input:focused {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #3b82f6;
+    -fx-effect: dropshadow(gaussian, rgba(59,130,246,0.22), 8, 0.0, 0, 0);
+}
+
+.gamedir-input.gamedir-error,
+.gamedir-input.gamedir-error:focused {
+    -fx-border-color: #ef4444;
+    -fx-effect: dropshadow(gaussian, rgba(239,68,68,0.22), 8, 0.0, 0, 0);
+}
+
+.gamedir-browse-btn {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #0f172a;
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-padding: 0 16;
+    -fx-pref-height: 40;
+    -fx-background-radius: 8;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+    -fx-cursor: hand;
+}
+
+.gamedir-browse-btn:hover {
+    -fx-background-color: #f8fafc;
+}
+
+.gamedir-name-preview {
+    -fx-background-color: #f8fafc;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1;
+    -fx-border-style: dashed;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+}
+
+.gamedir-name-preview-icon {
+    -fx-padding: 0;
+    -fx-text-fill: #94a3b8;
+}
+
+.gamedir-name-preview-text {
+    -fx-font-size: 14px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #0f172a;
+}
+
+.gamedir-name-preview-empty {
+    -fx-text-fill: #94a3b8;
+    -fx-font-weight: 400;
+    -fx-font-style: italic;
+}
+
+.gamedir-form-actions {
+    -fx-padding: 24 0 0 0;
+    -fx-border-color: #f1f5f9 transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.gamedir-save-new {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 14px;
+    -fx-font-weight: 500;
+    -fx-padding: 0 24;
+    -fx-pref-height: 40;
+    -fx-background-radius: 8;
+    -fx-border-width: 0;
+    -fx-cursor: hand;
+}
+
+.gamedir-save-new:hover {
+    -fx-background-color: #2563eb;
+}
+
+/* ---------- 列表内滚动条：默认透明，悬停才出现（对齐参考稿） ---------- */
+.gamedir-list-scroll.inertia-pane > .scroll-bar:vertical {
+    -fx-opacity: 1;
+    -fx-pref-width: 6;
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.gamedir-list-scroll.inertia-pane > .scroll-bar:vertical .track {
+    -fx-background-color: transparent;
+    -fx-opacity: 0;
+}
+
+.gamedir-list-scroll.inertia-pane > .scroll-bar:vertical .increment-button,
+.gamedir-list-scroll.inertia-pane > .scroll-bar:vertical .decrement-button {
+    -fx-opacity: 0;
+    -fx-pref-height: 0;
+    -fx-padding: 0;
+}
+
+.gamedir-list-scroll.inertia-pane > .scroll-bar:vertical .thumb {
+    -fx-background-color: transparent;
+    -fx-background-radius: 10;
+    -fx-opacity: 0;
+}
+
+.gamedir-list-scroll.inertia-pane:hover > .scroll-bar:vertical .thumb {
+    -fx-background-color: #cbd5e1;
+    -fx-opacity: 1;
+}
+
+.gamedir-list-scroll.inertia-pane > .scroll-bar:vertical .thumb:hover {
+    -fx-background-color: #94a3b8;
+    -fx-opacity: 1;
+}
+
+/* ===================================================================
+ * 深色主题
+ * =================================================================== */
+.root.dark .gamedir-panel {
+    -fx-background-color: #0f2136;
+    -fx-border-color: rgba(255,255,255,0.10);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 28, 0.0, 0, 10);
+}
+
+.root.dark .gamedir-header {
+    -fx-border-color: transparent transparent rgba(255,255,255,0.08) transparent;
+}
+
+.root.dark .gamedir-panel.is-detail .gamedir-header:hover,
+.root.dark .gamedir-panel.is-add .gamedir-header:hover {
+    -fx-background-color: rgba(255,255,255,0.05);
+}
+
+.root.dark .gamedir-header-title,
+.root.dark .gamedir-back-top {
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .gamedir-search {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+
+.root.dark .gamedir-search:hover {
+    -fx-border-color: rgba(255,255,255,0.22);
+}
+
+.root.dark .gamedir-search.expanded {
+    -fx-background-color: #102a44;
+    -fx-border-color: #60a5fa;
+    -fx-effect: dropshadow(gaussian, rgba(96,165,250,0.30), 10, 0.0, 0, 0);
+}
+
+.root.dark .gamedir-search-icon {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .gamedir-search.expanded .gamedir-search-icon {
+    -fx-text-fill: #60a5fa;
+}
+
+.root.dark .gamedir-search-input {
+    -fx-text-fill: #ffffff;
+    -fx-prompt-text-fill: #94a3b8;
+}
+
+.root.dark .gamedir-search-clear {
+    -fx-background-color: #475569;
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .gamedir-search-clear:hover {
+    -fx-background-color: #64748b;
+}
+
+.root.dark .gamedir-add-btn,
+.root.dark .gamedir-browse-btn {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-text-fill: #ffffff;
+    -fx-border-color: rgba(255,255,255,0.16);
+}
+
+.root.dark .gamedir-add-btn:hover,
+.root.dark .gamedir-browse-btn:hover {
+    -fx-background-color: rgba(255,255,255,0.14);
+}
+
+.root.dark .gamedir-summary {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-border-color: transparent transparent rgba(255,255,255,0.08) transparent;
+}
+
+.root.dark .gamedir-summary-icon {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .gamedir-summary-path {
+    -fx-text-fill: #a0aec0;
+}
+
+.root.dark .gamedir-list-host,
+.root.dark .gamedir-empty,
+.root.dark .gamedir-detail,
+.root.dark .gamedir-add {
+    -fx-background-color: transparent;
+}
+
+.root.dark .gamedir-item {
+    -fx-border-color: transparent transparent rgba(255,255,255,0.08) transparent;
+}
+
+.root.dark .gamedir-item-last {
+    -fx-border-width: 0;
+}
+
+.root.dark .gamedir-item-hover {
+    -fx-background-color: rgba(255,255,255,0.06);
+}
+
+.root.dark .gamedir-item-selected {
+    -fx-background-color: rgba(96,165,250,0.12);
+}
+
+.root.dark .gamedir-new-highlight {
+    -fx-background-color: rgba(96,165,250,0.18);
+}
+
+.root.dark .gamedir-item-accent {
+    -fx-background-color: #60a5fa;
+}
+
+.root.dark .gamedir-radio {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.35);
+}
+
+.root.dark .gamedir-item:hover .gamedir-radio {
+    -fx-border-color: #94a3b8;
+}
+
+.root.dark .gamedir-item.selected .gamedir-radio {
+    -fx-background-color: #60a5fa;
+    -fx-border-color: #60a5fa;
+}
+
+.root.dark .gamedir-radio-dot {
+    -fx-background-color: #ffffff;
+}
+
+.root.dark .gamedir-item-title {
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .gamedir-item-desc {
+    -fx-text-fill: #a0aec0;
+}
+
+.root.dark .gamedir-badge-text {
+    -fx-text-fill: #4ade80;
+}
+
+.root.dark .gamedir-badge-dot {
+    -fx-background-color: #22c55e;
+}
+
+.root.dark .gamedir-icon-btn {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .gamedir-icon-btn:hover {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .gamedir-icon-btn-danger:hover {
+    -fx-background-color: rgba(239,68,68,0.14);
+    -fx-text-fill: #f87171;
+}
+
+.root.dark .gamedir-edit-label {
+    -fx-text-fill: #a0aec0;
+}
+
+.root.dark .gamedir-edit-input {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #60a5fa;
+}
+
+.root.dark .gamedir-edit-input.gamedir-error {
+    -fx-border-color: #f87171;
+}
+
+.root.dark .gamedir-edit-save {
+    -fx-background-color: #3b82f6;
+}
+
+.root.dark .gamedir-edit-save:hover {
+    -fx-background-color: #2563eb;
+}
+
+.root.dark .gamedir-edit-cancel {
+    -fx-background-color: rgba(255,255,255,0.10);
+    -fx-text-fill: #cbd5e1;
+}
+
+.root.dark .gamedir-edit-cancel:hover {
+    -fx-background-color: rgba(255,255,255,0.16);
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .gamedir-empty-icon {
+    -fx-text-fill: #475569;
+}
+
+.root.dark .gamedir-empty-text {
+    -fx-text-fill: #a0aec0;
+}
+
+.root.dark .gamedir-detail-header-card {
+    -fx-background-color: linear-gradient(to bottom right, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.20), 8, 0.0, 0, 2);
+}
+
+.root.dark .gamedir-detail-icon-wrap {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(96,165,250,0.30);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.25), 12, 0.0, 0, 4);
+}
+
+.root.dark .gamedir-detail-icon {
+    -fx-text-fill: #60a5fa;
+}
+
+.root.dark .gamedir-detail-title {
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .gamedir-detail-badge {
+    -fx-background-color: rgba(34,197,94,0.16);
+    -fx-border-color: rgba(34,197,94,0.30);
+}
+
+.root.dark .gamedir-detail-badge-text {
+    -fx-text-fill: #4ade80;
+}
+
+.root.dark .gamedir-detail-badge.gamedir-detail-badge-inactive {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-border-color: rgba(255,255,255,0.12);
+}
+
+.root.dark .gamedir-detail-badge.gamedir-detail-badge-inactive .gamedir-detail-badge-dot {
+    -fx-background-color: #94a3b8;
+}
+
+.root.dark .gamedir-detail-badge.gamedir-detail-badge-inactive .gamedir-detail-badge-text {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .gamedir-detail-path-card {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+
+.root.dark .gamedir-detail-label {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .gamedir-detail-path {
+    -fx-text-fill: #cbd5e1;
+}
+
+.root.dark .gamedir-detail-grid-item {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+
+.root.dark .gamedir-detail-grid-label {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .gamedir-detail-grid-value {
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .gamedir-form-label {
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .gamedir-input {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-text-fill: #ffffff;
+    -fx-prompt-text-fill: #94a3b8;
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+
+.root.dark .gamedir-input:focused {
+    -fx-background-color: rgba(255,255,255,0.12);
+    -fx-border-color: #60a5fa;
+}
+
+.root.dark .gamedir-input.gamedir-error,
+.root.dark .gamedir-input.gamedir-error:focused {
+    -fx-border-color: #f87171;
+}
+
+.root.dark .gamedir-name-preview {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-border-color: rgba(255,255,255,0.14);
+}
+
+.root.dark .gamedir-name-preview-icon {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .gamedir-name-preview-text {
+    -fx-text-fill: #ffffff;
+}
+
+.root.dark .gamedir-name-preview-empty {
+    -fx-text-fill: #94a3b8;
+}
+
+.root.dark .gamedir-form-actions {
+    -fx-border-color: rgba(255,255,255,0.08) transparent transparent transparent;
+}
+
+.root.dark .gamedir-list-scroll.inertia-pane:hover > .scroll-bar:vertical .thumb {
+    -fx-background-color: #475569;
+}
+
+.root.dark .gamedir-list-scroll.inertia-pane > .scroll-bar:vertical .thumb:hover {
+    -fx-background-color: #64748b;
+}
+
+/* ===================================================================
+ * 高对比度（浅色）
+ * =================================================================== */
+.root.high-contrast .gamedir-panel {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #000000;
+    -fx-border-width: 1.5;
+    -fx-effect: none;
+}
+
+.root.high-contrast .gamedir-header {
+    -fx-border-color: transparent transparent rgba(0,0,0,0.40) transparent;
+    -fx-border-width: 0 0 1.5 0;
+}
+
+.root.high-contrast .gamedir-header-title,
+.root.high-contrast .gamedir-back-top {
+    -fx-text-fill: #000000;
+    -fx-font-weight: 700;
+}
+
+.root.high-contrast .gamedir-search {
+    -fx-background-color: #ffffff;
+    -fx-border-color: rgba(0,0,0,0.55);
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast .gamedir-search.expanded {
+    -fx-border-color: #000000;
+}
+
+.root.high-contrast .gamedir-search-icon {
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .gamedir-search-input {
+    -fx-text-fill: #000000;
+    -fx-prompt-text-fill: #333333;
+}
+
+.root.high-contrast .gamedir-add-btn,
+.root.high-contrast .gamedir-browse-btn {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #000000;
+    -fx-border-color: rgba(0,0,0,0.55);
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast .gamedir-summary {
+    -fx-background-color: #ffffff;
+    -fx-border-color: transparent transparent rgba(0,0,0,0.40) transparent;
+    -fx-border-width: 0 0 1.5 0;
+}
+
+.root.high-contrast .gamedir-summary-icon,
+.root.high-contrast .gamedir-summary-path {
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .gamedir-list-host,
+.root.high-contrast .gamedir-empty,
+.root.high-contrast .gamedir-detail,
+.root.high-contrast .gamedir-add {
+    -fx-background-color: transparent;
+}
+
+.root.high-contrast .gamedir-item {
+    -fx-border-color: transparent transparent rgba(0,0,0,0.30) transparent;
+    -fx-border-width: 0 0 1.5 0;
+}
+
+.root.high-contrast .gamedir-item-last {
+    -fx-border-width: 0;
+}
+
+.root.high-contrast .gamedir-item-hover {
+    -fx-background-color: rgba(0,0,0,0.07);
+}
+
+.root.high-contrast .gamedir-item-selected {
+    -fx-background-color: rgba(0,0,0,0.12);
+}
+
+.root.high-contrast .gamedir-new-highlight {
+    -fx-background-color: rgba(0,0,0,0.18);
+}
+
+.root.high-contrast .gamedir-item-accent {
+    -fx-background-color: #000000;
+}
+
+.root.high-contrast .gamedir-radio {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #000000;
+    -fx-border-width: 2;
+}
+
+.root.high-contrast .gamedir-item.selected .gamedir-radio {
+    -fx-background-color: #000000;
+    -fx-border-color: #000000;
+}
+
+.root.high-contrast .gamedir-radio-dot {
+    -fx-background-color: #ffffff;
+}
+
+.root.high-contrast .gamedir-item-title,
+.root.high-contrast .gamedir-form-label {
+    -fx-text-fill: #000000;
+    -fx-font-weight: 700;
+}
+
+.root.high-contrast .gamedir-item-desc {
+    -fx-text-fill: #111111;
+}
+
+.root.high-contrast .gamedir-badge-text {
+    -fx-text-fill: #000000;
+    -fx-font-weight: 700;
+}
+
+.root.high-contrast .gamedir-badge-dot {
+    -fx-background-color: #000000;
+}
+
+.root.high-contrast .gamedir-icon-btn {
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .gamedir-icon-btn:hover {
+    -fx-background-color: rgba(0,0,0,0.10);
+}
+
+.root.high-contrast .gamedir-icon-btn-danger:hover {
+    -fx-background-color: rgba(0,0,0,0.14);
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .gamedir-edit-label {
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .gamedir-edit-input,
+.root.high-contrast .gamedir-input {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #000000;
+    -fx-border-color: #000000;
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast .gamedir-edit-save,
+.root.high-contrast .gamedir-save-new {
+    -fx-background-color: #000000;
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast .gamedir-edit-cancel {
+    -fx-background-color: #e5e7eb;
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .gamedir-empty-icon {
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .gamedir-empty-text {
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .gamedir-detail-header-card,
+.root.high-contrast .gamedir-detail-path-card,
+.root.high-contrast .gamedir-detail-grid-item,
+.root.high-contrast .gamedir-name-preview {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #000000;
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast .gamedir-detail-icon,
+.root.high-contrast .gamedir-detail-title,
+.root.high-contrast .gamedir-detail-label,
+.root.high-contrast .gamedir-detail-path,
+.root.high-contrast .gamedir-detail-grid-label,
+.root.high-contrast .gamedir-detail-grid-value,
+.root.high-contrast .gamedir-name-preview-text {
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .gamedir-detail-badge,
+.root.high-contrast .gamedir-detail-badge.gamedir-detail-badge-inactive {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #000000;
+}
+
+.root.high-contrast .gamedir-detail-badge-text,
+.root.high-contrast .gamedir-detail-badge.gamedir-detail-badge-inactive .gamedir-detail-badge-text {
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast .gamedir-detail-badge-dot,
+.root.high-contrast .gamedir-detail-badge.gamedir-detail-badge-inactive .gamedir-detail-badge-dot {
+    -fx-background-color: #000000;
+}
+
+.root.high-contrast .gamedir-form-actions {
+    -fx-border-color: rgba(0,0,0,0.40) transparent transparent transparent;
+    -fx-border-width: 1.5 0 0 0;
+}
+
+.root.high-contrast .gamedir-list-scroll.inertia-pane:hover > .scroll-bar:vertical .thumb {
+    -fx-background-color: #000000;
+}
+
+.root.high-contrast .gamedir-list-scroll.inertia-pane > .scroll-bar:vertical .thumb:hover {
+    -fx-background-color: #000000;
+}
+
+/* ===================================================================
+ * 高对比度（深色）
+ * =================================================================== */
+.root.high-contrast.dark .gamedir-panel {
+    -fx-background-color: #000000;
+    -fx-border-color: #ffffff;
+    -fx-border-width: 1.5;
+    -fx-effect: none;
+}
+
+.root.high-contrast.dark .gamedir-header {
+    -fx-border-color: transparent transparent rgba(255,255,255,0.50) transparent;
+    -fx-border-width: 0 0 1.5 0;
+}
+
+.root.high-contrast.dark .gamedir-header-title,
+.root.high-contrast.dark .gamedir-back-top {
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: 700;
+}
+
+.root.high-contrast.dark .gamedir-search {
+    -fx-background-color: #000000;
+    -fx-border-color: rgba(255,255,255,0.60);
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast.dark .gamedir-search.expanded {
+    -fx-border-color: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-search-icon {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-search-input {
+    -fx-text-fill: #ffffff;
+    -fx-prompt-text-fill: #cccccc;
+}
+
+.root.high-contrast.dark .gamedir-search-clear {
+    -fx-background-color: #334155;
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-add-btn,
+.root.high-contrast.dark .gamedir-browse-btn {
+    -fx-background-color: #000000;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: rgba(255,255,255,0.60);
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast.dark .gamedir-summary {
+    -fx-background-color: #000000;
+    -fx-border-color: transparent transparent rgba(255,255,255,0.50) transparent;
+    -fx-border-width: 0 0 1.5 0;
+}
+
+.root.high-contrast.dark .gamedir-summary-icon,
+.root.high-contrast.dark .gamedir-summary-path {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-list-host,
+.root.high-contrast.dark .gamedir-empty,
+.root.high-contrast.dark .gamedir-detail,
+.root.high-contrast.dark .gamedir-add {
+    -fx-background-color: transparent;
+}
+
+.root.high-contrast.dark .gamedir-item {
+    -fx-border-color: transparent transparent rgba(255,255,255,0.30) transparent;
+    -fx-border-width: 0 0 1.5 0;
+}
+
+.root.high-contrast.dark .gamedir-item-last {
+    -fx-border-width: 0;
+}
+
+.root.high-contrast.dark .gamedir-item-hover {
+    -fx-background-color: rgba(255,255,255,0.08);
+}
+
+.root.high-contrast.dark .gamedir-item-selected {
+    -fx-background-color: rgba(255,255,255,0.16);
+}
+
+.root.high-contrast.dark .gamedir-new-highlight {
+    -fx-background-color: rgba(255,255,255,0.20);
+}
+
+.root.high-contrast.dark .gamedir-item-accent {
+    -fx-background-color: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-radio {
+    -fx-background-color: #000000;
+    -fx-border-color: #ffffff;
+    -fx-border-width: 2;
+}
+
+.root.high-contrast.dark .gamedir-item.selected .gamedir-radio {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-radio-dot {
+    -fx-background-color: #000000;
+}
+
+.root.high-contrast.dark .gamedir-item-title,
+.root.high-contrast.dark .gamedir-form-label {
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: 700;
+}
+
+.root.high-contrast.dark .gamedir-item-desc {
+    -fx-text-fill: #e2e8f0;
+}
+
+.root.high-contrast.dark .gamedir-badge-text {
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: 700;
+}
+
+.root.high-contrast.dark .gamedir-badge-dot {
+    -fx-background-color: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-icon-btn {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-icon-btn:hover {
+    -fx-background-color: rgba(255,255,255,0.14);
+}
+
+.root.high-contrast.dark .gamedir-icon-btn-danger:hover {
+    -fx-background-color: rgba(255,255,255,0.20);
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-edit-label {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-edit-input,
+.root.high-contrast.dark .gamedir-input {
+    -fx-background-color: #000000;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #ffffff;
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast.dark .gamedir-edit-save,
+.root.high-contrast.dark .gamedir-save-new {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #000000;
+}
+
+.root.high-contrast.dark .gamedir-edit-cancel {
+    -fx-background-color: #334155;
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-empty-icon {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-empty-text {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-detail-header-card,
+.root.high-contrast.dark .gamedir-detail-path-card,
+.root.high-contrast.dark .gamedir-detail-grid-item,
+.root.high-contrast.dark .gamedir-name-preview {
+    -fx-background-color: #000000;
+    -fx-border-color: #ffffff;
+    -fx-border-width: 1.5;
+}
+
+.root.high-contrast.dark .gamedir-detail-icon,
+.root.high-contrast.dark .gamedir-detail-title,
+.root.high-contrast.dark .gamedir-detail-label,
+.root.high-contrast.dark .gamedir-detail-path,
+.root.high-contrast.dark .gamedir-detail-grid-label,
+.root.high-contrast.dark .gamedir-detail-grid-value,
+.root.high-contrast.dark .gamedir-name-preview-text {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-detail-badge,
+.root.high-contrast.dark .gamedir-detail-badge.gamedir-detail-badge-inactive {
+    -fx-background-color: #000000;
+    -fx-border-color: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-detail-badge-text,
+.root.high-contrast.dark .gamedir-detail-badge.gamedir-detail-badge-inactive .gamedir-detail-badge-text {
+    -fx-text-fill: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-detail-badge-dot,
+.root.high-contrast.dark .gamedir-detail-badge.gamedir-detail-badge-inactive .gamedir-detail-badge-dot {
+    -fx-background-color: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-form-actions {
+    -fx-border-color: rgba(255,255,255,0.50) transparent transparent transparent;
+    -fx-border-width: 1.5 0 0 0;
+}
+
+.root.high-contrast.dark .gamedir-list-scroll.inertia-pane:hover > .scroll-bar:vertical .thumb {
+    -fx-background-color: #ffffff;
+}
+
+.root.high-contrast.dark .gamedir-list-scroll.inertia-pane > .scroll-bar:vertical .thumb:hover {
+    -fx-background-color: #ffffff;
 }

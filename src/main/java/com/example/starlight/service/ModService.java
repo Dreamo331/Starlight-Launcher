@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.service;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.model.*;
 import com.example.starlight.listsaves.listsaves;
 
@@ -20,8 +22,8 @@ public class ModService {
         List<ModInfo> mods = new ArrayList<>();
         Path globalDir = Paths.get(gameDir, "mods");
         Path versionDir = version.isEmpty() ? null : Paths.get(gameDir, "versions", version, "mods");
-        if (Files.isDirectory(globalDir)) scanModDir(globalDir, "[全局]", mods);
-        if (versionDir != null && Files.isDirectory(versionDir)) scanModDir(versionDir, "[版本]", mods);
+        if (Files.isDirectory(globalDir)) scanModDir(globalDir, I18N.get("service.t0049"), mods);
+        if (versionDir != null && Files.isDirectory(versionDir)) scanModDir(versionDir, I18N.get("service.t0050"), mods);
         mods.sort(Comparator.comparing(m -> m.name));
         return mods;
     }
@@ -35,14 +37,14 @@ public class ModService {
             if (fname.endsWith(".disabled")) {
                 newPath = path.resolveSibling(fname.substring(0, fname.length() - 9));
                 Files.move(path, newPath);
-                return ActionResult.ok("已启用 " + newPath.getFileName());
+                return ActionResult.ok(I18N.get("service.p0105", newPath.getFileName()));
             } else {
                 newPath = path.resolveSibling(fname + ".disabled");
                 Files.move(path, newPath);
-                return ActionResult.ok("已禁用 " + fname);
+                return ActionResult.ok(I18N.get("service.p0106", fname));
             }
         } catch (IOException e) {
-            return ActionResult.fail("操作失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("service.p0107", e.getMessage()));
         }
     }
 
@@ -107,9 +109,9 @@ public class ModService {
     public static ActionResult readConfigFileContent(String filePath) {
         try {
             String content = Files.readString(Paths.get(filePath), StandardCharsets.UTF_8);
-            return ActionResult.ok("读取成功", content);
+            return ActionResult.ok(I18N.get("service.t0051"), content);
         } catch (IOException e) {
-            return ActionResult.fail("读取失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("service.p0108", e.getMessage()));
         }
     }
 

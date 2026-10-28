@@ -1,5 +1,7 @@
 package com.example.starlight.newui.framegen;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.service.GameInstanceRegistry;
 
 import java.io.BufferedReader;
@@ -78,7 +80,7 @@ public final class GameProcessLocator {
         if (fromWmi.isValid()) {
             return fromWmi;
         }
-        return new Target(-1, "未找到 Minecraft 进程（启动器注册表与命令行扫描都没命中）",
+        return new Target(-1, I18N.get("framegen.t0071"),
                 Source.NONE);
     }
 
@@ -87,7 +89,7 @@ public final class GameProcessLocator {
             final List<GameInstanceRegistry.Instance> alive =
                     GameInstanceRegistry.aliveInstances();
             if (alive.isEmpty()) {
-                return new Target(-1, "启动器注册表里没有运行中的实例", Source.NONE);
+                return new Target(-1, I18N.get("framegen.t0072"), Source.NONE);
             }
             // 多个实例时取最近启动的那个（用户刚开的那局才是要测的）
             GameInstanceRegistry.Instance best = alive.get(0);
@@ -106,7 +108,7 @@ public final class GameProcessLocator {
             return new Target((int) best.pid, desc, Source.REGISTRY);
         } catch (Throwable t) {
             System.err.println("[FrameGen] 读取 GameInstanceRegistry 失败: " + t);
-            return new Target(-1, "读取注册表异常", Source.NONE);
+            return new Target(-1, I18N.get("framegen.t0073"), Source.NONE);
         }
     }
 
@@ -134,7 +136,7 @@ public final class GameProcessLocator {
 
         final List<String> lines = runPowerShell(script);
         if (lines.isEmpty()) {
-            return new Target(-1, "WMI 查询没有返回任何 java 进程", Source.NONE);
+            return new Target(-1, I18N.get("framegen.t0074"), Source.NONE);
         }
 
         final long ownPid = ProcessHandle.current().pid();
@@ -162,14 +164,14 @@ public final class GameProcessLocator {
             final boolean hasGameDir = cmd.contains("--gameDir");
             if (bestPid < 0 || (hasGameDir && !haveWithGameDir)) {
                 bestPid = pid;
-                bestDesc = "命令行命中 Minecraft 客户端 (PID " + pid + ")";
+                bestDesc = I18N.get("framegen.p0146", pid + ")");
                 haveWithGameDir = hasGameDir;
             }
         }
 
         if (bestPid < 0) {
             return new Target(-1,
-                    "扫到 " + lines.size() + " 个 java 进程，但没有一个命令行像 Minecraft 客户端",
+                    I18N.get("gpl.r0001", lines.size()),
                     Source.NONE);
         }
         return new Target(bestPid, bestDesc, Source.SCAN);

@@ -1,5 +1,7 @@
 package com.example.starlight.service;
 
+
+import com.example.starlight.util.I18N;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -44,7 +46,7 @@ public final class GameInstanceRegistry {
 
         /** 列表里显示的名称 */
         public String displayName() {
-            return version.isBlank() ? "Minecraft（未知版本）" : "Minecraft " + version;
+            return version.isBlank() ? I18N.get("service.t0017") : "Minecraft " + version;
         }
 
         /** 已运行时长（毫秒） */

@@ -1,6 +1,9 @@
 package com.example.starlight.service;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.StarlightConfig;
+import com.example.starlight.download.DownloadEngineRouter;
 import com.example.starlight.download.task.GameResourceCompleter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,24 +72,25 @@ public final class ParallelLaunchManager {
                                   GameResourceCompleter.ProgressCallback progress,
                                   java.util.concurrent.atomic.AtomicBoolean cancel) {
         // 阶段 1：预下载 natives jar，保证后续原生库提取与资源补全并行时无文件竞态
-        report(progress, 0, "正在预下载原生库...");
-        boolean jarsOk = GameResourceCompleter.completeNativeJarsOnly(gameDir, version,
+        report(progress, 0, I18N.get("service.t0052"));
+        // 2026-10-21：经分流器调用 —— 设置里选 PCL 引擎时走新引擎，默认仍是原引擎
+        boolean jarsOk = DownloadEngineRouter.completeNativeJarsOnly(gameDir, version,
                 wrap(progress, 0, 8), cancel);
         if (!jarsOk) {
             if (cancel != null && cancel.get()) {
-                report(progress, 0, "已取消启动");
+                report(progress, 0, I18N.get("service.t0053"));
                 log.info("Parallel preparation cancelled during native jars");
                 return false;
             }
-            report(progress, 0, "原生库下载失败，请检查网络连接");
+            report(progress, 0, I18N.get("service.t0054"));
             log.error("Native jars download failed, abort parallel preparation");
             return false;
         }
 
         // 阶段 2：资源补全与原生库检查提取并行执行
-        report(progress, 8, "正在并行补全资源与原生库...");
+        report(progress, 8, I18N.get("service.t0055"));
         CompletableFuture<Boolean> resources = CompletableFuture.supplyAsync(() ->
-                GameResourceCompleter.completeAll(gameDir, version, wrap(progress, 8, 60), cancel), POOL);
+                DownloadEngineRouter.completeAll(gameDir, version, wrap(progress, 8, 60), cancel), POOL);
         CompletableFuture<Boolean> natives = CompletableFuture.supplyAsync(() ->
                 FileService.checkAndCompleteNatives(gameDir, version, versionJson), POOL);
 
@@ -104,12 +108,12 @@ public final class ParallelLaunchManager {
         }
 
         if (cancel != null && cancel.get()) {
-            report(progress, 100, "已取消启动");
+            report(progress, 100, I18N.get("service.t0056"));
             log.info("Parallel preparation cancelled");
             return false;
         }
 
-        report(progress, 100, "资源准备完成");
+        report(progress, 100, I18N.get("service.t0057"));
         return nativesOk;
     }
 

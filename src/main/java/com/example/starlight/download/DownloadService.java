@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.download;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.download.engine.HttpDownloadEngine;
 import com.example.starlight.download.mod.DownloadCoordinator;
 import com.example.starlight.download.mod.DownloadFileTask;
@@ -40,7 +42,7 @@ public class DownloadService {
             boolean ok = VersionManifest.downloadVersion(versionId, gameDir,
                     (pct, msg) -> { if (progress != null) progress.onProgress(pct, msg); });
             if (ok && onResult != null) onResult.onSuccess(true);
-            else if (!ok && onResult != null) onResult.onError("下载版本失败: " + versionId);
+            else if (!ok && onResult != null) onResult.onError(I18N.get("download.p0064", versionId));
         });
     }
 
@@ -52,7 +54,7 @@ public class DownloadService {
             boolean ok = AssetDownloader.downloadAssetIndex(assetId, gameDir,
                     (pct, msg) -> { if (progress != null) progress.onProgress(pct, msg); });
             if (ok && onResult != null) onResult.onSuccess(true);
-            else if (!ok && onResult != null) onResult.onError("下载资源索引失败");
+            else if (!ok && onResult != null) onResult.onError(I18N.get("download.t0001"));
         });
     }
 
@@ -64,7 +66,7 @@ public class DownloadService {
             boolean ok = AssetDownloader.downloadAssets(gameDir,
                     (pct, msg) -> { if (progress != null) progress.onProgress(pct, msg); });
             if (ok && onResult != null) onResult.onSuccess(true);
-            else if (!ok && onResult != null) onResult.onError("下载资源文件失败");
+            else if (!ok && onResult != null) onResult.onError(I18N.get("download.t0002"));
         });
     }
 
@@ -81,14 +83,14 @@ public class DownloadService {
                                                    CallbackInterfaces.ResultCallback<Boolean> onResult) {
         CompletableFuture.runAsync(() -> {
             try {
-                boolean ok = GameResourceCompleter.completeAll(gameDir, versionId,
+                boolean ok = DownloadEngineRouter.completeAll(gameDir, versionId,
                         (pct, msg) -> { if (onProgress != null) onProgress.onProgress(pct, msg); });
                 if (onResult != null) {
                     if (ok) onResult.onSuccess(true);
                     else onResult.onSuccess(false);
                 }
             } catch (Exception e) {
-                if (onResult != null) onResult.onError("资源补全失败: " + e.getMessage());
+                if (onResult != null) onResult.onError(I18N.get("download.p0065", e.getMessage()));
             }
         });
     }
@@ -115,7 +117,7 @@ public class DownloadService {
                 // ① 多源链：官方 URL + provider 注入的镜像候选（BMCLAPI/MCBBS 等）
                 DownloadSourceChain chain = DownloadSourceChain.fromProvider(url, DownloadProviderHolder.get());
                 if (chain.getSources().isEmpty()) {
-                    onResult.onError("下载失败: 没有可用下载源");
+                    onResult.onError(I18N.get("download.t0003"));
                     return;
                 }
                 // ② 单文件任务：通用入口不校验大小/哈希；分块缓存落在目标父目录 .download-cache
@@ -131,23 +133,23 @@ public class DownloadService {
                 while (System.currentTimeMillis() < deadline) {
                     DownloadFileTask.State s = task.getState();
                     if (s == DownloadFileTask.State.SUCCESS) {
-                        onProgress.onProgress(100, "下载完成: " + savePath);
-                        onResult.onSuccess("下载完成: " + savePath);
+                        onProgress.onProgress(100, I18N.get("download.p0066", savePath));
+                        onResult.onSuccess(I18N.get("download.p0067", savePath));
                         return;
                     }
                     if (s == DownloadFileTask.State.FAILED || s == DownloadFileTask.State.CANCELLED) {
                         Throwable err = task.getLastError();
-                        onResult.onError("下载失败: " + (err == null ? "未知原因" : err.getMessage()));
+                        onResult.onError(I18N.get("download.p0068", (err == null ? I18N.get("download.t0056") : err.getMessage())));
                         return;
                     }
                     int pct = (int) (task.progress() * 100);
-                    onProgress.onProgress(pct, "下载中 " + pct + "%");
+                    onProgress.onProgress(pct, I18N.get("download.p0069", pct + "%"));
                     Thread.sleep(200);
                 }
                 task.cancel();
-                onResult.onError("下载失败: 超时（30 分钟）");
+                onResult.onError(I18N.get("download.t0004"));
             } catch (Exception e) {
-                onResult.onError("下载失败: " + e.getMessage());
+                onResult.onError(I18N.get("download.p0070", e.getMessage()));
             }
         });
     }

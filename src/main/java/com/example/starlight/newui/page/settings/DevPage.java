@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.auth.offline.LocalCapeProxy;
 import com.example.starlight.auth.offline.LocalYggdrasilServer;
 import com.example.starlight.colorblind.ColorBlindTuneServer;
@@ -93,7 +95,7 @@ public final class DevPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(host, "开发者选项");
+        VBox root = PageKit.settingsPage(host, I18N.get("dev.t0001"));
 
         // 启动画面开关（原有功能） //
         CheckBox splashToggle = PageKit.toggle("true".equals(host.config().getOrDefault("ShowSplash", "true")));
@@ -101,7 +103,7 @@ public final class DevPage {
             host.config().put("ShowSplash", String.valueOf(splashToggle.isSelected()));
             host.saveConfig();
         });
-        root.getChildren().add(PageKit.settingsCard("启动画面", "显示启动画面", splashToggle));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("dev.t0002"), I18N.get("dev.t0003"), splashToggle));
 
         // 调试模式开关 //
         boolean debugMode = "true".equalsIgnoreCase(host.config().getOrDefault("DebugMode", "false"));
@@ -114,8 +116,8 @@ public final class DevPage {
             DebugLog.applyMode(debugToggle.isSelected()); // 同步 logback root 级别（DEBUG/INFO）
             DebugLog.log("调试模式已" + (debugToggle.isSelected() ? "开启" : "关闭"));
         });
-        root.getChildren().add(PageKit.settingsCard("调试模式",
-                "记录底层页面刷新与网络数据包收发详情（大小、URL、请求/响应内容），实时显示在下方日志区", debugToggle));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("dev.t0004"),
+                I18N.get("dev.t0005"), debugToggle));
 
         // 中文日志开关 //
         boolean chineseLog = !"false".equalsIgnoreCase(host.config().getOrDefault("ChineseLog", "true"));
@@ -127,8 +129,8 @@ public final class DevPage {
             host.saveConfig();
             DebugLog.log("中文日志已" + (zhToggle.isSelected() ? "开启" : "关闭"));
         });
-        root.getChildren().add(PageKit.settingsCard("中文日志",
-                "调试日志以中文输出（如「发送 / 接收」）；关闭后以英文输出（SEND / RECV）", zhToggle));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("dev.t0006"),
+                I18N.get("dev.t0007"), zhToggle));
 
         // 调试日志缓冲上限 //
         root.getChildren().add(buildBufferCard());
@@ -144,7 +146,7 @@ public final class DevPage {
 
         // 过滤关键字：改变后按历史全量重渲染
         filterField = new TextField();
-        filterField.setPromptText("过滤日志（关键字，如 NET / 内部 / URL）...");
+        filterField.setPromptText(I18N.get("dev.t0008"));
         filterField.textProperty().addListener((o, ov, nv) -> renderLog());
 
         // 页面重建时回显历史日志
@@ -200,7 +202,7 @@ public final class DevPage {
         // 悬浮监控窗 //
         root.getChildren().add(buildFloatWindowsCard());
 
-        Label warn = AppIcons.label("warning", "开发者选项可能会影响启动器稳定性，请谨慎操作");
+        Label warn = AppIcons.label("warning", I18N.get("dev.t0009"));
         warn.setStyle("-fx-text-fill: #eab308; -fx-font-size: 12px; -fx-padding: 10 0;");
         root.getChildren().add(warn);
         return root;
@@ -253,7 +255,7 @@ public final class DevPage {
         int current = DebugLog.getMaxEntries();
         ComboBox<String> combo = new ComboBox<>();
         for (int v : new int[]{500, 1000, 2000, 5000, 10000, 20000}) {
-            combo.getItems().add(v + " 条");
+            combo.getItems().add(I18N.get("dev.p0108", v));
         }
         selectNearest(combo, current);
         combo.setOnAction(e -> {
@@ -261,10 +263,10 @@ public final class DevPage {
             DebugLog.setMaxEntries(v);
             host.config().put("DebugLogMaxEntries", String.valueOf(v));
             host.saveConfig();
-            host.toast("调试日志缓冲已调整为 " + v + " 条");
+            host.toast(I18N.get("dev.p0109", v));
         });
-        return PageKit.settingsCard("日志缓冲上限",
-                "内存中保留的调试日志条数（超出丢弃最旧）；调大可回看更早的网络包", combo);
+        return PageKit.settingsCard(I18N.get("dev.t0010"),
+                I18N.get("dev.t0011"), combo);
     }
 
     /** 下拉选中与 current 最接近的档位 */
@@ -278,7 +280,7 @@ public final class DevPage {
                 best = v;
             }
         }
-        combo.setValue(best + " 条");
+        combo.setValue(I18N.get("dev.p0110", best));
     }
 
     private int parseLeadingInt(String s, int fallback) {
@@ -297,31 +299,31 @@ public final class DevPage {
         filterField.setStyle("-fx-font-size: 12px;");
         HBox.setHgrow(filterField, Priority.ALWAYS);
 
-        Button clearBtn = AppIcons.button("trash", "清空日志");
+        Button clearBtn = AppIcons.button("trash", I18N.get("dev.t0012"));
         clearBtn.getStyleClass().add("btn-primary");
         clearBtn.setOnAction(e -> {
             history.clear();
             renderLog();
         });
-        Button copyBtn = AppIcons.button("copy", "复制全部");
+        Button copyBtn = AppIcons.button("copy", I18N.get("dev.t0013"));
         copyBtn.getStyleClass().add("btn-primary");
         copyBtn.setOnAction(e -> {
             ClipboardContent content = new ClipboardContent();
             content.putString(filteredText());
             Clipboard.getSystemClipboard().setContent(content);
-            host.ui().toast("已复制全部日志到剪贴板");
+            host.ui().toast(I18N.get("dev.t0014"));
         });
-        Button exportBtn = AppIcons.button("download", "导出");
+        Button exportBtn = AppIcons.button("download", I18N.get("dev.t0015"));
         exportBtn.getStyleClass().add("btn-primary");
         exportBtn.setOnAction(e -> exportLog());
-        Button uploadBtn = AppIcons.button("upload", "上传");
+        Button uploadBtn = AppIcons.button("upload", I18N.get("dev.t0016"));
         uploadBtn.getStyleClass().add("btn-primary");
         uploadBtn.setOnAction(e -> uploadLog(uploadBtn));
-        Button openDirBtn = AppIcons.button("folder", "日志文件夹");
+        Button openDirBtn = AppIcons.button("folder", I18N.get("dev.t0017"));
         openDirBtn.getStyleClass().add("btn-primary");
         openDirBtn.setOnAction(e -> host.openFile(Path.of("logs").toAbsolutePath().toString()));
         // 新窗口打开（重构 §6.15：日志区缩小到 240px 后，完整回看走独立只读窗口）
-        Button popoutBtn = AppIcons.button("external-link", "新窗口打开");
+        Button popoutBtn = AppIcons.button("external-link", I18N.get("dev.t0018"));
         popoutBtn.getStyleClass().add("btn-primary");
         popoutBtn.setOnAction(e -> openLogPopout());
 
@@ -338,19 +340,19 @@ public final class DevPage {
         area.setWrapText(false);
         area.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 12px;");
         area.setPrefHeight(420);
-        Button copy = PageKit.cardActionButton("复制全部");
+        Button copy = PageKit.cardActionButton(I18N.get("dev.t0019"));
         copy.setOnAction(ev -> {
             ClipboardContent content = new ClipboardContent();
             content.putString(area.getText());
             Clipboard.getSystemClipboard().setContent(content);
-            host.toast("已复制到剪贴板");
+            host.toast(I18N.get("dev.t0020"));
         });
         HBox top = new HBox(10);
         top.setAlignment(Pos.CENTER_RIGHT);
         top.getChildren().add(copy);
         VBox box = new VBox(8);
         box.getChildren().addAll(top, area);
-        host.ui().modal("调试日志（只读快照）", box, 860, 560);
+        host.ui().modal(I18N.get("dev.t0021"), box, 860, 560);
     }
 
     /** 过滤匹配：空 = 全部命中（忽略大小写的包含匹配） */
@@ -377,11 +379,11 @@ public final class DevPage {
     /** 导出日志为文件（FileChooser，默认名 starlight-debug.log） */
     private void exportLog() {
         FileChooser fc = new FileChooser();
-        fc.setTitle("导出调试日志");
+        fc.setTitle(I18N.get("dev.t0022"));
         fc.setInitialFileName("starlight-debug.log");
         fc.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("日志文件", "*.log", "*.txt"),
-                new FileChooser.ExtensionFilter("全部文件", "*.*"));
+                new FileChooser.ExtensionFilter(I18N.get("dev.t0023"), "*.log", "*.txt"),
+                new FileChooser.ExtensionFilter(I18N.get("dev.t0024"), "*.*"));
         java.io.File file = fc.showSaveDialog(host.stage());
         if (file == null) return;
         writeExport(file.toPath());
@@ -390,9 +392,9 @@ public final class DevPage {
     private void writeExport(Path target) {
         try {
             Files.writeString(target, filteredText(), StandardCharsets.UTF_8);
-            host.toast("日志已导出: " + target);
+            host.toast(I18N.get("dev.k0001", target));
         } catch (IOException ex) {
-            host.toast("导出失败: " + ex.getMessage());
+            host.toast(I18N.get("dev.k0002", ex.getMessage()));
         }
     }
 
@@ -403,11 +405,11 @@ public final class DevPage {
     private void uploadLog(Button btn) {
         String main = filteredText();
         if (main.isBlank()) {
-            host.toast("日志为空，无可上传内容");
+            host.toast(I18N.get("dev.t0025"));
             return;
         }
         btn.setDisable(true);
-        btn.setText("上传中...");
+        btn.setText(I18N.get("dev.t0026"));
         Thread worker = new Thread(() -> {
             try {
                 List<sendlogs.LogFileEntry> extras = new ArrayList<>();
@@ -422,14 +424,14 @@ public final class DevPage {
                 LogUploadStore.add(record);
                 Platform.runLater(() -> {
                     btn.setDisable(false);
-                    btn.setText("上传");
+                    btn.setText(I18N.get("dev.t0027"));
                     LogUploadResultWindow.show(host.stage(), record, host::toast, () -> { });
                 });
             } catch (Exception ex) {
                 Platform.runLater(() -> {
                     btn.setDisable(false);
-                    btn.setText("上传");
-                    host.toast("上传失败: " + ex.getMessage());
+                    btn.setText(I18N.get("dev.t0028"));
+                    host.toast(I18N.get("dev.k0003", ex.getMessage()));
                 });
             }
         }, "dev-log-upload");
@@ -452,12 +454,11 @@ public final class DevPage {
 
     /** 清除 <gameDir>/.cache：下载元数据缓存（meta/）+ 校验状态缓存（verify-state.json） */
     private Node buildCacheCard() {
-        Button btn = PageKit.cardActionButton("清除下载缓存");
-        btn.setOnAction(e -> host.ui().confirm("清除下载缓存",
-                "将删除游戏目录 .cache 下的下载元数据缓存与校验状态缓存。\n"
-                        + "不影响游戏文件本身，下次资源补全会重新拉取元数据并做完整校验（更慢但更严格）。",
-                "清除", true, this::doClearCache));
-        return PageKit.settingsCard("下载缓存", "清除下载元数据缓存与校验状态缓存（排查文件损坏 / 强制重新校验）", btn);
+        Button btn = PageKit.cardActionButton(I18N.get("dev.t0029"));
+        btn.setOnAction(e -> host.ui().confirm(I18N.get("dev.t0030"),
+                I18N.get("dev.t0106"),
+                I18N.get("dev.t0031"), true, this::doClearCache));
+        return PageKit.settingsCard(I18N.get("dev.t0032"), I18N.get("dev.t0033"), btn);
     }
 
     private void doClearCache() {
@@ -468,8 +469,8 @@ public final class DevPage {
             freed += deleteFile(Path.of(gameDir, ".cache", "verify-state.json"));
             long f = freed;
             Platform.runLater(() -> host.toast(f > 0
-                    ? "已清除下载缓存，释放 " + FormatBytes.human(f)
-                    : "没有可清除的下载缓存"));
+                    ? I18N.get("dev.k0021", FormatBytes.human(f))
+                    : I18N.get("dev.t0034")));
         }, "dev-clear-cache");
         worker.setDaemon(true);
         worker.start();
@@ -514,15 +515,15 @@ public final class DevPage {
         sourceHealthSummary.setStyle("-fx-text-fill: #9ca3af; -fx-font-size: 12px;");
         sourceHealthRows = new VBox(4);
 
-        Button refreshBtn = PageKit.cardActionButton("刷新");
+        Button refreshBtn = PageKit.cardActionButton(I18N.get("dev.t0035"));
         refreshBtn.setOnAction(e -> refreshSourceHealth());
-        Button resetBtn = PageKit.cardActionButton("重置");
-        resetBtn.setOnAction(e -> host.ui().confirm("重置源健康状态",
-                "将清空全部下载源健康统计（拉黑 / 失败计数 / 成功经验），下一个文件起重新观察。",
-                "重置", true, () -> {
+        Button resetBtn = PageKit.cardActionButton(I18N.get("dev.t0036"));
+        resetBtn.setOnAction(e -> host.ui().confirm(I18N.get("dev.t0037"),
+                I18N.get("dev.t0038"),
+                I18N.get("dev.t0039"), true, () -> {
                     SourceHealth.getInstance().reset();
                     refreshSourceHealth();
-                    host.toast("源健康状态已重置");
+                    host.toast(I18N.get("dev.t0040"));
                 }));
 
         HBox header = new HBox(10);
@@ -531,8 +532,8 @@ public final class DevPage {
         HBox.setHgrow(spacer, Priority.ALWAYS);
         header.getChildren().addAll(sourceHealthSummary, spacer, refreshBtn, resetBtn);
 
-        VBox card = PageKit.settingsCardStacked("下载源健康",
-                "「主机 + 路径前缀」级熔断与成功经验（跳过的无效请求 / 各源失败计数 / 最近成功耗时）", header);
+        VBox card = PageKit.settingsCardStacked(I18N.get("dev.t0041"),
+                I18N.get("dev.t0042"), header);
         card.getChildren().add(sourceHealthRows);
         refreshSourceHealth();
 
@@ -554,32 +555,32 @@ public final class DevPage {
         SourceHealth sh = SourceHealth.getInstance();
         long skipped = sh.getSkippedRequests();
         List<SourceHealth.HealthRow> rows = sh.snapshot();
-        sourceHealthSummary.setText("累计跳过无效请求 " + skipped + " 次 · 跟踪 " + rows.size() + " 个地址段");
+        sourceHealthSummary.setText(I18N.get("dev.p0111", skipped, rows.size()));
         if (rows.isEmpty()) {
-            sourceHealthRows.getChildren().add(dimHint("暂无记录（尚未发生下载）"));
+            sourceHealthRows.getChildren().add(dimHint(I18N.get("dev.t0043")));
             return;
         }
         long now = System.currentTimeMillis();
         int shown = 0;
         for (SourceHealth.HealthRow row : rows) {
             if (shown >= 20) {
-                sourceHealthRows.getChildren().add(dimHint("…其余 " + (rows.size() - shown) + " 条略"));
+                sourceHealthRows.getChildren().add(dimHint(I18N.get("dev.p0112", (rows.size() - shown))));
                 break;
             }
             boolean blocked = row.blockedUntilMs > 0;
             boolean dirty = row.consecutive404 > 0 || row.consecutiveTimeout > 0
                     || row.consecutiveEmpty > 0 || row.slowCount > 0;
             String status = blocked
-                    ? "已拉黑 " + Math.max(1, (row.blockedUntilMs - now) / 1000) + "s"
-                    : "正常";
+                    ? I18N.get("dev.p0113", Math.max(1, (row.blockedUntilMs - now) / 1000), "s")
+                    : I18N.get("dev.t0044");
             String color = blocked ? "#ef4444" : dirty ? "#f59e0b" : "#9ca3af";
             StringBuilder line = new StringBuilder(row.key)
                     .append("  [").append(status).append("]");
             if (row.consecutive404 > 0) line.append(" 404×").append(row.consecutive404);
-            if (row.consecutiveTimeout > 0) line.append(" 超时×").append(row.consecutiveTimeout);
-            if (row.consecutiveEmpty > 0) line.append(" 空×").append(row.consecutiveEmpty);
-            if (row.slowCount > 0) line.append(" 慢×").append(row.slowCount);
-            if (row.lastSuccessCostMs >= 0) line.append(" · 上次成功 ").append(row.lastSuccessCostMs).append("ms");
+            if (row.consecutiveTimeout > 0) line.append(I18N.get("dev.t0045")).append(row.consecutiveTimeout);
+            if (row.consecutiveEmpty > 0) line.append(I18N.get("dev.t0046")).append(row.consecutiveEmpty);
+            if (row.slowCount > 0) line.append(I18N.get("dev.t0047")).append(row.slowCount);
+            if (row.lastSuccessCostMs >= 0) line.append(I18N.get("dev.t0048")).append(row.lastSuccessCostMs).append("ms");
             Label l = new Label(line.toString());
             l.setStyle("-fx-text-fill: " + color + "; -fx-font-size: 11px;"
                     + " -fx-font-family: 'Consolas', monospace;");
@@ -600,7 +601,7 @@ public final class DevPage {
     /** 本地服务状态：皮肤/披风服务 / 披风代理 / 色觉调节页（懒启动，随游戏会话或功能开关拉起） */
     private Node buildServiceCard() {
         serviceRows = new VBox(4);
-        Button refreshBtn = PageKit.cardActionButton("刷新");
+        Button refreshBtn = PageKit.cardActionButton(I18N.get("dev.t0049"));
         refreshBtn.setOnAction(e -> refreshServices());
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
@@ -610,8 +611,8 @@ public final class DevPage {
         placeholder.setVisible(false);
         header.getChildren().addAll(placeholder, spacer, refreshBtn);
 
-        VBox card = PageKit.settingsCardStacked("本地服务状态",
-                "启动器内嵌的回环 HTTP 服务（随机端口、懒启动）；排查皮肤/披风/色觉调节异常时先看这里", header);
+        VBox card = PageKit.settingsCardStacked(I18N.get("dev.t0050"),
+                I18N.get("dev.t0051"), header);
         card.getChildren().add(serviceRows);
         refreshServices();
         return card;
@@ -622,21 +623,28 @@ public final class DevPage {
         serviceRows.getChildren().clear();
 
         LocalYggdrasilServer ygg = LocalYggdrasilServer.current();
-        serviceRow("本地皮肤/披风服务 (Yggdrasil)",
-                ygg == null ? "未启动（启动游戏且本地有披风时拉起）" : "运行中 · 端口 " + ygg.getPort(),
+        serviceRow(I18N.get("dev.t0052"),
+                ygg == null ? I18N.get("dev.t0053") : I18N.get("dev.k0004", ygg.getPort()),
                 ygg != null);
 
         LocalCapeProxy cape = LocalCapeProxy.current();
-        serviceRow("本地披风代理",
-                cape == null ? "未启动（同上，配合 cape-url-patch-agent 注入）" : "运行中 · 端口 " + cape.getCapePort(),
+        serviceRow(I18N.get("dev.t0054"),
+                cape == null ? I18N.get("dev.t0055") : I18N.get("dev.k0005", cape.getCapePort()),
                 cape != null);
+
+        // 披风 agent 落点：单 EXE 形态由内置资源释放到用户数据目录（只查状态，不触发释放）
+        java.nio.file.Path agent = com.example.starlight.auth.offline.CapeAgentInstaller.installedPath();
+        serviceRow(I18N.get("dev.t0056"),
+                agent != null ? I18N.get("dev.r0001", agent)
+                        : I18N.get("dev.r0002", com.example.starlight.config.AppDirs.capeAgentJar()),
+                agent != null);
 
         boolean tuneUp = ColorBlindTuneServer.isRunning();
         String tuneUrl = ColorBlindTuneServer.url();
-        serviceRow("色觉快速调节页",
-                tuneUp ? "运行中 · " + tuneUrl : "未启动（打开色盲辅助调节时拉起）", tuneUp);
+        serviceRow(I18N.get("dev.t0057"),
+                tuneUp ? I18N.get("dev.k0022", tuneUrl) : I18N.get("dev.t0058"), tuneUp);
         if (tuneUp) {
-            Button open = PageKit.cardActionButton("打开网页");
+            Button open = PageKit.cardActionButton(I18N.get("dev.t0059"));
             open.setOnAction(e -> host.openWebUrl(tuneUrl));
             serviceRows.getChildren().add(open);
         }
@@ -662,13 +670,13 @@ public final class DevPage {
 
         VBox rows = new VBox(6);
         rows.getChildren().addAll(
-                paramRow("合并重试次数（1~10）", mergeRetry),
-                paramRow("合并退避基数 ms（100~5000，实际退避 = 基数×次数）", mergeBackoff),
-                paramRow("慢速掐线阈值 秒（1~60，两包间隔超此值且不足 1KB 即断开）", slowGap),
-                paramRow("镜像熔断阈值 次（1~10，连续失败多少次拉黑镜像）", breakerThreshold),
-                paramRow("镜像熔断冷却 秒（10~600，冷却结束放行探测）", breakerCooldown));
+                paramRow(I18N.get("dev.t0060"), mergeRetry),
+                paramRow(I18N.get("dev.t0061"), mergeBackoff),
+                paramRow(I18N.get("dev.t0062"), slowGap),
+                paramRow(I18N.get("dev.t0063"), breakerThreshold),
+                paramRow(I18N.get("dev.t0064"), breakerCooldown));
 
-        Button applyBtn = PageKit.cardActionButton("应用");
+        Button applyBtn = PageKit.cardActionButton(I18N.get("dev.t0065"));
         applyBtn.setOnAction(e -> {
             int retry = PageKit.parseIntSafe(mergeRetry.getText(), DownloadSettings.DEFAULT_MERGE_RETRY);
             int backoff = PageKit.parseIntSafe(mergeBackoff.getText(), DownloadSettings.DEFAULT_MERGE_BACKOFF_MS);
@@ -692,9 +700,9 @@ public final class DevPage {
             slowGap.setText(String.valueOf(DownloadSettings.getSlowGapSec()));
             breakerThreshold.setText(String.valueOf(DownloadSettings.getBreakerThreshold()));
             breakerCooldown.setText(String.valueOf(DownloadSettings.getBreakerCooldownSec()));
-            host.toast("下载策略参数已应用（立即生效）");
+            host.toast(I18N.get("dev.t0066"));
         });
-        Button resetBtn = PageKit.cardActionButton("恢复默认");
+        Button resetBtn = PageKit.cardActionButton(I18N.get("dev.t0067"));
         resetBtn.setOnAction(e -> {
             mergeRetry.setText(String.valueOf(DownloadSettings.DEFAULT_MERGE_RETRY));
             mergeBackoff.setText(String.valueOf(DownloadSettings.DEFAULT_MERGE_BACKOFF_MS));
@@ -708,8 +716,8 @@ public final class DevPage {
         btns.setAlignment(Pos.CENTER_LEFT);
         btns.getChildren().addAll(applyBtn, resetBtn);
 
-        VBox card = PageKit.settingsCardStacked("下载策略参数",
-                "调错会直接伤下载成功率——仅在排查特定源/镜像问题时调整", rows);
+        VBox card = PageKit.settingsCardStacked(I18N.get("dev.t0068"),
+                I18N.get("dev.t0069"), rows);
         card.getChildren().add(btns);
         return card;
     }
@@ -744,10 +752,10 @@ public final class DevPage {
 
         hostChips = new VBox(4);
         TextField input = new TextField();
-        input.setPromptText("域名片段，如 my-mirror.example.com（可 | 分隔多个）");
+        input.setPromptText(I18N.get("dev.t0070"));
         input.setStyle("-fx-font-size: 12px;");
         HBox.setHgrow(input, Priority.ALWAYS);
-        Button addBtn = PageKit.cardActionButton("添加");
+        Button addBtn = PageKit.cardActionButton(I18N.get("dev.t0071"));
         addBtn.setOnAction(e -> {
             String raw = input.getText();
             if (raw == null || raw.isBlank()) return;
@@ -761,14 +769,13 @@ public final class DevPage {
             if (added > 0) {
                 persistHosts();
                 input.clear();
-                host.toast("已添加 " + added + " 个单线程 host 片段");
+                host.toast(I18N.get("dev.p0114", added));
             }
             refreshHostChips();
         });
 
-        VBox card = PageKit.settingsCardStacked("单线程 Host 黑名单",
-                "命中片段的下载源只开一个线程（防风控/限流）；内置: bmclapi / github.com / githubusercontent"
-                        + " / modrinth / mcbbs / optifine / meloong / momot / pcl2-server（不可移除）",
+        VBox card = PageKit.settingsCardStacked(I18N.get("dev.t0072"),
+                I18N.get("dev.t0107"),
                 hostInputRow(input, addBtn));
         card.getChildren().add(hostChips);
         refreshHostChips();
@@ -788,13 +795,13 @@ public final class DevPage {
         hostChips.getChildren().clear();
         List<String> frags = HostPolicy.userFragments();
         if (frags.isEmpty()) {
-            hostChips.getChildren().add(dimHint("暂无用户自加片段"));
+            hostChips.getChildren().add(dimHint(I18N.get("dev.t0073")));
             return;
         }
         for (String frag : frags) {
             Label name = new Label(frag);
             name.setStyle("-fx-text-fill: #d1d5db; -fx-font-size: 12px; -fx-font-family: 'Consolas', monospace;");
-            Button remove = PageKit.cardActionButton("移除");
+            Button remove = PageKit.cardActionButton(I18N.get("dev.t0074"));
             remove.setOnAction(e -> {
                 HostPolicy.removeSingleThreadHost(frag);
                 persistHosts();
@@ -817,29 +824,29 @@ public final class DevPage {
 
     /** 合并配置查看器：starlight.ini + starlight-client.ini + 版本级 overrides（敏感值打码） */
     private Node buildConfigViewerCard() {
-        Button btn = PageKit.cardActionButton("查看合并配置");
+        Button btn = PageKit.cardActionButton(I18N.get("dev.t0075"));
         btn.setOnAction(e -> {
             TextArea area = new TextArea(buildConfigDump());
             area.setEditable(false);
             area.setWrapText(false);
             area.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 12px;");
             area.setPrefHeight(420);
-            Button copy = PageKit.cardActionButton("复制全部");
+            Button copy = PageKit.cardActionButton(I18N.get("dev.t0076"));
             copy.setOnAction(ev -> {
                 ClipboardContent content = new ClipboardContent();
                 content.putString(area.getText());
                 Clipboard.getSystemClipboard().setContent(content);
-                host.toast("配置已复制到剪贴板");
+                host.toast(I18N.get("dev.t0077"));
             });
             HBox top = new HBox(10);
             top.setAlignment(Pos.CENTER_RIGHT);
             top.getChildren().add(copy);
             VBox box = new VBox(8);
             box.getChildren().addAll(top, area);
-            host.ui().modal("合并配置查看（敏感值已打码）", box, 720, 560);
+            host.ui().modal(I18N.get("dev.t0078"), box, 720, 560);
         });
-        return PageKit.settingsCard("配置查看器",
-                "只读展示两份 ini 与版本级 config.overrides.json 的实际内容，排查「改了没生效」", btn);
+        return PageKit.settingsCard(I18N.get("dev.t0079"),
+                I18N.get("dev.t0080"), btn);
     }
 
     /** 拼装配置转储：两份 ini + 版本级覆盖文件；key 含 token/password/key/secret 的值打码 */
@@ -849,7 +856,7 @@ public final class DevPage {
         dumpMap(sb, ConfigManager.readConfig());
         sb.append("\n== starlight-client.ini ==\n");
         dumpMap(sb, ConfigManager.readClientConfig());
-        sb.append("\n== 版本级覆盖 config.overrides.json ==\n");
+        sb.append(I18N.get("dev.t0081"));
         String gameDir = host.config().getOrDefault("GameDir", ".minecraft");
         boolean any = false;
         Path versions = Path.of(gameDir, "versions");
@@ -864,17 +871,17 @@ public final class DevPage {
                     sb.append("-- ").append(p).append(" --\n");
                     try {
                         String content = Files.readString(p);
-                        if (content.length() > 2000) content = content.substring(0, 2000) + "\n…(已截断)";
+                        if (content.length() > 2000) content = content.substring(0, 2000) + I18N.get("dev.r0003");
                         sb.append(content).append('\n');
                     } catch (IOException ex) {
-                        sb.append("（读取失败: ").append(ex.getMessage()).append("）\n");
+                        sb.append(I18N.get("dev.t0082")).append(ex.getMessage()).append("）\n");
                     }
                 }
             } catch (IOException ignored) {
                 // 目录遍历失败按无覆盖文件处理
             }
         }
-        if (!any) sb.append("（当前游戏目录下没有版本级覆盖文件）\n");
+        if (!any) sb.append(I18N.get("dev.t0083"));
         return sb.toString();
     }
 
@@ -883,7 +890,7 @@ public final class DevPage {
 
     private void dumpMap(StringBuilder sb, Map<String, String> map) {
         if (map.isEmpty()) {
-            sb.append("（空）\n");
+            sb.append(I18N.get("dev.t0084"));
             return;
         }
         new java.util.TreeMap<>(map).forEach((k, v) -> sb.append(k).append(" = ")
@@ -900,11 +907,11 @@ public final class DevPage {
 
     /** 上次启动命令查看/导出（来源：logs/minecraft_launch_*.log 的「完整启动命令」行） */
     private Node buildLaunchCommandCard() {
-        Button btn = PageKit.cardActionButton("查看上次启动命令");
+        Button btn = PageKit.cardActionButton(I18N.get("dev.t0085"));
         btn.setOnAction(e -> {
             String cmd = findLastLaunchCommand();
             if (cmd == null) {
-                host.toast("还没有启动记录（未找到 logs/minecraft_launch_*.log）");
+                host.toast(I18N.get("dev.t0086"));
                 return;
             }
             TextArea area = new TextArea(cmd);
@@ -913,19 +920,19 @@ public final class DevPage {
             area.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 12px;");
             area.setPrefHeight(200);
 
-            Button copy = PageKit.cardActionButton("复制");
+            Button copy = PageKit.cardActionButton(I18N.get("dev.t0087"));
             copy.setOnAction(ev -> {
                 ClipboardContent content = new ClipboardContent();
                 content.putString(cmd);
                 Clipboard.getSystemClipboard().setContent(content);
-                host.toast("启动命令已复制到剪贴板");
+                host.toast(I18N.get("dev.t0088"));
             });
-            Button export = PageKit.cardActionButton("导出 .bat");
+            Button export = PageKit.cardActionButton(I18N.get("dev.t0089"));
             export.setOnAction(ev -> {
                 FileChooser fc = new FileChooser();
-                fc.setTitle("导出启动脚本");
+                fc.setTitle(I18N.get("dev.t0090"));
                 fc.setInitialFileName("launch-minecraft.bat");
-                fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("批处理脚本", "*.bat"));
+                fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(I18N.get("dev.t0091"), "*.bat"));
                 java.io.File file = fc.showSaveDialog(host.stage());
                 if (file == null) return;
                 try {
@@ -933,9 +940,9 @@ public final class DevPage {
                     String bat = "@echo off\r\ncd /d \"" + Path.of(gameDir).toAbsolutePath().normalize()
                             + "\"\r\n" + cmd + "\r\n";
                     Files.writeString(file.toPath(), bat, StandardCharsets.UTF_8);
-                    host.toast("启动脚本已导出: " + file.getAbsolutePath());
+                    host.toast(I18N.get("dev.k0006", file.getAbsolutePath()));
                 } catch (IOException ex) {
-                    host.toast("导出失败: " + ex.getMessage());
+                    host.toast(I18N.get("dev.k0007", ex.getMessage()));
                 }
             });
             HBox btns = new HBox(10);
@@ -943,10 +950,10 @@ public final class DevPage {
             btns.getChildren().addAll(copy, export);
             VBox box = new VBox(8);
             box.getChildren().addAll(btns, area);
-            host.ui().modal("上次启动命令（完整 JVM + 游戏参数）", box, 860, 320);
+            host.ui().modal(I18N.get("dev.t0092"), box, 860, 320);
         });
-        return PageKit.settingsCard("启动命令预览",
-                "提取最近一次游戏启动的完整命令行（含 JVM 参数 / classpath / 游戏参数），可复制或导出为 .bat 复现", btn);
+        return PageKit.settingsCard(I18N.get("dev.t0093"),
+                I18N.get("dev.t0094"), btn);
     }
 
     /** 扫 logs/minecraft_launch_*.log 取最新一份中的「完整启动命令: 」行；没有返回 null */
@@ -967,10 +974,14 @@ public final class DevPage {
         if (latest == null) return null;
         try {
             List<String> lines = Files.readAllLines(latest, StandardCharsets.UTF_8);
+            // 注意：这里的「完整启动命令: 」是日志文件格式的锚点，由日志写入方决定，不是界面文案。
+            // 日志一律保持中文（docs/2026-10-01-游戏启动日志PCL标准.md），绝不能走 I18N，
+            // 否则解析永远失败。
+            final String anchor = I18N.get("dev.t0095");
             for (int i = lines.size() - 1; i >= 0; i--) {
                 String line = lines.get(i);
-                if (line.contains("完整启动命令: ")) {
-                    return line.substring(line.indexOf("完整启动命令: ") + "完整启动命令: ".length());
+                if (line.contains(anchor)) {
+                    return line.substring(line.indexOf(anchor) + anchor.length());
                 }
             }
         } catch (IOException ignored) {
@@ -990,28 +1001,28 @@ public final class DevPage {
 
     /** 三个悬浮监控窗的开关（性能 / 下载速度 / 游戏状态），窗口生命周期独立于本页 */
     private Node buildFloatWindowsCard() {
-        Button perfBtn = floatButton("性能监控", DevFloatWindows::togglePerformance,
+        Button perfBtn = floatButton(I18N.get("dev.t0096"), DevFloatWindows::togglePerformance,
                 () -> DevFloatWindows.isPerformanceOpen());
-        Button dlBtn = floatButton("下载速度", DevFloatWindows::toggleDownloadSpeed,
+        Button dlBtn = floatButton(I18N.get("dev.t0097"), DevFloatWindows::toggleDownloadSpeed,
                 () -> DevFloatWindows.isDownloadSpeedOpen());
-        Button gameBtn = floatButton("游戏状态", DevFloatWindows::toggleGameStatus,
+        Button gameBtn = floatButton(I18N.get("dev.t0098"), DevFloatWindows::toggleGameStatus,
                 () -> DevFloatWindows.isGameStatusOpen());
-        Button netBtn = floatButton("网络请求", DevFloatWindows::toggleNetworkStats,
+        Button netBtn = floatButton(I18N.get("dev.t0099"), DevFloatWindows::toggleNetworkStats,
                 () -> DevFloatWindows.isNetworkStatsOpen());
 
         HBox btns = new HBox(10);
         btns.setAlignment(Pos.CENTER_LEFT);
         btns.getChildren().addAll(perfBtn, dlBtn, gameBtn, netBtn);
-        return PageKit.settingsCardStacked("悬浮监控窗",
-                "置顶小窗，游戏/下载时挂在角落观察；再次点击关闭。性能/下载速度 1s 采样，网络请求为累计计数", btns);
+        return PageKit.settingsCardStacked(I18N.get("dev.t0100"),
+                I18N.get("dev.t0101"), btns);
     }
 
     /** 悬浮窗开关按钮：点击切换，文案随状态刷新（页面重建时按当前状态恢复） */
     private Button floatButton(String name, Runnable toggle, java.util.function.BooleanSupplier isOpen) {
-        Button b = PageKit.cardActionButton(name + "：" + (isOpen.getAsBoolean() ? "已开" : "关闭"));
+        Button b = PageKit.cardActionButton(name + "：" + (isOpen.getAsBoolean() ? I18N.get("dev.t0102") : I18N.get("dev.t0103")));
         b.setOnAction(e -> {
             toggle.run();
-            b.setText(name + "：" + (isOpen.getAsBoolean() ? "已开" : "关闭"));
+            b.setText(name + "：" + (isOpen.getAsBoolean() ? I18N.get("dev.t0104") : I18N.get("dev.t0105")));
         });
         return b;
     }

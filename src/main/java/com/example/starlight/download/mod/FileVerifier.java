@@ -1,5 +1,7 @@
 package com.example.starlight.download.mod;
 
+
+import com.example.starlight.util.I18N;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -46,19 +48,19 @@ public final class FileVerifier {
      */
     public static Optional<String> verify(Path file, long expectedSize, long minSize, String expectedHash) {
         if (file == null || !Files.isRegularFile(file)) {
-            return Optional.of("文件不存在: " + file);
+            return Optional.of(I18N.get("mod.p0021", file));
         }
         long size;
         try {
             size = Files.size(file);
         } catch (IOException e) {
-            return Optional.of("无法读取文件大小: " + e.getMessage());
+            return Optional.of(I18N.get("mod.p0022", e.getMessage()));
         }
         if (expectedSize >= 0 && size != expectedSize) {
-            return Optional.of("大小不符: 期望 " + expectedSize + " 字节, 实际 " + size);
+            return Optional.of(I18N.get("fv.r0001", expectedSize, size));
         }
         if (minSize > 0 && size < minSize) {
-            return Optional.of("文件过小: " + size + " < " + minSize);
+            return Optional.of(I18N.get("mod.p0023", size + " < " + minSize));
         }
         if (expectedHash != null && !expectedHash.isBlank()) {
             String algo = detectHashAlgo(expectedHash);
@@ -67,10 +69,10 @@ public final class FileVerifier {
                 try {
                     actual = hashHex(file, algo);
                 } catch (Exception e) {
-                    return Optional.of("哈希计算失败: " + e.getMessage());
+                    return Optional.of(I18N.get("mod.p0024", e.getMessage()));
                 }
                 if (!actual.equalsIgnoreCase(expectedHash.trim())) {
-                    return Optional.of("哈希不符(" + algo + "): 期望 " + expectedHash + " 实际 " + actual);
+                    return Optional.of(I18N.get("fv.r0002", algo, expectedHash, actual));
                 }
             }
         }

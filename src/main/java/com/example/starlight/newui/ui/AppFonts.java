@@ -1,5 +1,7 @@
 package com.example.starlight.newui.ui;
 
+import com.example.starlight.util.I18N;
+
 import javafx.scene.text.Font;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

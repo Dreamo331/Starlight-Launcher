@@ -9,6 +9,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class FabricProvider implements LoaderProvider {
+
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(FabricProvider.class);
+
     public String name() { return "Fabric"; }
     public String icon() { return ""; }
     public String fallbackUrl() { return "https://fabricmc.net/"; }
@@ -37,7 +41,10 @@ public class FabricProvider implements LoaderProvider {
                 String ver = VersionDownloadService.getJsonString(firstLoader, "version");
                 return new LoaderVersion(name(), ver, true, "https://fabricmc.net/use/installer/");
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            // 查询失败要留痕：静默吞掉会让「网络抖动查空」与「真的没有加载器」无法区分
+            LOG.warn("Fabric version query failed for {}: {}", mcVersion, e.getMessage());
+        }
         return new LoaderVersion(name(), null, false, null);
     }
 
@@ -49,8 +56,9 @@ public class FabricProvider implements LoaderProvider {
                     "https://meta.fabricmc.net/v2/versions/loader/" + mcVersion);
             JsonArray arr = new Gson().fromJson(json, JsonArray.class);
             if (arr != null) {
-                int maxShow = 20;
-                for (int i = 0; i < arr.size() && i < maxShow; i++) {
+                // 元数据返回全部 loader 版本，截断丢失老版本（老 Forge 推荐版常在第 20 位之后）；
+                // 数据量只有几十 KB，交给 UI 做搜索过滤而不是在数据源头砍掉
+                for (int i = 0; i < arr.size(); i++) {
                     JsonObject entry = arr.get(i).getAsJsonObject();
                     JsonObject loader = entry.getAsJsonObject("loader");
                     if (loader != null) {
@@ -62,7 +70,9 @@ public class FabricProvider implements LoaderProvider {
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LOG.warn("Fabric version list query failed for {}: {}", mcVersion, e.getMessage());
+        }
         return list;
     }
 

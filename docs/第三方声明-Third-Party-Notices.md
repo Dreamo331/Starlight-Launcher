@@ -37,6 +37,7 @@ This file lists the third-party software, data and services used by Starlight La
 | Component | Used for | License |
 |---|---|---|
 | Lucide icon set | UI icons | ISC |
+| Bing mark (`images/bing.png`) | Indicates the search engine used by the top search pill | Microsoft trademark/artwork, used only descriptively ("this search opens Bing"). The project is not affiliated with Microsoft and claims no rights in it. |
 | Starlight Launcher icon and artwork | Project identity | © 2026 Starlight Launcher Contributors. **Not licensed for reuse in forks** — see [LICENSE-EN.md](LICENSE-EN.md) Section 4. |
 
 ## 4. Network services and data sources
@@ -56,13 +57,16 @@ The launcher talks to the following services **on the User's behalf**. Each is o
 | `api.modrinth.com`, `cdn.modrinth.com` (or the `mod.mcimirror.top` mirror) | Mod and modpack search and download | Modrinth |
 | `api.curseforge.com`, `edge.forgecdn.net` (or mirror) | Mod and modpack search and download | Overwolf / CurseForge |
 | `raw.githubusercontent.com` (HMCL mod dictionary), `www.mcmod.cn` | Chinese mod names and links | HMCL contributors; mcmod.cn |
-| `littleskin.cn`, user-selected skin sites | Third-party ("Yggdrasil" / authlib) skin authentication | The skin site operator |
+| `littleskin.cn`, `skin.prinzeugen.net` (official Blessing Skin demo), `skin.mualliance.ltd` (MUA), plus any skin site you enter yourself | Third-party ("Yggdrasil" / authlib) skin authentication. Presets in `services.thirdPartyPresets` only pre-fill the address in the "third-party login" dropdown; selecting one sends no request — requests are always triggered by you clicking login | The respective skin site operators; not affiliated with this project |
 | `authlib-injector.yushi.moe`, GitHub releases | authlib-injector, downloaded on request | yushijinhun, AGPL-3.0 |
 | `mirrors.tuna.tsinghua.edu.cn`, `repo.huaweicloud.com`, `adoptium.net` | JDK downloads | Mirror operators; Eclipse Adoptium |
 | `api.logshare.cn` | **Opt-in** log upload when the User clicks "Upload log" | Logshare |
+| `api.natfrp.com`, `www.natfrp.com`, `nya.globalslb.net` (frpc download CDN), and the node hostnames assigned to your tunnels | FRP multiplayer (SakuraFrp): access-key verification, tunnel/node management, tunnel configuration and official frpc download. The access key is stored locally only | SakuraFrp (natfrp), not affiliated with this project; use is subject to its Terms of Service |
 | User-configured AI provider (OpenAI, DeepSeek, Moonshot, Zhipu, Qwen, Doubao, SiliconFlow, OpenRouter, Groq, MiniMax, Hunyuan, Ernie, Spark, StepFun, Baichuan, Gemini, Anthropic) | Text features the User explicitly invokes | The selected provider |
 | Third-party community site API (only if the community module is configured) | Community posts and check-in | That site |
 | GitHub / Gitee | Update checks and release downloads | GitHub, Inc. / Gitee |
+| `cn.bing.com` | Search pill in the top navigation bar: the launcher only builds the result-page URL locally and hands it to the **system default browser**. It never issues the request itself, and never reads or parses the result page | Microsoft (Bing); visited directly by your browser |
+| The Project's official release channel (the address configured in `services.capeAgentUrl`) | Re-download of the bundled cape-patch agent (`cape-url-patch-agent.jar`) **only when the embedded copy is missing**; this component is written by the Project itself and published under MIT | The Project |
 
 ## 5. Game content and trademarks
 
@@ -75,7 +79,10 @@ The launcher talks to the following services **on the User's behalf**. Each is o
 For the avoidance of doubt, Starlight Launcher:
 
 - contains **no** Mojang game code and **no** Minecraft client files;
-- bundles **no** JDK, **no** authlib-injector, and **no** mods — these are downloaded only when the User asks for them;
+- bundles **no** JDK, **no** authlib-injector, and **no** mods — these are downloaded only when the User asks for them
+  (exception: the cape-patch agent `cape-url-patch-agent.jar`, a few KB of the Project's own code, ships embedded in the
+  single-EXE build so that offline accounts' OptiFine cape downloads can be redirected to loopback; it contains no
+  third-party code);
 - contains **no** advertising SDK, **no** analytics SDK, **no** crash-reporting SDK, and **no** tracking of User behaviour;
 - includes **no** built-in payment, top-up, recharge or tipping function, and processes **no** payments of any kind;
 - ships **no** monetized server list and receives **no** share of revenue from any third-party server.

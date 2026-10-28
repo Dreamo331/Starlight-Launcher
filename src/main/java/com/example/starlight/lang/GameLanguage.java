@@ -1,5 +1,7 @@
 package com.example.starlight.lang;
 
+
+import com.example.starlight.util.I18N;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,11 +37,11 @@ public class GameLanguage {
     public static final Map<String, String> LANGUAGE_MAP = new LinkedHashMap<>();
 
     static {
-        LANGUAGE_MAP.put("简体中文", "zh_cn");
-        LANGUAGE_MAP.put("繁体中文", "zh_tw");
+        LANGUAGE_MAP.put(I18N.get("lang.t0001"), "zh_cn");
+        LANGUAGE_MAP.put(I18N.get("lang.t0002"), "zh_tw");
         LANGUAGE_MAP.put("English (US)", "en_us");
         LANGUAGE_MAP.put("English (UK)", "en_gb");
-        LANGUAGE_MAP.put("日本語", "ja_jp");
+        LANGUAGE_MAP.put(I18N.get("lang.t0003"), "ja_jp");
         LANGUAGE_MAP.put("한국어", "ko_kr");
         LANGUAGE_MAP.put("Français", "fr_fr");
         LANGUAGE_MAP.put("Deutsch", "de_de");

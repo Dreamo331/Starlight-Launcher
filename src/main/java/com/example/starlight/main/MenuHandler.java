@@ -1,5 +1,7 @@
 package com.example.starlight.main;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.auth.AccountManager.Account;
 import com.example.starlight.auth.AuthlibInjectorSupport;
@@ -8,6 +10,9 @@ import com.example.starlight.auth.offline.LocalCapeProxy;
 import com.example.starlight.auth.offline.OfflineSkinManager;
 import com.example.starlight.auth.offline.Skin;
 import com.example.starlight.config.GameDirManager;
+import com.example.starlight.config.SelectedVersion;
+import com.example.starlight.config.StarlightConfig;
+import com.example.starlight.frp.SakuraFrpService;
 import com.example.starlight.util.VanillaVersion;
 import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.gui.UIGeneralControlClass;
@@ -196,55 +201,55 @@ public class MenuHandler {
         }
     }
 
-    // FRP 隧道 //
+    // FRP 隧道（SakuraFrp）//
 
-    public static void startFrpTunnel(String addr) {
-        System.out.println("Starting FRP tunnel...");
-        System.out.println("Target address: " + addr);
-
+    /**
+     * 启动一条已存在的 SakuraFrp 隧道（CLI 用）。
+     *
+     * <p>访问密钥由联机页连接后保存到本机凭据文件；这里不接收明文密钥。
+     * 未传隧道 ID 时回退到配置项 {@code SakuraFrpTunnelId}（联机页最后一次启动的隧道）。
+     */
+    public static void startFrpTunnel(String tunnelIdArg) {
+        int tunnelId = parseTunnelId(tunnelIdArg);
+        if (tunnelId <= 0) {
+            // 联机页保存在 starlight-client.ini；历史值可能仍在 starlight.ini，一并兜底
+            tunnelId = parseTunnelId(ConfigManager.readClientConfig().get("SakuraFrpTunnelId"));
+        }
+        if (tunnelId <= 0) {
+            tunnelId = parseTunnelId(StarlightConfig.get("SakuraFrpTunnelId"));
+        }
+        if (tunnelId <= 0) {
+            System.err.println("Error: no tunnel ID. Usage: frp <tunnel-id>"
+                    + " (or start a tunnel once in the launcher's FRP page first).");
+            return;
+        }
+        final int id = tunnelId;
+        System.out.println("Starting SakuraFrp tunnel " + id + "...");
         new Thread(() -> {
             try {
-                Path frpcPath = Paths.get("frpc");
-                Path frpcExePath = Paths.get("frpc.exe");
-
-                if (!Files.exists(frpcPath) && !Files.exists(frpcExePath)) {
-                    System.err.println("Error: frpc/frpc.exe not found! Place frpc in the launcher directory.");
-                    return;
-                }
-
-                String frpcCmd = Files.exists(frpcExePath) ? "frpc.exe" : "frpc";
-                String[] parts = addr.split(":");
-                String localIp = parts[0];
-                String localPort = parts.length > 1 ? parts[1] : "25565";
-
-                String configContent = String.format("""
-                    [common]
-                    server_addr = frp.your-server.com
-                    server_port = 7000
-
-                    [minecraft]
-                    type = tcp
-                    local_ip = %s
-                    local_port = %s
-                    remote_port = 25565
-                    """, localIp, localPort);
-
-                Files.writeString(Paths.get("frpc_temp.ini"), configContent);
-
-                ProcessBuilder pb = new ProcessBuilder(frpcCmd, "-c", "frpc_temp.ini");
-                pb.inheritIO();
-                Process process = pb.start();
-                System.out.println("FRP tunnel started (PID: " + process.pid() + ")");
-                System.out.println("Local " + addr + " -> remote port 25565");
+                SakuraFrpService.StartResult result = SakuraFrpService.get().startTunnel(id, System.out::println);
+                System.out.println("Tunnel established: " + result.publicAddress());
                 System.out.println("Press Ctrl+C to stop the tunnel.");
-
-                int exitCode = process.waitFor();
-                System.out.println("FRP tunnel stopped, exit code: " + exitCode);
-
+                while (SakuraFrpService.get().isRunning()) {
+                    Thread.sleep(1000);
+                }
+                System.out.println("SakuraFrp tunnel stopped.");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             } catch (Exception e) {
-                System.err.println("FRP tunnel start failed: " + e.getMessage());
+                System.err.println("SakuraFrp tunnel failed: " + e.getMessage());
             }
-        }, "frp-tunnel-thread").start();
+        }, "sakura-frp-thread").start();
+    }
+
+    private static int parseTunnelId(String text) {
+        if (text == null || text.isBlank()) return -1;
+        try {
+            int id = Integer.parseInt(text.trim());
+            return id > 0 ? id : -1;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     // 发送日志 //
@@ -394,15 +399,15 @@ public class MenuHandler {
                 System.out.println("\n[Fix Suggestions]");
                 List<String> suggestions = new ArrayList<>();
                 if (logContent.contains("OutOfMemoryError")) {
-                    suggestions.add("将最大内存 (-Xmx) 增加到 4096MB 或更高");
+                    suggestions.add(I18N.get("main.t0002"));
                 }
                 if (logContent.contains("EXCEPTION_ACCESS_VIOLATION")) {
-                    suggestions.add("更新显卡驱动到最新版本");
+                    suggestions.add(I18N.get("main.t0003"));
                 }
                 if (suggestions.isEmpty()) {
-                    suggestions.add("检查 Java 版本是否兼容");
-                    suggestions.add("验证游戏文件完整性");
-                    suggestions.add("更新所有模组到最新版本");
+                    suggestions.add(I18N.get("main.t0004"));
+                    suggestions.add(I18N.get("main.t0005"));
+                    suggestions.add(I18N.get("main.t0006"));
                 }
                 for (int i = 0; i < suggestions.size(); i++) {
                     System.out.println("  " + (i + 1) + ". " + suggestions.get(i));
@@ -448,7 +453,7 @@ public class MenuHandler {
     public static Map<String, String> getDefaultConfig() {
         Map<String, String> config = new LinkedHashMap<>();
         config.put("GameDir", ".minecraft");
-        config.put("Version", "1.20.1");
+        // 版本选择不在这里给默认值：它属于「某个游戏目录」，写在各目录的 starlight.json 里
         config.put("JavaPath", "java");
         config.put("MinMemory", "2048");
         config.put("MaxMemory", "4096");
@@ -487,7 +492,7 @@ public class MenuHandler {
     }
 
     public static String getLoggedInUserName() {
-        return (currentAccount != null) ? currentAccount.name : "未知";
+        return (currentAccount != null) ? currentAccount.name : I18N.get("main.t0007");
     }
 
     public static void loginOffline(String username) {
@@ -517,22 +522,28 @@ public class MenuHandler {
 
     public static boolean isConfigReady() {
         Map<String, String> cfg = readConfig();
-        String version = cfg.get("Version");
-        String gameDir = cfg.get("GameDir");
-        if (version == null || version.isEmpty() || gameDir == null || gameDir.isEmpty()) return false;
+        // 版本选择真源：当前游戏目录内的 starlight.json（ini 不再保存 Version）
+        String gameDir = GameDirManager.activePath(cfg);
+        String version = SelectedVersion.of(cfg);
+        if (version.isEmpty() || gameDir.isEmpty()) return false;
         Path versionJson = Paths.get(gameDir, "versions", version, version + ".json");
         return Files.exists(versionJson);
     }
 
     public static UIGeneralControlClass.LaunchConfig getLaunchConfig() {
         Map<String, String> cfg = readConfig();
+        // 版本选择真源：当前游戏目录内的 starlight.json（ini 不再保存 Version）
+        String gameDir = GameDirManager.activePath(cfg);
+        String version = SelectedVersion.of(cfg);
         // 版本独立配置：全局 ini + 当前版本覆盖（config.overrides.json）合并后再构造
-        Map<String, String> effective = VersionConfigManager.buildEffectiveIni(
-                cfg, GameDirManager.activePath(cfg), cfg.getOrDefault("Version", ""));
+        Map<String, String> effective = VersionConfigManager.buildEffectiveIni(cfg, gameDir, version);
+        // 合并结果里已没有 Version / GameDir 键，这里显式带上，保证与选定目录一致
+        effective.put("Version", version);
+        effective.put("GameDir", gameDir);
 
         UIGeneralControlClass.LaunchConfig config = new UIGeneralControlClass.LaunchConfig();
         config.gameDir = effective.getOrDefault("GameDir", ".minecraft");
-        config.version = effective.getOrDefault("Version", "1.20.1");
+        config.version = version.isEmpty() ? "1.20.1" : version;
         config.javaPath = effective.getOrDefault("JavaPath", "java");
         config.userName = effective.getOrDefault("UserName", "Player");
         config.uuid = effective.getOrDefault("UUID", UUID.randomUUID().toString());
@@ -578,9 +589,10 @@ public class MenuHandler {
         parts.add("-Xmx" + config.maxMemory + "M");
 
         if (config.jvmArgs != null && !config.jvmArgs.isEmpty()) {
-            String[] jvmArgsArray = config.jvmArgs.split("\\s+");
-            for (String arg : jvmArgsArray) {
-                if (!arg.trim().isEmpty()) parts.add(arg.trim());
+            // 必须按「带引号路径」切分：-javaagent 指向 ~/.starlight 下的绝对路径，
+            // 用户名含空格时朴素 split("\\s+") 会把 jar 路径拆成两半，JVM 直接拒绝启动
+            for (String arg : com.example.starlight.startmc.LaunchInfo.splitCommandLine(config.jvmArgs)) {
+                if (!arg.isBlank()) parts.add(arg);
             }
         }
 
@@ -740,9 +752,8 @@ public class MenuHandler {
             System.out.print("Enter Minecraft version to launch (e.g. 1.20.1): ");
             if (scanner.hasNextLine()) {
                 config.version = scanner.nextLine().trim();
-                Map<String, String> cfg = new LinkedHashMap<>();
-                cfg.put("Version", config.version);
-                saveConfig(cfg);
+                // 版本选择真源：写进该游戏目录自己的 starlight.json，不再写 ini
+                SelectedVersion.set(config.gameDir, config.version);
             }
         }
 

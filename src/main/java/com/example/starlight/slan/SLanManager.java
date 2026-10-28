@@ -5,6 +5,8 @@
  */
 package com.example.starlight.slan;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.util.DebugLog;
 import java.io.BufferedReader;
 import java.io.File;
@@ -530,23 +532,28 @@ public class SLanManager {
             result.setSuccess(true);
 
             // Minecraft 房间名称（来自 UDP 广播 MOTD）
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (result.getRoomName() == null && (line.contains("房间名称") || line.contains("房间名"))) {
-                result.setRoomName(extractAfter(line, "房间名称"));
-                if (result.getRoomName() == null) result.setRoomName(extractAfter(line, "房间名"));
+                result.setRoomName(extractAfter(line, I18N.get("slan.t0001")));
+                if (result.getRoomName() == null) result.setRoomName(extractAfter(line, I18N.get("slan.t0002")));
             }
             // Minecraft 端口
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (result.getPort() == null && line.contains("端口")) {
-                result.setPort(extractAfter(line, "端口"));
+                result.setPort(extractAfter(line, I18N.get("slan.t0003")));
             }
             // 邀请码
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (result.getInviteCode() == null && (line.contains("邀请码") || line.contains("Invite"))) {
-                result.setInviteCode(extractAfter(line, "邀请码"));
+                result.setInviteCode(extractAfter(line, I18N.get("slan.t0004")));
             }
             // 连接密码
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (result.getPassword() == null && line.contains("连接密码")) {
-                result.setPassword(extractAfter(line, "连接密码"));
+                result.setPassword(extractAfter(line, I18N.get("slan.t0005")));
             }
             // 房间创建完成标志
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (line.contains("房间已创建")) {
                 done = true;
             }
@@ -574,16 +581,19 @@ public class SLanManager {
             result.setSuccess(true);
 
             // 认证成功 = 已加入房间
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (line.contains("认证成功")) {
                 result.setConnected(true);
                 done = true;
             }
             // 认证失败原因
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (line.contains("认证失败")) {
                 result.setConnected(false);
-                result.setError(extractAfter(line, "认证失败"));
+                result.setError(extractAfter(line, I18N.get("slan.t0006")));
             }
             // 虚拟服务端口（本机 MC 客户端连接端口）
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (result.getPort() == null && line.contains("虚拟服务端已启动")) {
                 Matcher m = Pattern.compile(":(\\d{2,5})").matcher(line);
                 if (m.find()) {
@@ -591,12 +601,14 @@ public class SLanManager {
                 }
             }
             // 兜底：新版客户端输出「Minecraft 端口: xxx」
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (result.getPort() == null && line.contains("Minecraft 端口")) {
-                result.setPort(extractAfter(line, "Minecraft 端口"));
+                result.setPort(extractAfter(line, I18N.get("slan.t0007")));
             }
             // 房间ID
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (result.getHostAddress() == null && line.contains("房间ID")) {
-                result.setHostAddress(extractAfter(line, "房间ID"));
+                result.setHostAddress(extractAfter(line, I18N.get("slan.t0008")));
             }
         }
 
@@ -622,24 +634,28 @@ public class SLanManager {
         // 从输出中解析房间信息（兼容多种输出格式）
         for (String line : result.getOutputLines()) {
             // 房间名称
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (hostResult.getRoomName() == null && (line.contains("房间名称") || line.contains("房间名"))) {
-                hostResult.setRoomName(extractAfter(line, "房间名称"));
-                if (hostResult.getRoomName() == null) hostResult.setRoomName(extractAfter(line, "房间名"));
+                hostResult.setRoomName(extractAfter(line, I18N.get("slan.t0009")));
+                if (hostResult.getRoomName() == null) hostResult.setRoomName(extractAfter(line, I18N.get("slan.t0010")));
             }
             // 邀请码
             if (hostResult.getInviteCode() == null
+                    // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
                     && (line.contains("邀请码") || line.contains("Invite") || line.contains("Code"))) {
-                hostResult.setInviteCode(extractAfter(line, "邀请码"));
+                hostResult.setInviteCode(extractAfter(line, I18N.get("slan.t0011")));
                 if (hostResult.getInviteCode() == null) hostResult.setInviteCode(extractValue(line));
             }
             // 端口
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (hostResult.getPort() == null && (line.contains("端口") || line.contains("Port"))) {
-                hostResult.setPort(extractAfter(line, "端口"));
+                hostResult.setPort(extractAfter(line, I18N.get("slan.t0012")));
                 if (hostResult.getPort() == null) hostResult.setPort(extractValue(line));
             }
             // 连接密码
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (hostResult.getPassword() == null && line.contains("连接密码")) {
-                hostResult.setPassword(extractAfter(line, "连接密码"));
+                hostResult.setPassword(extractAfter(line, I18N.get("slan.t0013")));
             }
         }
 
@@ -653,19 +669,23 @@ public class SLanManager {
 
         // 解析连接信息
         for (String line : result.getOutputLines()) {
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (line.contains("成功") || line.contains("Success") || line.contains("Connected")) {
                 joinResult.setConnected(true);
             }
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (line.contains("IP") || line.contains("地址")) {
                 joinResult.setHostAddress(extractValue(line));
             }
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (line.contains("端口") || line.contains("Port")) {
-                joinResult.setPort(extractAfter(line, "端口"));
+                joinResult.setPort(extractAfter(line, I18N.get("slan.t0014")));
                 if (joinResult.getPort() == null) joinResult.setPort(extractValue(line));
             }
+            // i18n-lock: 不要翻译此行中文——解析 SL-MinecraftLAN 程序的中文输出，协议锚点，翻译即功能失效
             if (line.contains("认证失败") || line.contains("邀请码无效")) {
                 joinResult.setConnected(false);
-                joinResult.setError(extractAfter(line, "认证失败"));
+                joinResult.setError(extractAfter(line, I18N.get("slan.t0015")));
                 if (joinResult.getError() == null) joinResult.setError(line.trim());
             }
         }
@@ -761,7 +781,7 @@ public class SLanManager {
             try {
                 File dir = executablePath.getParent().toFile();
                 if (!dir.exists() && !dir.mkdirs()) {
-                    throw new SLanException("无法创建模块目录: " + dir);
+                    throw new SLanException(I18N.get("slan.p0022", dir));
                 }
 
                 tmpFile = new File(dir, EXECUTABLE_NAME + ".part");
@@ -776,7 +796,7 @@ public class SLanManager {
                 DebugLog.http(true, "GET", downloadUrl, 0, 0, null, -1);
                 if (code != HttpURLConnection.HTTP_OK) {
                     DebugLog.http(false, null, downloadUrl, code, 0, null, -1);
-                    throw new SLanException("下载失败: HTTP " + code);
+                    throw new SLanException(I18N.get("slan.p0023", code));
                 }
 
                 long total = conn.getContentLengthLong();
@@ -802,16 +822,16 @@ public class SLanManager {
                 }
 
                 if (total > 0 && tmpFile.length() != total) {
-                    throw new SLanException("下载不完整: 期望 " + total + " 字节，实际 " + tmpFile.length() + " 字节");
+                    throw new SLanException(I18N.get("slanm.r0001", total, tmpFile.length()));
                 }
 
                 // 替换目标文件（Windows 下先删除旧文件再重命名）
                 File target = executablePath.toFile();
                 if (target.exists() && !target.delete()) {
-                    throw new SLanException("无法替换旧模块文件: " + target);
+                    throw new SLanException(I18N.get("slan.p0024", target));
                 }
                 if (!tmpFile.renameTo(target)) {
-                    throw new SLanException("模块文件保存失败: " + target);
+                    throw new SLanException(I18N.get("slan.p0025", target));
                 }
                 tmpFile = null;
 
@@ -820,7 +840,7 @@ public class SLanManager {
             } catch (SLanException e) {
                 future.completeExceptionally(e);
             } catch (Exception e) {
-                future.completeExceptionally(new SLanException("下载失败: " + e.getMessage(), e));
+                future.completeExceptionally(new SLanException(I18N.get("slan.p0026", e.getMessage()), e));
             } finally {
                 if (conn != null) conn.disconnect();
                 if (tmpFile != null && tmpFile.exists()) {

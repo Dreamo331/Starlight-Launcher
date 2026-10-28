@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.auth.offline;
 
+
+import com.example.starlight.util.I18N;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,9 +27,13 @@ import java.util.concurrent.Executors;
  * {@code Minecraft.proxy} 来自 Main 的 {@code --proxyHost} 参数（SOCKS 类型），但
  * authlib-injector 的 {@code ProxyParameterWorkaround} 会把该参数从 Main 参数中剥掉。
  * hosts/80 端口劫持又需要管理员权限。因此采用字节码级方案：给游戏 JVM 追加
- * {@code -javaagent:lib/cape-url-patch-agent.jar=<端口>}，agent 在 CapeUtils 类加载时
+ * {@code -javaagent:<agent jar>=<端口>}，agent 在 CapeUtils 类加载时
  * 把常量池里的 {@code http://s.optifine.net} 前缀重写为 {@code http://127.0.0.1:<端口>}，
  * 下载直连本服务器的 {@code /capes/<玩家名>.png}。</p>
+ *
+ * <p><b>agent jar 从哪来</b>：开发形态直接取工作目录的 {@code lib/cape-url-patch-agent.jar}；
+ * 发布形态是 GraalVM Native Image 单 EXE（没有 lib/ 目录），由 {@link CapeAgentInstaller}
+ * 把 exe 内置的资源释放到 {@code ~/.starlight/}。两条路径都在 {@link #agentJvmArg()} 里收敛。</p>
  *
  * <p><b>为何不用 JDK HttpServer</b>：com.sun.net.httpserver 的响应与 OptiFine
  * HttpPipelineReceiver 实测不兼容（status 2xx 但 getBody() 返回 null，
@@ -39,7 +45,7 @@ public final class LocalCapeProxy {
 
     private static final Logger LOG = LoggerFactory.getLogger(LocalCapeProxy.class);
 
-    /** CapeUrlPatchAgent jar 相对路径（启动器工作目录下 lib/） */
+    /** 开发形态的 agent jar 相对路径（工作目录下 lib/；单 EXE 形态由 CapeAgentInstaller 兜底） */
     private static final String AGENT_JAR = "lib/cape-url-patch-agent.jar";
 
     private final ServerSocket server;
@@ -76,11 +82,14 @@ public final class LocalCapeProxy {
             LocalCapeProxy p = new LocalCapeProxy(ss, ex, username, capePng);
             ex.submit(p::acceptLoop);
             current = p; // 状态查询：同一时刻至多一个游戏会话在用，后启动覆盖前者
-            LOG.info("本地披风服务器已启动：http://127.0.0.1:{}（拦截 /capes/{}，agent {}）",
-                    p.capePort, username, Files.exists(resolveAgentJar()) ? "在位" : "缺失");
+            // 只做「查找」，不在这里触发释放/下载：agent 由 agentJvmArg() 在拼接启动参数时
+            // 按需安装（那条路径本来就在后台线程，且失败可跳过而不影响本服务器）
+            LOG.info(I18N.get("offline.t0048"),
+                    p.capePort, username,
+                    resolveDevAgentJar().map(Object::toString).orElse(I18N.get("offline.t0049")));
             return p;
         } catch (IOException e) {
-            LOG.warn("本地披风服务器启动失败：{}", e.getMessage());
+            LOG.warn(I18N.get("offline.t0013"), e.getMessage());
             return null;
         }
     }
@@ -100,40 +109,57 @@ public final class LocalCapeProxy {
     }
 
     /**
-     * 解析 CapeUrlPatchAgent jar 的绝对路径：优先 user.dir/lib（IDEA/常规运行），
-     * 回退到启动器 classes/jar 所在位置向上逐级查找。不存在时返回 user.dir 版本
-     * （由调用方判断）。
+     * 解析 CapeUrlPatchAgent jar 的绝对路径。
+     *
+     * <p>两级策略：
+     * <ol>
+     *   <li><b>开发形态</b>：工作目录（或 classes/jar 位置向上逐级）下的 {@code lib/cape-url-patch-agent.jar}。
+     *       本地改完 agent 重新打包即刻生效，不必同步 {@link CapeAgentInstaller} 里的校验和；</li>
+     *   <li><b>单 EXE 发布形态</b>：没有 {@code lib/}，交给 {@link CapeAgentInstaller}
+     *       从内置资源释放到 {@code ~/.starlight/}（exe 内缺资源时再兜底联网下载）。</li>
+     * </ol>
+     *
+     * @return agent jar 绝对路径；两条路径都拿不到时返回 null
      */
     private static java.nio.file.Path resolveAgentJar() {
+        return resolveDevAgentJar().orElseGet(CapeAgentInstaller::ensure);
+    }
+
+    /** 开发形态查找：{@code lib/} 侧文件；找不到返回 empty 交给安装器兜底 */
+    private static java.util.Optional<java.nio.file.Path> resolveDevAgentJar() {
         java.nio.file.Path p = Paths.get(AGENT_JAR).toAbsolutePath().normalize();
-        if (Files.exists(p)) return p;
+        if (Files.exists(p)) return java.util.Optional.of(p);
         try {
             java.nio.file.Path cur = java.nio.file.Paths.get(
                     LocalCapeProxy.class.getProtectionDomain().getCodeSource().getLocation().toURI());
             for (int i = 0; i < 8 && cur != null; i++) {
                 java.nio.file.Path cand = cur.resolve("lib").resolve("cape-url-patch-agent.jar").normalize();
-                if (Files.exists(cand)) return cand;
+                if (Files.exists(cand)) return java.util.Optional.of(cand);
                 java.nio.file.Path cand2 = cur.resolve("cape-url-patch-agent.jar").normalize();
-                if (Files.exists(cand2)) return cand2;
+                if (Files.exists(cand2)) return java.util.Optional.of(cand2);
                 cur = cur.getParent();
             }
         } catch (Exception ignored) {
         }
-        return p;
+        return java.util.Optional.empty();
     }
 
     /**
      * 注入给游戏 JVM 的 CapeUrlPatchAgent 参数（绝对路径，游戏子进程工作目录可能与
      * 启动器不同）；agent jar 缺失时返回 null。
-     * 返回示例：{@code -javaagent:C:\path\to\lib\cape-url-patch-agent.jar=9878}
+     *
+     * <p>返回值含空格时（Windows 用户名带空格）会被调用方按引号分组切分，
+     * 所以这里统一加双引号，见 {@code LaunchInfo.splitCommandLine}。</p>
+     *
+     * 返回示例：{@code -javaagent:"C:\Users\Zhang San\.starlight\cape-url-patch-agent.jar"=9878}
      */
     public String agentJvmArg() {
         java.nio.file.Path agent = resolveAgentJar();
-        if (!Files.exists(agent)) {
-            LOG.warn("未找到 CapeUrlPatchAgent jar（{}），披风注入跳过", agent);
+        if (agent == null || !Files.exists(agent)) {
+            LOG.warn(I18N.get("offline.t0014"), agent);
             return null;
         }
-        return "-javaagent:" + agent + "=" + capePort;
+        return "-javaagent:\"" + agent + "\"=" + capePort;
     }
 
     public void stop() {
@@ -143,7 +169,7 @@ public final class LocalCapeProxy {
         } catch (IOException ignored) {
         }
         executor.shutdownNow();
-        LOG.info("本地披风服务器已停止：http://127.0.0.1:{}", capePort);
+        LOG.info(I18N.get("offline.t0015"), capePort);
     }
 
     private void acceptLoop() {
@@ -153,7 +179,7 @@ public final class LocalCapeProxy {
                 executor.submit(() -> handleSocket(sock));
             } catch (IOException e) {
                 if (!stopped) {
-                    LOG.debug("披风服务器 accept 中断：{}", e.getMessage());
+                    LOG.debug(I18N.get("offline.t0016"), e.getMessage());
                 }
                 return;
             }
@@ -175,7 +201,7 @@ public final class LocalCapeProxy {
             }
             serve(path, out);
         } catch (IOException e) {
-            LOG.debug("披风连接处理异常：{}", e.getMessage());
+            LOG.debug(I18N.get("offline.t0017"), e.getMessage());
         }
     }
 
@@ -184,14 +210,14 @@ public final class LocalCapeProxy {
             String name = path.substring("/capes/".length());
             if (name.endsWith(".png")) name = name.substring(0, name.length() - 4);
             if (name.equals(username)) {
-                LOG.info("收到 OptiFine 披风下载请求：/capes/{}.png（命中本地玩家 {}，返回 {} 字节）",
+                LOG.info(I18N.get("offline.t0018"),
                         username, username, capePng.length);
                 writeResponse(out, 200, "image/png", capePng);
                 return;
             }
-            LOG.info("收到披风下载请求 /capes/{}（非本地玩家 {}，404）", name, username);
+            LOG.info(I18N.get("offline.t0019"), name, username);
         } else {
-            LOG.debug("披风服务器收到非披风请求：{}（404）", path);
+            LOG.debug(I18N.get("offline.t0020"), path);
         }
         writeResponse(out, 404, "text/plain", "not found".getBytes(StandardCharsets.UTF_8));
     }

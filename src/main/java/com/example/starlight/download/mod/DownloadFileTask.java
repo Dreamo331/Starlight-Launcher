@@ -1,5 +1,7 @@
 package com.example.starlight.download.mod;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.download.DownloadSettings;
 
 import java.io.IOException;
@@ -149,7 +151,14 @@ public final class DownloadFileTask {
     }
 
     public void cancel() {
-        cancelled.set(true);
+        if (!cancelled.compareAndSet(false, true)) return;
+        // 立即打断各分块：断开正在进行的连接，阻塞中的 read 马上返回，
+        // 不用等读超时/当前分块下完（「取消下载」要立刻生效）
+        synchronized (pieces) {
+            for (DownloadPiece p : pieces) {
+                p.abort();
+            }
+        }
     }
 
     public Throwable getLastError() {
@@ -225,7 +234,7 @@ public final class DownloadFileTask {
         Files.createDirectories(partDir);
         DownloadSource src = chain.nextSource(true);
         chain.advanceFirstThreadCursor();
-        if (src == null) throw new IOException("无可用下载源: " + target);
+        if (src == null) throw new IOException(I18N.get("mod.p0009", target));
         DownloadPiece piece = new DownloadPiece(0, 0, -1,
                 partDir.resolve("piece-0.part"), true);
         piece.setMountedSource(src);
@@ -321,7 +330,7 @@ public final class DownloadFileTask {
         synchronized (pieces) {
             for (DownloadPiece p : pieces) {
                 if (p.getState() == DownloadPiece.State.FAILED) {
-                    throw new IOException("分块下载失败: " + p);
+                    throw new IOException(I18N.get("mod.p0010", p));
                 }
             }
         }
@@ -341,9 +350,9 @@ public final class DownloadFileTask {
             // 大小校验：< MinSize 或 ≠ 期望大小 → 切源
             if (contentLength < minSize
                     || (expectedSize >= 0 && contentLength != expectedSize)) {
-                src.recordFailure(new IOException("大小校验失败: " + contentLength));
-                chain.markDisabled(src, "大小不符");
-                throw new IOException("文件大小校验失败: " + target);
+                src.recordFailure(new IOException(I18N.get("mod.p0011", contentLength)));
+                chain.markDisabled(src, I18N.get("mod.t0001"));
+                throw new IOException(I18N.get("mod.p0012", target));
             }
         }
     }
@@ -380,7 +389,7 @@ public final class DownloadFileTask {
         // 3 次仍失败：删残文件，把当前源标记失败，整体换源重下一轮
         cleanupPartDir();
         DownloadSource cur = chain.nextSource(false);
-        if (cur != null) chain.markDisabled(cur, "合并失败");
+        if (cur != null) chain.markDisabled(cur, I18N.get("mod.t0002"));
         if (!retried) {
             retried = true;
             resetPieces();
@@ -388,7 +397,7 @@ public final class DownloadFileTask {
             run(); // 整体重下一轮
             return;
         }
-        throw lastErr != null ? lastErr : new IOException("合并失败");
+        throw lastErr != null ? lastErr : new IOException(I18N.get("mod.t0003"));
     }
 
     /** 单线程串行合并：Σdone==fileSize 校验 → 写 dest.tmp → FileVerifier 校验 → ATOMIC_MOVE */
@@ -400,7 +409,7 @@ public final class DownloadFileTask {
                 for (DownloadPiece p : pieces) sum += p.getDone();
             }
             if (sum != fileSize) {
-                throw new IOException("分块总量不符: Σdone=" + sum + " != fileSize=" + fileSize);
+                throw new IOException(I18N.get("mod.p0013", sum + " != fileSize=" + fileSize));
             }
         }
         state = State.MERGING;
@@ -423,7 +432,7 @@ public final class DownloadFileTask {
         Optional<String> verifyErr = FileVerifier.verify(tmp, expectedSize, minSize, expectedHash);
         if (verifyErr.isPresent()) {
             Files.deleteIfExists(tmp);
-            throw new IOException("合并后校验失败: " + verifyErr.get());
+            throw new IOException(I18N.get("mod.p0014", verifyErr.get()));
         }
         // 校验通过后原子替换目标
         Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);

@@ -1,5 +1,7 @@
 package com.example.starlight.newui.ai;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AiConfig;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -53,7 +55,7 @@ public final class AiModelCatalog {
     public static List<String> fetch(String baseUrl, String apiKey) throws IOException {
         String base = AiConfig.normalizeBaseUrl(baseUrl);
         if (base.isEmpty()) {
-            throw new IOException("尚未填写 API 地址");
+            throw new IOException(I18N.get("ai.t0001"));
         }
 
         HttpURLConnection conn = null;
@@ -87,7 +89,7 @@ public final class AiModelCatalog {
 
             List<String> models = parseModelIds(body);
             if (models.isEmpty()) {
-                throw new IOException("服务商没有返回模型列表（可直接手动输入模型名）");
+                throw new IOException(I18N.get("ai.t0002"));
             }
             return models;
         } finally {

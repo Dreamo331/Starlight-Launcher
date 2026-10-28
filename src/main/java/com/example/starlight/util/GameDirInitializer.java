@@ -1,5 +1,7 @@
 package com.example.starlight.util;
 
+
+import com.example.starlight.util.I18N;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -49,10 +51,11 @@ public final class GameDirInitializer {
         /** 供 toast / 日志使用的一句话摘要 */
         public String summary() {
             if (ok()) {
-                if (created == 0 && filesCreated == 0) return "目录已完整，无需初始化";
-                return "已创建 " + created + " 个目录" + (filesCreated > 0 ? "、" + filesCreated + " 个配置文件" : "");
+                if (created == 0 && filesCreated == 0) return I18N.get("util.t0006");
+                return I18N.get("gdi.r0001", created,
+                filesCreated > 0 ? I18N.get("gdi.r0002", filesCreated) : "");
             }
-            return "部分目录初始化失败：" + String.join("、", errors);
+            return I18N.get("util.p0046", String.join("、", errors));
         }
     }
 
@@ -61,7 +64,7 @@ public final class GameDirInitializer {
      * 并在缺失时生成 {@code launcher_profiles.json}。目录本身不存在时也会被创建。
      */
     public static InitResult initializeGameDir(Path gameDir) {
-        if (gameDir == null) return new InitResult(0, 0, List.of("路径为空"));
+        if (gameDir == null) return new InitResult(0, 0, List.of(I18N.get("util.t0007")));
         InitResult dirs = createMissingDirs(gameDir, GAME_DIR_SUBDIRS);
         int files = ensureLauncherProfiles(gameDir) == ProfilesStatus.REGENERATED ? 1 : 0;
         return new InitResult(dirs.created(), files, dirs.errors());
@@ -73,11 +76,11 @@ public final class GameDirInitializer {
      */
     public static InitResult initializeVersionIsolation(Path gameDir, String versionDirName) {
         if (gameDir == null || versionDirName == null || versionDirName.isBlank()) {
-            return new InitResult(0, 0, List.of("版本目录名为空"));
+            return new InitResult(0, 0, List.of(I18N.get("util.t0008")));
         }
         // 与下载页 folderName 校验保持一致：含非法字符的目录名不应落盘
         if (versionDirName.matches(".*[\\\\/:*?\"<>|].*")) {
-            return new InitResult(0, 0, List.of("版本目录名含非法字符: " + versionDirName));
+            return new InitResult(0, 0, List.of(I18N.get("util.p0047", versionDirName)));
         }
         return createMissingDirs(gameDir.resolve("versions").resolve(versionDirName),
                 VERSION_ISOLATED_SUBDIRS);
@@ -110,7 +113,7 @@ public final class GameDirInitializer {
      * 已初始化则只校验并修复 {@code launcher_profiles.json}。
      */
     public static InitResult detectAndFix(Path gameDir) {
-        if (gameDir == null) return new InitResult(0, 0, List.of("路径为空"));
+        if (gameDir == null) return new InitResult(0, 0, List.of(I18N.get("util.t0009")));
         if (!isInitialized(gameDir)) return initializeGameDir(gameDir);
         int files = 0;
         List<String> errors = new ArrayList<>();

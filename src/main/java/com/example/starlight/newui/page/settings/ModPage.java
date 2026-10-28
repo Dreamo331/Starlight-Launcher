@@ -1,5 +1,7 @@
 package com.example.starlight.newui.page.settings;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.PageKit;
@@ -22,9 +24,9 @@ public final class ModPage {
     }
 
     public Node build() {
-        VBox root = PageKit.settingsPage(ctx, "模组");
+        VBox root = PageKit.settingsPage(ctx, I18N.get("modtab.t0001"));
         // 内测功能标注
-        Label betaNotice = AppIcons.label("warning", "模组（启动器扩展）功能当前为内测版，可能存在缺陷或行为变更，请谨慎使用。");
+        Label betaNotice = AppIcons.label("warning", I18N.get("modtab.t0002"));
         betaNotice.setStyle("-fx-font-size: 12px; -fx-text-fill: #b45309;"
                 + " -fx-background-color: rgba(245,158,11,0.12); -fx-background-radius: 8; -fx-padding: 8 12;");
         betaNotice.setWrapText(true);
@@ -34,10 +36,10 @@ public final class ModPage {
             ctx.config().put("HomeQuickManageMod", String.valueOf(quickModToggle.isSelected()));
             ctx.saveConfig();
             ctx.updateModTabVisibility();
-            ctx.toast("首页快速管理MOD: " + (quickModToggle.isSelected() ? "开启" : "关闭"));
+            ctx.toast(I18N.get("modtab.k0038", (quickModToggle.isSelected() ? I18N.get("modtab.t0003") : I18N.get("modtab.t0004"))));
         });
-        root.getChildren().add(PageKit.settingsCard("首页快速管理MOD",
-                "开启后在顶部导航栏显示「模组」页，便于快速管理模组（将用户上传的 .jar 模组文件复制到指定位置）", quickModToggle));
+        root.getChildren().add(PageKit.settingsCard(I18N.get("modtab.t0005"),
+                I18N.get("modtab.t0006"), quickModToggle));
         return root;
     }
 }

@@ -10,6 +10,8 @@
 // 子类只需实现 launch() 方法，填充特定加载器的启动逻辑。
 package com.example.starlight.startmc.launcher;
 
+
+import com.example.starlight.util.I18N;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -42,6 +44,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -127,6 +130,18 @@ public abstract class BaseLauncher {
      */
     private Consumer<Process> onProcessStarted;
 
+    /**
+     * 取消判定器（由启动入口注入，与「取消启动」按钮共用同一个标志位）。
+     *
+     * <p>为什么必须让基类知道：取消启动走的是 {@code destroyForcibly()} 强制结束，
+     * Windows 上 {@code waitFor()} 拿到的退出码就是 1。缺少这个信号时，退出归因只能看退出码，
+     * 于是每一次正常的「取消启动」都会被写成「游戏异常退出 (代码: 1) - 可能是 JVM 启动失败或游戏崩溃」。
+     */
+    private volatile BooleanSupplier cancelChecker;
+
+    /** 进程启动后补判到的那一次取消（判定器只在启动瞬间与收尾各读一次，中间不重复读） */
+    private volatile boolean cancelledByUser;
+
     /** 占位符替换用的键值对（参考 HMCL getConfigurations()） */
     protected Map<String, String> placeholderKeys;
 
@@ -141,6 +156,30 @@ public abstract class BaseLauncher {
      */
     public void setOnProcessStarted(Consumer<Process> callback) {
         this.onProcessStarted = callback;
+    }
+
+    /**
+     * 注入「是否已被用户取消」判定器（取值为 true 表示用户点了取消启动）。
+     *
+     * <p>由启动入口（{@code UIGeneralControlClass} / {@code GameLauncherService}）在创建
+     * launcher 后立即注入，二者都用自己的 {@code launchCancelled} 标志位作为判定源，
+     * 保证「点取消」与「日志/退出归因」看到的是同一个事实。
+     *
+     * @param checker 判定器；传 null 表示不关心取消（默认）
+     */
+    public void setCancelChecker(BooleanSupplier checker) {
+        this.cancelChecker = checker;
+    }
+
+    /** 是否已请求取消（未注入判定器时恒为 false） */
+    protected boolean isCancelRequested() {
+        BooleanSupplier checker = this.cancelChecker;
+        return checker != null && checker.getAsBoolean();
+    }
+
+    /** 本次启动是否被用户主动取消（收尾后供外部读取，例如决定要不要查崩溃日志） */
+    public boolean isCancelledByUser() {
+        return cancelledByUser;
     }
 
     /**
@@ -243,7 +282,7 @@ public abstract class BaseLauncher {
         // 加载父版本 JSON
         Path parentJsonPath = verDir.resolveSibling(parentId).resolve(parentId + ".json");
         if (!Files.exists(parentJsonPath)) {
-            writeLog("父版本 JSON 不存在: " + parentJsonPath + " (inheritsFrom=" + parentId + ")", "WARN");
+            writeLog(I18N.get("launcher.p0031", parentJsonPath + " (inheritsFrom=" + parentId + ")"), "WARN");
             return json;
         }
 
@@ -277,7 +316,7 @@ public abstract class BaseLauncher {
             writeLog("已合并父版本 '" + parentId + "' 的 libraries 到 " + json.get("id").getAsString(), "INFO");
 
         } catch (IOException e) {
-            writeLog("读取父版本 JSON 失败: " + e.getMessage(), "WARN");
+            writeLog(I18N.get("launcher.p0032", e.getMessage()), "WARN");
         }
 
         return json;
@@ -353,7 +392,7 @@ public abstract class BaseLauncher {
         GameDirInitializer.InitResult init = GameDirInitializer.initializeVersionIsolation(
                 launchInfo.getGameDirPath(), launchInfo.getVersion());
         if (!init.ok()) {
-            throw new IOException("版本隔离目录创建失败，已中止启动以免游戏数据写入全局目录: " + init.summary());
+            throw new IOException(I18N.get("launcher.p0033", init.summary()));
         }
         if (init.created() > 0) {
             writeLog("已补齐版本隔离目录: " + init.created() + " 个子目录", "INFO");
@@ -412,7 +451,7 @@ public abstract class BaseLauncher {
                     if (dllCount >= MIN_REQUIRED_DLLS) {
                         // 版本指纹校验：无指纹（别的启动器提取/历史残留）或指纹不符 → 视为过期重提
                         if (expectedFingerprint == null || !expectedFingerprint.equals(readNativesFingerprint(dir))) {
-                            writeLog("natives 目录版本不符或缺少指纹，重新提取: " + dir, "WARN");
+                            writeLog(I18N.get("launcher.p0034", dir), "WARN");
                             deleteRecursively(dir);
                             continue;
                         }
@@ -427,14 +466,14 @@ public abstract class BaseLauncher {
                         deleteRecursively(dir);
                     }
                 } catch (IOException e) {
-                    writeLog("检查 natives 目录失败: " + e.getMessage(), "WARN");
+                    writeLog(I18N.get("launcher.p0035", e.getMessage()), "WARN");
                 }
             }
         }
 
         // 第二步：从 Native JAR 中提取 DLL //
         // 参考 HMCL DefaultLauncher.decompressNatives() + Unzipper
-        writeLog("从 native JAR 文件中提取 DLL...", "WARN");
+        writeLog(I18N.get("launcher.t0001"), "WARN");
         Path extractDir = verDir.resolve(NATIVES_EXTRACT_DIR);
 
         try {
@@ -534,7 +573,7 @@ public abstract class BaseLauncher {
             writeLog("找到 " + nativeJars.size() + " 个 native JAR 文件", "INFO");
 
             if (nativeJars.isEmpty()) {
-                writeLog("错误: 找不到任何 native JAR，无法补全原生库，终止启动", "ERROR");
+                writeLog(I18N.get("launcher.t0002"), "ERROR");
                 return false;
             }
 
@@ -576,10 +615,10 @@ public abstract class BaseLauncher {
                         }
                         extractedCount++;
                         extractedNames.add(fileName);
-                        writeLog("  提取: " + fileName + " <- " + jar.getFileName(), "INFO");
+                        writeLog(I18N.get("launcher.p0036", fileName + " <- " + jar.getFileName()), "INFO");
                     }
                 } catch (IOException e) {
-                    writeLog("提取失败 " + jar.getFileName() + ": " + e.getMessage(), "WARN");
+                    writeLog(I18N.get("launcher.p0037", jar.getFileName() + ": " + e.getMessage()), "WARN");
                 }
             }
 
@@ -601,7 +640,7 @@ public abstract class BaseLauncher {
             writeLog("Natives 路径: " + nativesPath + " (" + dllCount + " 个 " + PlatformUtils.getNativeExtension() + ")", "INFO");
 
         } catch (IOException e) {
-            writeLog("提取 natives 失败: " + e.getMessage(), "ERROR");
+            writeLog(I18N.get("launcher.p0038", e.getMessage()), "ERROR");
             return false;
         }
 
@@ -1001,7 +1040,7 @@ public abstract class BaseLauncher {
             Files.writeString(nativesDir.resolve(NATIVES_FINGERPRINT_FILE), fingerprint,
                     StandardCharsets.UTF_8);
         } catch (IOException e) {
-            writeLog("写入 natives 指纹失败: " + e.getMessage(), "WARN");
+            writeLog(I18N.get("launcher.p0039", e.getMessage()), "WARN");
         }
     }
 
@@ -1086,43 +1125,70 @@ public abstract class BaseLauncher {
         base.add("-Dcom.sun.jndi.cosnaming.object.trustURLCodebase=false");
         base.add("-Dlog4j2.formatMsgNoLookups=true");
 
-        // FML 证书跳过 //
-        base.add("-Dfml.ignoreInvalidMinecraftCertificates=true");
-        base.add("-Dfml.ignorePatchDiscrepancies=true");
-
-        // 解锁实验性 VM 选项（参考 HMCL CommandBuilder.addUnstableDefault） //
-        base.add("-XX:+UnlockExperimentalVMOptions");
-        base.add("-XX:+UnlockDiagnosticVMOptions");
-
-        // GC 调优（参考 HMCL G1GC 参数） //
-        base.add("-XX:+UseG1GC");
-        base.add("-XX:-UseAdaptiveSizePolicy");
-        base.add("-XX:-OmitStackTraceInFastThrow");
-        base.add("-XX:G1MixedGCCountTarget=5");
-        base.add("-XX:G1NewSizePercent=20");
-        base.add("-XX:G1ReservePercent=20");
-        base.add("-XX:MaxGCPauseMillis=50");
-        base.add("-XX:G1HeapRegionSize=32m");
-
-        // 大内存优化（64 位 + >4GB 内存时启用，参考 HMCL） //
-        if (PlatformUtils.is64Bit() && PlatformUtils.getTotalMemoryBytes() > 4L * 1024 * 1024 * 1024) {
-            base.add("-XX:-DontCompileHugeMethods");
-            base.add("-XX:MaxNodeLimit=240000");
-            base.add("-XX:NodeLimitFudgeFactor=8000");
-            base.add("-XX:TieredCompileTaskTimeout=10000");
-            base.add("-XX:ReservedCodeCacheSize=400M");
-            // 以下为 JDK 9+ 的 code cache 分段选项，Java 8 不识别（Unrecognized VM option），
-            // 需按游戏 JVM 版本条件化添加
-            if (getGameJavaMajorVersion() >= 9) {
-                base.add("-XX:NonNMethodCodeHeapSize=12M");
-                base.add("-XX:ProfiledCodeHeapSize=194M");
-                base.add("-XX:NmethodSweepActivity=1");
-            }
+        // FML 证书跳过：只有 Forge 系加载器会读这两个属性 —— Vanilla / Fabric 下注入纯属噪音，
+        // 也会让启动命令看起来像被误判成了 Forge
+        String loaderType = launchInfo.getLoaderType();
+        boolean forgeFamily = LoaderDetector.isForge(loaderType)
+                || LoaderDetector.NEOFORGE.equals(loaderType);
+        if (forgeFamily) {
+            base.add("-Dfml.ignoreInvalidMinecraftCertificates=true");
+            base.add("-Dfml.ignorePatchDiscrepancies=true");
         }
 
-        // JVM 其他参数 //
-        base.add("-Djdk.lang.Process.allowAmbiguousCommands=true");
+        // GraalVM（JVMCI）不吃 HotSpot 那套激进调优 //
+        // 解锁实验/诊断选项 + G1 细调 + code cache 分段 + NodeLimit 在部分 GraalVM 版本上与 JVMCI
+        // 组合会直接在原生层崩溃（0xC0000409 栈缓冲区溢出 / 0xC0000005 访问冲突，均无 Java 堆栈）。
+        // 这里退回最简参数集：只留内存、编码、诊断与路径，其余一概不传。
+        boolean graalVm = PlatformUtils.isGraalVmRuntime(launchInfo.getJavaPath());
+        if (graalVm) {
+            writeLog("检测到 GraalVM 运行时，已跳过 HotSpot 专用调优参数（改用最简 JVM 参数启动）；"
+                    + "若仍出现无堆栈的原生崩溃，请改用标准 OpenJDK 21/25 对照一次", "INFO");
+            // 唯一保留的 -XX：强制 fast-throw 也产出堆栈，崩溃诊断更依赖它
+            base.add("-XX:-OmitStackTraceInFastThrow");
+        } else {
+            // 解锁实验性 VM 选项（参考 HMCL CommandBuilder.addUnstableDefault） //
+            base.add("-XX:+UnlockExperimentalVMOptions");
+            base.add("-XX:+UnlockDiagnosticVMOptions");
+
+            // GC 调优（参考 HMCL G1GC 参数） //
+            base.add("-XX:+UseG1GC");
+            base.add("-XX:-UseAdaptiveSizePolicy");
+            base.add("-XX:-OmitStackTraceInFastThrow");
+            base.add("-XX:G1MixedGCCountTarget=5");
+            base.add("-XX:G1NewSizePercent=20");
+            base.add("-XX:G1ReservePercent=20");
+            base.add("-XX:MaxGCPauseMillis=50");
+            base.add("-XX:G1HeapRegionSize=32m");
+
+            // 大内存优化（64 位 + >4GB 内存时启用，参考 HMCL） //
+            if (PlatformUtils.is64Bit() && PlatformUtils.getTotalMemoryBytes() > 4L * 1024 * 1024 * 1024) {
+                base.add("-XX:-DontCompileHugeMethods");
+                base.add("-XX:MaxNodeLimit=240000");
+                base.add("-XX:NodeLimitFudgeFactor=8000");
+                base.add("-XX:TieredCompileTaskTimeout=10000");
+                base.add("-XX:ReservedCodeCacheSize=400M");
+                // 以下为 JDK 9+ 的 code cache 分段选项，Java 8 不识别（Unrecognized VM option），
+                // 需按游戏 JVM 版本条件化添加
+                if (getGameJavaMajorVersion() >= 9) {
+                    base.add("-XX:NonNMethodCodeHeapSize=12M");
+                    base.add("-XX:ProfiledCodeHeapSize=194M");
+                    base.add("-XX:NmethodSweepActivity=1");
+                }
+            }
+
+            // JVM 其他参数 //
+            base.add("-Djdk.lang.Process.allowAmbiguousCommands=true");
+        }
+
         base.add("-XX:HeapDumpPath=minecraft_launcher.heapdump");
+        // 崩溃取证：把 hs_err_pid*.log 固定写到版本目录 —— JVM 默认写到「进程工作目录」，
+        // 会随版本隔离设置飘（游戏目录 / versions/<版本>），崩溃面板只能到处找。
+        // %p 由 JVM 自己展开（路径作为单个 argv 传递，含空格 / 中文都没问题）。
+        // core dump 默认不开：单个 dump 可能数 GB，需要时用户自己在 Java 参数里加
+        // -XX:+CreateCoredumpOnCrash，并自行清理。
+        if (verDir != null) {
+            base.add("-XX:ErrorFile=" + verDir.resolve("hs_err_pid%p.log"));
+        }
 
         // Natives / JAR 路径 //
         String nativesPathStr = (nativesPath != null) ? nativesPath.toString() : verDir.toString();
@@ -1163,11 +1229,25 @@ public abstract class BaseLauncher {
         if (extraJvm != null) {
             for (String arg : extraJvm) {
                 if (arg == null || arg.isBlank()) continue;
-                if (arg.startsWith("-")) {
-                    base.add(arg);
-                } else {
-                    writeLog("忽略非 JVM 选项参数: " + arg, "WARN");
+                if (!arg.startsWith("-")) {
+                    writeLog(I18N.get("launcher.p0040", arg), "WARN");
+                    continue;
                 }
+                // 用户全局 JvmArgs 里常带着 Forge 专用属性（老版本模板默认就写这两个）：
+                // 非 Forge 系加载器下直接剔除，免得 Vanilla 的启动命令里出现误导性的 -Dfml.*
+                if (!forgeFamily && arg.startsWith("-Dfml.")) {
+                    writeLog(I18N.get("launcher.p0041", arg), "WARN");
+                    continue;
+                }
+                // GraalVM 下默认屏蔽 JVMCI / 非标准 GC 相关参数（用户自己写的也屏蔽）：
+                // 这类组合是已知的「无 Java 堆栈原生崩溃」诱因，启动器无法替用户验证安全性。
+                // 屏蔽后必须留痕：写 WARN 并点名，用户要保留就自己删掉后单独测试。
+                if (graalVm && isRiskyOnGraalVm(arg)) {
+                    writeLog("已在 GraalVM 下屏蔽参数: " + arg
+                            + "（与 JVMCI 组合属已知崩溃风险；如需保留请从 Java 参数里移除后自行测试）", "WARN");
+                    continue;
+                }
+                base.add(arg);
             }
         }
 
@@ -1182,6 +1262,21 @@ public abstract class BaseLauncher {
     }
 
     // 游戏参数 //
+
+    /**
+     * 该参数是否属于「GraalVM 下默认屏蔽」的一类（用户 JvmArgs 里的）。
+     *
+     * <p>涵盖：{@code -Dgraal.*}（JVMCI 调优）、Shenandoah 系 GC（非标准 GC 与 GraalVM 组合是
+     * 已知崩溃组合）、{@code -XX:+UnlockExperimentalVMOptions}（解锁项在 GraalVM 上语义不同）。
+     * 只做前缀/片段匹配，宁可少屏蔽也不要误伤正常参数。
+     */
+    static boolean isRiskyOnGraalVm(String arg) {
+        if (arg == null) return false;
+        String lower = arg.toLowerCase(Locale.ROOT);
+        return lower.startsWith("-dgraal.")
+                || lower.contains("shenandoah")
+                || lower.startsWith("-xx:+unlockexperimentalvmoptions");
+    }
 
     /**
      * 构建标准游戏参数（适用于 Vanilla / Fabric / Forge Legacy）
@@ -1539,7 +1634,7 @@ public abstract class BaseLauncher {
     /** 从启动参数中取 --gameDir 的取值，供日志核对；未注入时返回「缺失」 */
     private static String gameDirArgOf(List<String> arguments) {
         int index = arguments.indexOf("--gameDir");
-        if (index < 0 || index + 1 >= arguments.size()) return "缺失";
+        if (index < 0 || index + 1 >= arguments.size()) return I18N.get("launcher.t0003");
         return arguments.get(index + 1);
     }
 
@@ -1574,10 +1669,10 @@ public abstract class BaseLauncher {
         String fullCommandLine = String.join(" ", fullCommand);
         System.out.println(colorize("INFO", String.format("[%s] [INFO] [完整启动命令] %s",
                 LOG_TIMESTAMP.format(LocalDateTime.now()), fullCommandLine)));
-        writeLog("完整启动命令: " + fullCommandLine, "INFO");
+        writeLog(I18N.get("launcher.p0042", fullCommandLine), "INFO");
         // 隔离是否真的生效，看这三项：工作目录与 --gameDir 应同值且指向版本目录
         writeLog("工作目录: " + workingDir
-                + " | 版本隔离: " + (launchInfo.isVersionIsolation() ? "是" : "否")
+                + " | 版本隔离: " + (launchInfo.isVersionIsolation() ? I18N.get("launcher.t0027") : I18N.get("launcher.t0028"))
                 + " | --gameDir: " + gameDirArgOf(arguments), "INFO");
 
         Process process = pb.start();
@@ -1591,8 +1686,17 @@ public abstract class BaseLauncher {
             try {
                 onProcessStarted.accept(process);
             } catch (Exception e) {
-                writeLog("进程启动回调异常: " + e.getMessage(), "WARN");
+                writeLog(I18N.get("launcher.p0043", e.getMessage()), "WARN");
             }
+        }
+
+        // 取消启动的补救检查：用户可能恰好落在「各阶段检查点已过、进程还没起来」的窗口期点取消，
+        // 此时外部拿不到 PID（只有进程启动回调之后才有），常规取消路径杀不掉这个刚要起来的进程，
+        // 表现为「点了取消，游戏还是启动了」。这里在进程启动瞬间补判一次，已取消就立即结束。
+        if (isCancelRequested()) {
+            cancelledByUser = true;
+            writeLog(I18N.get("launcher.p0044", pid + ")"), "INFO");
+            process.destroyForcibly();
         }
 
         // 进程微调（设置 → 高级设置）：自定义游戏窗口标题 + 进程优先级 //
@@ -1603,7 +1707,7 @@ public abstract class BaseLauncher {
                     launchInfo.getVersion(), launchInfo.getUserName());
             GameProcessTweaks.applyOnProcessStarted(pid, title, launchInfo.getProcessPriority());
         } catch (Throwable t) {
-            writeLog("应用进程微调失败: " + t.getMessage(), "WARN");
+            writeLog(I18N.get("launcher.p0045", t.getMessage()), "WARN");
         }
 
         // 启动流读取线程（参考 HMCL StreamPump） //
@@ -1649,7 +1753,7 @@ public abstract class BaseLauncher {
             try {
                 boolean alive = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
                 if (alive != lastAlive.getAndSet(alive)) {
-                    writeLogToFile("[MONITOR] PID " + pid + (alive ? " - 运行中" : " - 已退出"), "INFO");
+                    writeLogToFile("[MONITOR] PID " + pid + (alive ? I18N.get("launcher.t0029") : I18N.get("launcher.t0030")), "INFO");
                 }
             } catch (Exception ignored) {}
         }, 10, 10, TimeUnit.SECONDS);
@@ -1688,9 +1792,17 @@ public abstract class BaseLauncher {
             TimeUnit.MILLISECONDS.toMinutes(duration) % 60,
             TimeUnit.MILLISECONDS.toSeconds(duration) % 60);
 
-        // 退出码分析（参考 HMCL ExitWaiter） //
-        String exitMessage = analyzeExitCode(exitCode, durStr);
-        writeLog(exitMessage, exitCode == 0 ? "INFO" : "WARN");
+        // 退出归因：先判「是否用户主动取消」，再看退出码 //
+        // 取消启动是强制结束进程，Windows 上 waitFor() 拿到的退出码就是 1；若按退出码归因，
+        // 每一次取消都会被误报成「游戏异常退出 - 可能是 JVM 启动失败或游戏崩溃」（用户看到的日志假象）。
+        // 判定源与「取消启动」按钮同源；cancelledByUser 是进程启动瞬间补判到的那一次。
+        boolean cancelled = cancelledByUser || isCancelRequested();
+        // 记下来：启动入口据此跳过「查找崩溃日志」，也据此抑制崩溃诊断面板
+        if (cancelled) cancelledByUser = true;
+        String exitMessage = cancelled
+                ? I18N.get("bl.r0001", durStr)
+                : analyzeExitCode(exitCode, durStr);
+        writeLog(exitMessage, (cancelled || exitCode == 0) ? "INFO" : "WARN");
 
         return exitCode;
     }
@@ -1701,20 +1813,28 @@ public abstract class BaseLauncher {
      */
     protected String analyzeExitCode(int exitCode, String duration) {
         if (exitCode == 0) {
-            return "游戏已退出，运行时长: " + duration + "，退出码: 0 (正常)";
+            return I18N.get("bl.r0002", duration);
         }
 
         if (exitCode == 1) {
-            return "游戏异常退出 (代码: " + exitCode + ")，运行时长: " + duration
-                + " - 可能是 JVM 启动失败或游戏崩溃";
+            return I18N.get("bl.r0006", exitCode, duration)
+                    + I18N.get("bl.r0007");
         }
 
         if (exitCode == 137 && PlatformUtils.isUnixLike()) {
-            return "游戏被 SIGKILL 终止 (代码: " + exitCode + ")，运行时长: " + duration
-                + " - 可能因内存不足被系统杀死";
+            return I18N.get("bl.r0004", exitCode, duration)
+                    + I18N.get("bl.r0008");
         }
 
-        return "游戏异常退出 (代码: " + exitCode + ")，运行时长: " + duration;
+        // 原生崩溃（访问冲突 / 非法指令等）在 Java 层不留任何异常，退出码就是唯一证据：
+        // 翻译成人话写进日志，别让日志里只剩一串看不懂的负数
+        String reason = PlatformUtils.describeExitCode(exitCode);
+        if (reason != null) {
+            return I18N.get("bl.r0005", exitCode, duration)
+                    + I18N.get("bl.r0009", reason);
+        }
+
+        return I18N.get("bl.r0006", exitCode, duration);
     }
 
     /**
@@ -1761,15 +1881,15 @@ public abstract class BaseLauncher {
 
         if (launchInfo.isVersionIsolation()) {
             if (Files.exists(versionModsDir)) {
-                writeLog("版本隔离已启用，使用版本专属 mods 目录: " + versionModsDir, "INFO");
+                writeLog(I18N.get("launcher.p0046", versionModsDir), "INFO");
                 return versionModsDir;
             }
             try {
                 Files.createDirectories(versionModsDir);
-                writeLog("版本隔离已启用，已创建 mods 目录: " + versionModsDir, "INFO");
+                writeLog(I18N.get("launcher.p0047", versionModsDir), "INFO");
                 return versionModsDir;
             } catch (IOException e) {
-                writeLog("创建版本 mods 目录失败，回退到全局目录", "WARN");
+                writeLog(I18N.get("launcher.t0004"), "WARN");
             }
         }
         return globalModsDir;
@@ -1940,7 +2060,7 @@ public abstract class BaseLauncher {
                     .forEach(p -> {
                         try { Files.delete(p); } catch (IOException e) {
                             // 删除失败（DLL 被占用等）至少留一条日志，方便定位后续 copy 报错的根因
-                            writeLog("删除失败: " + p + " (" + e.getMessage() + ")", "WARN");
+                            writeLog(I18N.get("launcher.p0048", p + " (" + e.getMessage() + ")"), "WARN");
                         }
                     });
             }
@@ -1955,7 +2075,7 @@ public abstract class BaseLauncher {
     protected void executePreLaunchCommand() {
         String cmd = launchInfo.getPreLaunchCommand();
         if (cmd != null && !cmd.isEmpty()) {
-            writeLog("执行启动前命令: " + cmd, "INFO");
+            writeLog(I18N.get("launcher.p0049", cmd), "INFO");
             Process p = null;
             try {
                 p = PlatformUtils.createShellProcessBuilder(cmd).start();
@@ -1963,12 +2083,12 @@ public abstract class BaseLauncher {
                 if (!finished) {
                     // 超时未退出：强杀残留进程，避免「启动前命令没跑完就启动游戏」违背语义
                     p.destroyForcibly();
-                    writeLog("启动前命令 30 秒未完成，已强制终止并继续启动", "WARN");
+                    writeLog(I18N.get("launcher.t0005"), "WARN");
                 }
             } catch (IOException | InterruptedException e) {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
                 if (p != null) p.destroyForcibly();
-                writeLog("启动前命令执行失败: " + e.getMessage(), "WARN");
+                writeLog(I18N.get("launcher.p0050", e.getMessage()), "WARN");
             }
         }
     }
@@ -1979,11 +2099,11 @@ public abstract class BaseLauncher {
     protected void executePostExitCommand() {
         String cmd = launchInfo.getPostExitCommand();
         if (cmd != null && !cmd.isEmpty()) {
-            writeLog("执行退出后命令: " + cmd, "INFO");
+            writeLog(I18N.get("launcher.p0051", cmd), "INFO");
             try {
                 PlatformUtils.createShellProcessBuilder(cmd).start();
             } catch (IOException e) {
-                writeLog("退出后命令执行失败: " + e.getMessage(), "WARN");
+                writeLog(I18N.get("launcher.p0052", e.getMessage()), "WARN");
             }
         }
     }

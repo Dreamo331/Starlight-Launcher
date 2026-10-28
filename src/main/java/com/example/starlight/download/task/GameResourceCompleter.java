@@ -1,5 +1,7 @@
 package com.example.starlight.download.task;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.download.DownloadProviderHolder;
 import com.example.starlight.download.DownloadSettings;
 import com.example.starlight.download.VerifySettings;
@@ -113,6 +115,12 @@ public class GameResourceCompleter {
      * 反复掐断，否则会陷入"每次都差一点"的死循环。放宽而不是取消，是为了防止它彻底卡死。
      */
     private static final int LAST_RESORT_TIMEOUT_FACTOR = 2;
+
+    /**
+     * 端点预探测的超时（毫秒）：必须足够短，否则探测本身变成新的开销。
+     * 实测健康镜像对不存在的对象会在 1~3 秒内回 404；挂死的端点则一个字节都不给。
+     */
+    private static final int ENDPOINT_PROBE_TIMEOUT_MS = 3_000;
     /** 读缓冲：64KB（与 download.mod 的 DownloadPiece.BUFFER_SIZE 对齐，减少小文件系统调用） */
     private static final int BUFFER_SIZE = 64 * 1024;
 
@@ -145,6 +153,70 @@ public class GameResourceCompleter {
 
     /** B 池（大文件）文件级并发线程数：独立于 A 池，避免大文件占满小文件线程 */
     private static final int BIG_POOL_THREADS = 4;
+
+    /**
+     * 全局并行配额（2026-10-20）：资产 / 库文件 / 版本 JAR 三条下行链路共享的「同时进行的文件下载数」上限。
+     *
+     * <p>三阶段改成并行之后，如果每段各自开满线程池，总连接数会变成 32+32+4，
+     * 对镜像和家长宽带都不友好（PCL2 的做法是全局单一配额，见 ModNet.vb:311-315）。
+     * 这里用信号量把「文件级并发」收敛成一份，池大小仍按各段任务量给足，不会成为瓶颈。
+     *
+     * <p>注意：单文件内部的分块线程（{@link ChunkedDownloader} 的 4~8 段）不受本配额限制——
+     * 它服务的是单个文件的吞吐，不是文件并发度。
+     */
+    private static final Semaphore GLOBAL_DOWNLOAD_SLOTS =
+            new Semaphore(Math.max(2, DownloadSettings.getDownloadThreads()), true);
+
+    /**
+     * 按当前设置的并发数重建全局配额（设置页改「并发下载数」后立即生效）。
+     * 只调整许可证总量，不打断在跑的下载。
+     */
+    public static void applyGlobalConcurrency() {
+        int target = Math.max(2, DownloadSettings.getDownloadThreads());
+        int current = GLOBAL_DOWNLOAD_SLOTS.availablePermits();
+        if (target > current) {
+            GLOBAL_DOWNLOAD_SLOTS.release(target - current);
+        } else if (target < current) {
+            // 只回收当前空闲的，避免把在跑的下载信号量吞掉导致永不释放
+            int revoke = Math.min(current - target, GLOBAL_DOWNLOAD_SLOTS.availablePermits());
+            if (revoke > 0) {
+                GLOBAL_DOWNLOAD_SLOTS.tryAcquire(revoke);
+            }
+        }
+    }
+
+    /** 获取一个全局下载槽位（可被取消打断），返回 false 表示已取消 */
+    private static boolean acquireSlot(AtomicBoolean cancel) {
+        while (true) {
+            if (isCancelled(cancel)) return false;
+            try {
+                if (GLOBAL_DOWNLOAD_SLOTS.tryAcquire(500L, TimeUnit.MILLISECONDS)) {
+                    return true;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+    }
+
+    /** 归还全局下载槽位 */
+    private static void releaseSlot() {
+        GLOBAL_DOWNLOAD_SLOTS.release();
+    }
+
+    /**
+     * 三阶段并行用的编排线程池（2026-10-20）。
+     *
+     * <p>只跑「资产 / 库 / 版本 JAR」这三个顶层阶段，各阶段内部自有下载线程池，
+     * 所以固定 3 个线程足够；守护线程，不阻止 JVM 退出。
+     */
+    private static final ExecutorService PREPARE_POOL = Executors.newFixedThreadPool(3, r -> {
+        Thread t = new Thread(r, "sl-prepare-phase");
+        t.setDaemon(true);
+        return t;
+    });
+
     // JUDGE-5：原私有静态 downloadProvider 字段收敛到 download 根目录的 DownloadProviderHolder，
     // 默认 BMCLAPI 的创建逻辑移入 Holder 的懒加载，本类不再直接持有/实例化 DownloadProvider。
     private static final ConcurrentHashMap<String, ReentrantLock> COMPLETION_LOCKS = new ConcurrentHashMap<>();
@@ -208,11 +280,11 @@ public class GameResourceCompleter {
     private static boolean completeAllLocked(String gameDir, String versionId, ProgressCallback progress, AtomicBoolean cancel) {
         JsonObject root;
         loadVerifyCache(gameDir);
-        report(progress, 0, "开始补全资源: " + versionId);
+        report(progress, 0, I18N.get("task.p0078", versionId));
         log.info("Start completing resources: versionId={}, gameDir={}", versionId, gameDir);
         String versionJson = readVersionJson(gameDir, versionId);
         if (versionJson == null) {
-            report(progress, 0, "未找到版本 JSON: " + versionId);
+            report(progress, 0, I18N.get("task.p0079", versionId));
             return false;
         }
         // 整合包等版本是壳 JSON（只有 id/inheritsFrom/time/releaseTime/type）：
@@ -222,38 +294,49 @@ public class GameResourceCompleter {
                     GSON.fromJson(versionJson, JsonObject.class));
         }
         catch (Exception e) {
-            report(progress, 0, "版本 JSON 解析失败: " + e.getMessage());
+            report(progress, 0, I18N.get("task.p0080", e.getMessage()));
             return false;
         }
-        report(progress, 5, "开始补全资产文件...");
-        boolean assetsOk = completeAssets(gameDir, root, wrapProgress(progress, 5, 50), cancel);
-        if (!assetsOk) {
-            log.warn("Asset completion has failed items, continuing with library files...");
+        report(progress, 5, I18N.get("task.t0002"));
+        // 2026-10-20 三阶段并行（对标 HMCL GameInstallTask.java:97-105 的 allOf 编排）：
+        // 原来严格串行「资产 → 库 → 版本 JAR」，三者耗时相加；现在并行，总时长≈最长的一段。
+        // 限制条件已核对：
+        //   · 三者写不同目录（assets/objects、libraries/、versions/<id>/<id>.jar），无文件竞态；
+        //   · 版本 JAR 需要版本 JSON，但它自己会沿 inheritsFrom 链解析 client 下载地址，不依赖资产/库结果；
+        //   · 文件级并发由 GLOBAL_DOWNLOAD_SLOTS 统一收敛，三头并行不会放大连接数。
+        final boolean[] assetsOk = {false};
+        final boolean[] libsOk = {false};
+        final boolean[] jarOk = {false};
+        CompletableFuture<Void> assetsFuture = CompletableFuture.runAsync(() -> {
+            assetsOk[0] = completeAssets(gameDir, root, wrapProgress(progress, 5, 50), cancel);
+            if (!assetsOk[0]) {
+                log.warn("Asset completion has failed items, continuing with library files...");
+            }
+        }, PREPARE_POOL);
+        CompletableFuture<Void> libsFuture = CompletableFuture.runAsync(() -> {
+            report(progress, 52, I18N.get("task.t0003"));
+            libsOk[0] = completeLibraries(gameDir, root, wrapProgress(progress, 52, 90), true, true, cancel);
+        }, PREPARE_POOL);
+        CompletableFuture<Void> jarFuture = CompletableFuture.runAsync(() -> {
+            report(progress, 92, I18N.get("task.t0004"));
+            jarOk[0] = completeVersionJar(gameDir, versionId, root, wrapProgress(progress, 92, 100), cancel);
+        }, PREPARE_POOL);
+        try {
+            CompletableFuture.allOf(assetsFuture, libsFuture, jarFuture).get(BATCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            log.error("Resource completion phases interrupted: {}", e.toString());
         }
         if (isCancelled(cancel)) {
-            report(progress, 100, "已取消资源补全: " + versionId);
-            log.info("Resource completion cancelled after assets: versionId={}", versionId);
+            report(progress, 100, I18N.get("task.p0081", versionId));
+            log.info("Resource completion cancelled: versionId={}", versionId);
             return false;
         }
-        report(progress, 52, "开始补全库文件...");
-        boolean libsOk = completeLibraries(gameDir, root, wrapProgress(progress, 52, 90), true, true, cancel);
-        if (isCancelled(cancel)) {
-            report(progress, 100, "已取消资源补全: " + versionId);
-            log.info("Resource completion cancelled after libraries: versionId={}", versionId);
-            return false;
-        }
-        report(progress, 92, "正在校验客户端 JAR...");
-        boolean jarOk = completeVersionJar(gameDir, versionId, root, wrapProgress(progress, 92, 100), cancel);
-        if (isCancelled(cancel)) {
-            report(progress, 100, "已取消资源补全: " + versionId);
-            return false;
-        }
-        boolean allOk = assetsOk && libsOk && jarOk;
+        boolean allOk = assetsOk[0] && libsOk[0] && jarOk[0];
         if (allOk) {
-            report(progress, 100, "资源补全完成: " + versionId);
+            report(progress, 100, I18N.get("task.p0082", versionId));
             log.info("Resource completion finished: versionId={}", versionId);
         } else {
-            report(progress, 100, "资源补全完成（部分失败）: " + versionId);
+            report(progress, 100, I18N.get("task.p0083", versionId));
             log.warn("Resource completion finished (partial failures): versionId={}", versionId);
         }
         return allOk;
@@ -272,7 +355,7 @@ public class GameResourceCompleter {
         loadVerifyCache(gameDir);
         String versionJson = readVersionJson(gameDir, versionId);
         if (versionJson == null) {
-            report(progress, 0, "未找到版本 JSON: " + versionId);
+            report(progress, 0, I18N.get("task.p0084", versionId));
             return false;
         }
         // 整合包等版本是壳 JSON（只有 id/inheritsFrom/time/releaseTime/type）：
@@ -282,7 +365,7 @@ public class GameResourceCompleter {
                     GSON.fromJson(versionJson, JsonObject.class));
         }
         catch (Exception e) {
-            report(progress, 0, "版本 JSON 解析失败: " + e.getMessage());
+            report(progress, 0, I18N.get("task.p0085", e.getMessage()));
             return false;
         }
         return completeAssets(gameDir, root, progress, cancel);
@@ -301,7 +384,7 @@ public class GameResourceCompleter {
         loadVerifyCache(gameDir);
         String versionJson = readVersionJson(gameDir, versionId);
         if (versionJson == null) {
-            report(progress, 0, "未找到版本 JSON: " + versionId);
+            report(progress, 0, I18N.get("task.p0086", versionId));
             return false;
         }
         // 整合包等版本是壳 JSON（只有 id/inheritsFrom/time/releaseTime/type）：
@@ -311,7 +394,7 @@ public class GameResourceCompleter {
                     GSON.fromJson(versionJson, JsonObject.class));
         }
         catch (Exception e) {
-            report(progress, 0, "版本 JSON 解析失败: " + e.getMessage());
+            report(progress, 0, I18N.get("task.p0087", e.getMessage()));
             return false;
         }
         return completeLibraries(gameDir, root, progress, true, true, cancel);
@@ -330,7 +413,7 @@ public class GameResourceCompleter {
         loadVerifyCache(gameDir);
         String versionJson = readVersionJson(gameDir, versionId);
         if (versionJson == null) {
-            report(progress, 0, "未找到版本 JSON: " + versionId);
+            report(progress, 0, I18N.get("task.p0088", versionId));
             return false;
         }
         // 整合包等版本是壳 JSON（只有 id/inheritsFrom/time/releaseTime/type）：
@@ -340,7 +423,7 @@ public class GameResourceCompleter {
                     GSON.fromJson(versionJson, JsonObject.class));
         }
         catch (Exception e) {
-            report(progress, 0, "版本 JSON 解析失败: " + e.getMessage());
+            report(progress, 0, I18N.get("task.p0089", e.getMessage()));
             return false;
         }
         return completeLibraries(gameDir, root, progress, false, true, cancel);
@@ -359,7 +442,7 @@ public class GameResourceCompleter {
         loadVerifyCache(gameDir);
         String versionJson = readVersionJson(gameDir, versionId);
         if (versionJson == null) {
-            report(progress, 0, "未找到版本 JSON: " + versionId);
+            report(progress, 0, I18N.get("task.p0090", versionId));
             return false;
         }
         // 整合包等版本是壳 JSON（只有 id/inheritsFrom/time/releaseTime/type）：
@@ -369,7 +452,7 @@ public class GameResourceCompleter {
                     GSON.fromJson(versionJson, JsonObject.class));
         }
         catch (Exception e) {
-            report(progress, 0, "版本 JSON 解析失败: " + e.getMessage());
+            report(progress, 0, I18N.get("task.p0091", e.getMessage()));
             return false;
         }
         return completeVersionJar(gameDir, versionId, root, progress, cancel);
@@ -382,30 +465,30 @@ public class GameResourceCompleter {
             String parentId = getJsonString(root, "inheritsFrom");
             if (parentId != null && copyJarFromParent(gameDir, parentId, targetJar)) {
                 log.info("Version jar copied from parent: {} -> {}", parentId, targetJar);
-                report(progress, 100, "客户端 JAR 已从父版本复制");
+                report(progress, 100, I18N.get("task.t0005"));
                 return true;
             }
             log.warn("Version JSON has no downloads.client, cannot complete client jar: versionId={}", versionId);
-            report(progress, 100, "未找到客户端 JAR 的下载地址，已跳过");
+            report(progress, 100, I18N.get("task.t0006"));
             return true;
         }
         AssetTask task = new AssetTask(versionId + ".jar", source.sha1, source.size, targetJar, false, source.url);
         if (isFileValid(task)) {
-            report(progress, 100, "客户端 JAR 已就绪");
+            report(progress, 100, I18N.get("task.t0007"));
             return true;
         }
         if (isCancelled(cancel)) {
-            report(progress, 100, "已取消客户端 JAR 下载");
+            report(progress, 100, I18N.get("task.t0008"));
             return false;
         }
-        report(progress, 10, "正在下载客户端 JAR: " + versionId + ".jar");
+        report(progress, 10, I18N.get("task.p0092", versionId + ".jar"));
         if (downloadClientJar(task, source.versionId, cancel)) {
             log.info("Version jar completion finished: {}", targetJar);
-            report(progress, 100, "客户端 JAR 补全完成");
+            report(progress, 100, I18N.get("task.t0009"));
             return true;
         }
         log.warn("Version jar download failed: {}", targetJar);
-        report(progress, 100, (isCancelled(cancel) ? "已取消客户端 JAR 下载" : "客户端 JAR 下载失败: " + versionId + ".jar"));
+        report(progress, 100, (isCancelled(cancel) ? I18N.get("task.t0065") : I18N.get("task.p0093", versionId + ".jar")));
         return false;
     }
 
@@ -440,6 +523,24 @@ public class GameResourceCompleter {
         return null;
     }
 
+    /**
+     * 下载客户端 JAR（版本主 jar）。
+     *
+     * <h3>2026-10-20 提速改造</h3>
+     * 本次补全慢的主因之一就是这里：原实现是<b>朴素 for 循环 + 单连接</b>，
+     * 20.6 MB 的 1.19.2 client.jar 实测单线程要 23~28 秒（理想链路），而日志里这段花了
+     * 285 秒且最终被取消，期间没有任何进度日志。
+     *
+     * <p>现在：
+     * <ol>
+     *   <li><b>走 {@link ChunkedDownloader} 分块并发</b>（与资产/库大文件同一套 Range 分段 + 速率型停滞判定），
+     *       源不支持 Range 时自动回退单连接；</li>
+     *   <li><b>候选按实测耗时排序</b>：由 {@link SourceRanking} 用持久化的
+     *       {@code lastSuccessCostMs} 排序，而不是固定按 provider 顺序
+     *       （实测 {@code /version/1.19.2/client} HEAD 就要 6.08 秒，官方源只要 0.94 秒）；</li>
+     *   <li>进等待池语义与资产一致：可重试失败会继续尝试后续候选。</li>
+     * </ol>
+     */
     private static boolean downloadClientJar(AssetTask task, String mcVersion, AtomicBoolean cancel) {
         ArrayList<URI> candidates = new ArrayList<>(DownloadProviderHolder.get().getVersionClientCandidates(mcVersion));
         candidates.addAll(DownloadProviderHolder.get().injectURLWithCandidates(task.url));
@@ -447,22 +548,40 @@ public class GameResourceCompleter {
         if (!candidates.contains(original)) {
             candidates.add(original);
         }
-        boolean downloaded = false;
-        for (int i = 0; i < candidates.size(); i++) {
-            if (downloaded || isCancelled(cancel)) break;
-            URI candidate = candidates.get(i);
-            if (SourceHealth.getInstance().isBlocked(candidate.toString())) {
-                continue;
-            }
-            // 与资产路径一致：最后一条可用候选放宽停滞判定
-            DownloadOutcome outcome = downloadFile(candidate.toString(), task.targetFile, task.hash, cancel,
-                    isLastAvailableCandidate(candidates, i));
-            if (outcome == DownloadOutcome.OK) {
-                downloaded = true;
-            } else if (outcome == DownloadOutcome.CANCELLED) {
+        // 与资产下载一致的候选排序：按历史成功耗时 / 慢源计数动态选最优源
+        List<URI> ranked = SourceRanking.sortCandidates(candidates);
+        // 死镜像探测：版本 JAR 只有一次机会，探测成本可忽略，但能避免整段卡在挂死的端点上
+        for (URI c : candidates) {
+            String s = c.toString();
+            if (s.contains("/version/")) {
+                probeContentAddressedEndpoint(s);
                 break;
             }
-            // RETRY / FAIL：客户端 JAR 是批外单文件下载，保持原有「继续下一候选」语义（不做等待池）
+        }
+        boolean downloaded = false;
+        // 2026-10-20：版本 JAR 与资产/库共享同一份全局并发配额（三阶段并行后唯一的文件并发上限）
+        boolean slotHeld = acquireSlot(cancel);
+        try {
+            for (int i = 0; i < ranked.size(); i++) {
+                if (downloaded || isCancelled(cancel)) break;
+                String candidateUrl = ranked.get(i).toString();
+                if (SourceHealth.getInstance().isBlocked(candidateUrl)) {
+                    continue;
+                }
+                boolean lastResort = isLastAvailableCandidate(ranked, i);
+                // 与资产路径统一：大文件走分块并发，小文件/不支持 Range 自动回退单连接
+                DownloadOutcome outcome = (task.size >= BIG_FILE_THRESHOLD)
+                        ? downloadBigFile(candidateUrl, task.targetFile, task.size, task.hash, cancel, lastResort)
+                        : downloadFile(candidateUrl, task.targetFile, task.hash, cancel, lastResort);
+                if (outcome == DownloadOutcome.OK) {
+                    downloaded = true;
+                } else if (outcome == DownloadOutcome.CANCELLED) {
+                    break;
+                }
+                // RETRY / FAIL：客户端 JAR 是批外单文件下载，保持原有「继续下一候选」语义（不做等待池）
+            }
+        } finally {
+            if (slotHeld) releaseSlot();
         }
         if (isCancelled(cancel) && !downloaded) {
             return false;
@@ -505,24 +624,80 @@ public class GameResourceCompleter {
     private static boolean completeAssets(String gameDir, JsonObject root, ProgressCallback progress, AtomicBoolean cancel) {
         JsonObject assetIndex = root.getAsJsonObject("assetIndex");
         if (assetIndex == null) {
-            report(progress, 0, "版本 JSON 无 assetIndex 字段，使用 legacy 索引");
+            report(progress, 0, I18N.get("task.t0010"));
             return downloadAndProcessLegacyAssets(gameDir, progress, cancel);
         }
         String assetId = getJsonString(assetIndex, "id");
         String sha1 = getJsonString(assetIndex, "sha1");
         String indexUrl = getJsonString(assetIndex, "url");
         if (assetId == null) {
-            report(progress, 0, "资产索引信息不完整");
+            report(progress, 0, I18N.get("task.t0011"));
             return false;
         }
-        report(progress, 5, "下载资产索引: " + assetId);
+        report(progress, 5, I18N.get("task.p0094", assetId));
         Path indexFile = downloadAssetIndex(gameDir, assetId, sha1, indexUrl, cancel);
         if (indexFile == null) {
-            report(progress, 5, (isCancelled(cancel) ? "已取消资产补全" : "资产索引下载失败: " + assetId));
+            report(progress, 5, (isCancelled(cancel) ? I18N.get("task.t0066") : I18N.get("task.p0095", assetId)));
             return false;
         }
-        report(progress, 10, "开始校验资产文件...");
+        report(progress, 10, I18N.get("task.t0012"));
+        // 2026-10-20 死镜像探测：先用极短超时探一次镜像的 /assets/ 端点，
+        // 挂了就整段跳过，而不是让每个资产各白等一个停滞周期。
+        // 实测（本机 2026-10-20）：bmclapi 的 /assets/ 完全无响应，而候选它排第一，
+        // 10 个文件实测从 9.4s 恶化到 178.2s（+1800%）。
+        probeContentAddressedEndpoint(
+                String.format(OBJECTS_BMCLAPI, "00", "0000000000000000000000000000000000000000"));
         return downloadAssetObjects(gameDir, indexFile, assetId, wrapProgress(progress, 10, 100), cancel);
+    }
+
+    /**
+     * 端点级可用性探测（2026-10-20）。
+     *
+     * <p>健康表是「事后学习」，但第一个文件仍然要付学费；而且如果每个新前缀都先撞一次，
+     * 学费会被重复支付几十次。这里在整批下载开始前用<b>一次</b>极短超时的探测，
+     * 把「整段不可用」的事实提前告诉健康表。
+     *
+     * <p>探测 URL 用一个必然不存在的假散列：镜像若健康会立刻回 404（快），
+     * 若挂死则会在 {@link #ENDPOINT_PROBE_TIMEOUT_MS} 内超时（也快）。
+     * 两种情况都在毫秒级返回，不会拖慢正常流程；只有<b>超时</b>才把该地址段拉黑。
+     */
+    private static void probeContentAddressedEndpoint(String probeUrl) {
+        if (probeUrl == null || probeUrl.isBlank()) return;
+        String key;
+        try {
+            key = SourceHealth.debugBlockKey(probeUrl);
+        } catch (Throwable t) {
+            return;
+        }
+        if (key == null || SourceHealth.getInstance().isBlocked(probeUrl)) return;
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) new URL(probeUrl).openConnection();
+            conn.setRequestMethod("HEAD");
+            conn.setConnectTimeout(ENDPOINT_PROBE_TIMEOUT_MS);
+            conn.setReadTimeout(ENDPOINT_PROBE_TIMEOUT_MS);
+            conn.setRequestProperty("User-Agent", AppConfig.USER_AGENT);
+            long startMs = System.currentTimeMillis();
+            int code = conn.getResponseCode();
+            long cost = System.currentTimeMillis() - startMs;
+            if (code >= 200 && code < 500) {
+                // 镜像活着（404 也算活：说明这段路径服务正常，只是该对象不存在）
+                log.debug("端点探测通过: {} (HTTP {}, {}ms)", key, code, cost);
+                SourceHealth.getInstance().recordSuccess(probeUrl);
+            } else {
+                log.debug("端点探测异常: {} (HTTP {}, {}ms)，交给健康表逐次判定", key, code, cost);
+            }
+        } catch (java.net.SocketTimeoutException timeout) {
+            log.warn("端点探测超时（{}ms 无响应），本次补全跳过该地址段: {}",
+                    ENDPOINT_PROBE_TIMEOUT_MS, key);
+            // 用 recordTimeout 正式计数：阈值 3，但这里一次探测就把它累计到阈值以上，
+            // 省掉「前两个文件各白等一轮」的学费
+            SourceHealth.getInstance().recordEndpointDead(probeUrl, I18N.get("task.t0013"));
+        } catch (IOException other) {
+            log.debug("端点探测失败（{}），交给健康表逐次判定: {}", other.toString(), key);
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
     }
 
     private static Path downloadAssetIndex(String gameDir, String assetId, String sha1, String indexUrl, AtomicBoolean cancel) {
@@ -612,7 +787,7 @@ public class GameResourceCompleter {
                 objects = root.getAsJsonObject("virtual");
                 isVirtual = true;
             } else {
-                report(progress, 0, "索引文件无 objects/virtual 字段: " + assetId);
+                report(progress, 0, I18N.get("task.p0096", assetId));
                 return false;
             }
             if (root.has("virtual") && root.get("virtual").isJsonPrimitive() && root.get("virtual").getAsBoolean()) {
@@ -622,7 +797,7 @@ public class GameResourceCompleter {
                 }
             }
             if ((total = (entries = objects.entrySet()).size()) == 0) {
-                report(progress, 100, "无需下载资产文件: " + assetId);
+                report(progress, 100, I18N.get("task.p0097", assetId));
                 return true;
             }
             Path objectsDir = Paths.get(gameDir, "assets", "objects");
@@ -647,7 +822,7 @@ public class GameResourceCompleter {
                 log.info("资产对象去重: 索引 {} 共 {} 条，其中 {} 条与其它条目指向同一文件，实际下载 {} 个对象", assetId, total, total - tasks.size(), tasks.size());
             }
             int uniqueTotal = tasks.size();
-            int downloaded = downloadConcurrently(tasks, objectsDir, progress, uniqueTotal, "资产文件", OBJECTS_MOJANG, OBJECTS_BMCLAPI, cancel);
+            int downloaded = downloadConcurrently(tasks, objectsDir, progress, uniqueTotal, I18N.get("task.t0014"), OBJECTS_MOJANG, OBJECTS_BMCLAPI, cancel);
             if (!isCancelled(cancel) && isVirtual && tasks.stream().anyMatch(t -> t.downloaded)) {
                 handleVirtualResources(gameDir, indexFile, progress, cancel);
             }
@@ -657,19 +832,19 @@ public class GameResourceCompleter {
         }
         catch (IOException e) {
             log.error("Asset object download error: assetId={}", assetId, e);
-            report(progress, 0, "资产对象下载异常: " + e.getMessage());
+            report(progress, 0, I18N.get("task.p0098", e.getMessage()));
             return false;
         }
     }
 
     private static boolean downloadAndProcessLegacyAssets(String gameDir, ProgressCallback progress, AtomicBoolean cancel) {
-        report(progress, 10, "使用 legacy 资产索引...");
+        report(progress, 10, I18N.get("task.t0015"));
         Path indexFile = downloadAssetIndex(gameDir, "legacy", null, null, cancel);
         if (indexFile == null && !isCancelled(cancel)) {
             indexFile = downloadAssetIndex(gameDir, "pre-1.6", null, null, cancel);
         }
         if (indexFile == null) {
-            report(progress, 0, isCancelled(cancel) ? "已取消资产补全" : "无法获取旧版资产索引");
+            report(progress, 0, isCancelled(cancel) ? I18N.get("task.t0067") : I18N.get("task.t0068"));
             return false;
         }
         return downloadAssetObjects(gameDir, indexFile, "legacy", wrapProgress(progress, 20, 100), cancel);
@@ -709,7 +884,7 @@ public class GameResourceCompleter {
             report(progress, 95, "正在整理虚拟资源目录（共 " + total + " 条待检查）...");
             for (Map.Entry<String, JsonElement> entry : objects.entrySet()) {
                 if (isCancelled(cancel)) {
-                    report(progress, 100, "已取消虚拟资源整理");
+                    report(progress, 100, I18N.get("task.t0016"));
                     log.info("Virtual resource copy cancelled: copied {} of {}", copied, total);
                     return;
                 }
@@ -730,7 +905,7 @@ public class GameResourceCompleter {
                 if (now - lastReportAt >= 2_000L || scanned % 200 == 0) {
                     lastReportAt = now;
                     int pct = total > 0 ? 95 + Math.min(5, scanned * 5 / total) : 100;
-                    report(progress, pct, String.format("正在整理虚拟资源目录: %d/%d 已检查，%d 已复制",
+                    report(progress, pct, String.format(I18N.get("task.t0017"),
                             scanned, total, copied));
                 }
             }
@@ -746,7 +921,7 @@ public class GameResourceCompleter {
     private static boolean completeLibraries(String gameDir, JsonObject root, ProgressCallback progress, boolean includeArtifacts, boolean includeClassifiers, AtomicBoolean cancel) {
         JsonArray libraries = root.getAsJsonArray("libraries");
         if (libraries == null || libraries.size() == 0) {
-            report(progress, 100, "无需下载库文件");
+            report(progress, 100, I18N.get("task.t0018"));
             return true;
         }
         String osName = normalizeOs(System.getProperty("os.name"));
@@ -768,11 +943,13 @@ public class GameResourceCompleter {
             addLibraryTask(tasks, libDir, nativeArtifact, nativeClassifier);
         }
         if (tasks.isEmpty()) {
-            report(progress, 100, "所有库文件已就绪");
+            report(progress, 100, I18N.get("task.t0019"));
             return true;
         }
         report(progress, 5, "开始下载库文件: " + tasks.size() + " 个");
-        int downloaded = downloadConcurrently(tasks, libDir, wrapProgress(progress, 5, 100), tasks.size(), "库文件", LIB_MOJANG, LIB_BMCLAPI, cancel);
+        // 与资产同一套死镜像探测：镜像的 /libraries/ 整段不干活时，不要在几百个库文件上重复交学费
+        probeContentAddressedEndpoint(LIB_BMCLAPI + "com/example/starlight/__probe__/0/__probe__.jar");
+        int downloaded = downloadConcurrently(tasks, libDir, wrapProgress(progress, 5, 100), tasks.size(), I18N.get("task.t0020"), LIB_MOJANG, LIB_BMCLAPI, cancel);
         boolean allOk = downloaded == tasks.size();
         log.info("Library file completion finished: {}/{}", downloaded, tasks.size());
         return allOk;
@@ -860,7 +1037,7 @@ public class GameResourceCompleter {
             }
             log.warn("[{}] 已 {}s 无文件完成（完成 {}/{}），仍在等待: {}{}",
                     taskLabel, idle / 1000L, lastProgressCount.get(), total,
-                    stuck.isEmpty() ? "（无）" : String.join(", ", stuck),
+                    stuck.isEmpty() ? I18N.get("task.t0069") : String.join(", ", stuck),
                     stuck.size() >= 20 ? " …" : "");
         }, 20, 20, TimeUnit.SECONDS);
         try {
@@ -1005,11 +1182,11 @@ public class GameResourceCompleter {
         // 下次启动补全不再冷启动探测，前期文件直接优先历史快源
         SourceHealth.getInstance().persistIfDirty();
         if (isCancelled(cancel)) {
-            report(progress, 100, String.format("%s: 已取消，%d/%d 已就绪", taskLabel, totalDownloaded, total));
+            report(progress, 100, String.format(I18N.get("task.t0021"), taskLabel, totalDownloaded, total));
             log.info("{} cancelled: {}/{} ready", taskLabel, totalDownloaded, total);
             return totalDownloaded;
         }
-        report(progress, 100, String.format("%s: %d/%d 完成, %d 失败", taskLabel, totalDownloaded, total, totalFailed));
+        report(progress, 100, String.format(I18N.get("task.t0022"), taskLabel, totalDownloaded, total, totalFailed));
         return totalDownloaded;
     }
 
@@ -1034,7 +1211,17 @@ public class GameResourceCompleter {
                 if (isCancelled(cancel)) {
                     return;
                 }
-                DownloadOutcome outcome = downloadSingleAsset(task, primaryUrl, fallbackUrl, cancel);
+                // 2026-10-20：占用全局下载槽位。三阶段并行后这是唯一的文件并发上限，
+                // 保证「资产 + 库 + 版本 JAR」同时进行中的文件数不会超过用户设定的并发数。
+                if (!acquireSlot(cancel)) {
+                    return;
+                }
+                DownloadOutcome outcome;
+                try {
+                    outcome = downloadSingleAsset(task, primaryUrl, fallbackUrl, cancel);
+                } finally {
+                    releaseSlot();
+                }
                 applyBatchOutcome(outcome, task, cancel, completed, failedCount, lastProgressAt,
                         lastProgressCount, progress, total, taskLabel, finallyFailed, waveRetryable);
             }, executor));
@@ -1096,10 +1283,10 @@ public class GameResourceCompleter {
     private static void recordFinalFailures(AssetTask task) {
         SourceHealth health = SourceHealth.getInstance();
         for (String url : task.emptyUrls) {
-            health.recordEmpty(url, "资源补全");
+            health.recordEmpty(url, I18N.get("task.t0023"));
         }
         for (String url : task.stallUrls) {
-            health.recordTimeout(url, "资源补全");
+            health.recordTimeout(url, I18N.get("task.t0024"));
         }
         for (String url : task.retryableFailUrls) {
             health.markSlowBatch(url);
@@ -1363,6 +1550,11 @@ public class GameResourceCompleter {
             candidates = SourceRanking.sortCandidates(candidates);
             boolean downloaded = false;
             boolean retryableThisRun = false;
+            // 2026-10-20：统计「因健康表/慢源被跳过」的候选数。若所有候选都被跳过，
+            // 说明失败原因是「镜像整段不可用」而不是「资源不存在」——必须判可重试，
+            // 否则死镜像会把本批文件直接打成永久失败（旧实现的二次伤害）。
+            int skippedByHealth = 0;
+            int consideredCount = 0;
             candidateLoop:
             for (int i = 0; i < candidates.size(); i++) {
                 if (downloaded || isCancelled(cancel)) break;
@@ -1372,6 +1564,7 @@ public class GameResourceCompleter {
                 // 否则每个文件都要在同一个死源上白付一次失败
                 // （真实故障：bmclapi 的 /assets/<sha1> 对每个资产都 404 或返回 0 字节）
                 if (SourceHealth.getInstance().isBlocked(candidateUrl)) {
+                    skippedByHealth++;
                     continue;
                 }
                 // SHA-1 重试必须强制更换源（§2.1）：跳过已产出错误数据的候选
@@ -1389,8 +1582,10 @@ public class GameResourceCompleter {
                         && SourceHealth.getInstance().getSlowCount(candidateUrl) >= SLOW_SOURCE_SKIP_THRESHOLD) {
                     log.debug("本批慢源（slowCount≥{}）跳过: {}（任务 {}）",
                             SLOW_SOURCE_SKIP_THRESHOLD, candidateUrl, task.virtualPath);
+                    skippedByHealth++;
                     continue;
                 }
+                consideredCount++;
                 // 2026-09-30 A/B 双池：大文件（≥1MB）走分块并发，小文件保持单连接
                 DownloadOutcome outcome = (task.size >= BIG_FILE_THRESHOLD)
                         ? downloadBigFile(candidateUrl, targetFile, task.size, task.hash, cancel, lastResort)
@@ -1451,7 +1646,13 @@ public class GameResourceCompleter {
                 task.downloadCostMs = System.currentTimeMillis() - startMs;
                 return DownloadOutcome.OK;
             }
-            // 任务级结果：存在可重试失败 → 入等待池；否则（如全部 404）→ 不可重试失败
+            // 任务级结果：存在可重试失败 → 入等待池；否则（如全部 404）→ 不可重试失败。
+            // 2026-10-20：一个候选都没真正试过（全被健康表/慢源跳过）时，失败原因是「源整段不可用」，
+            // 必须判可重试 —— 交给等待池晚点再试，而不是把文件记成永久失败。
+            if (!retryableThisRun && consideredCount == 0 && skippedByHealth > 0) {
+                log.debug("全部候选被健康表跳过（{} 条），计入等待池: {}", skippedByHealth, task.virtualPath);
+                retryableThisRun = true;
+            }
             return retryableThisRun ? DownloadOutcome.RETRY : DownloadOutcome.FAIL;
         }
         catch (IOException e) {
@@ -1659,6 +1860,10 @@ public class GameResourceCompleter {
                 Files.createDirectories(targetPath.getParent());
 
                 boolean cancelledMidway = false;
+                boolean stalledMidway = false;
+                long stallWindowMs = DownloadSettings.getStallWindowMs(lastResort);
+                long windowStartMs = System.currentTimeMillis();
+                long bytesInWindow = 0L;
                 try (InputStream in = conn.getInputStream();
                      OutputStream out = totalRead > 0
                              ? Files.newOutputStream(tempFile, StandardOpenOption.CREATE,
@@ -1674,10 +1879,30 @@ public class GameResourceCompleter {
                         out.write(buffer, 0, read);
                         com.example.starlight.util.NetTrafficStats.recordBytes(read); // 全局流量统计
                         totalRead += read;
+                        bytesInWindow += read;
+                        // 2026-10-20 速率型停滞判定：数据在动就继续下（慢但可用），
+                        // 只有「窗口内实收字节低于速率阈值」才判卡死、换源。
+                        long nowMs = System.currentTimeMillis();
+                        long elapsed = nowMs - windowStartMs;
+                        if (elapsed >= stallWindowMs) {
+                            if (DownloadSettings.isStalled(elapsed, bytesInWindow)) {
+                                stalledMidway = true;
+                                break;
+                            }
+                            windowStartMs = nowMs;
+                            bytesInWindow = 0L;
+                        }
                     }
                 }
+                if (stalledMidway) {
+                    long stalledSec = stallWindowMs / 1000L;
+                    log.warn("源停滞（{}s 窗口内吞吐低于速率阈值），入等待池重试: {}", stalledSec, current);
+                    SourceHealth.getInstance().recordSlow(current, I18N.get("task.t0025"));
+                    deleteQuietly(tempFile);
+                    return DownloadOutcome.RETRY_STALL;
+                }
                 DebugLog.http(false, null, current, code, totalRead,
-                        cancelledMidway ? "[已取消]" : "[二进制文件]", -1L);
+                        cancelledMidway ? I18N.get("task.t0070") : I18N.get("task.t0071"), -1L);
                 if (cancelledMidway) {
                     Files.deleteIfExists(tempFile);
                     return DownloadOutcome.CANCELLED;
@@ -1688,7 +1913,7 @@ public class GameResourceCompleter {
                 if (totalRead == 0L && expectedSha1 != null && !expectedSha1.isBlank()) {
                     log.warn("源返回 200 但正文为 0 字节，入等待池重试: {}", current);
                     // 2026-09-30：首见只记软计数（§2.3），重试仍失败才由批级核算 recordEmpty
-                    SourceHealth.getInstance().recordSlow(current, "资源补全");
+                    SourceHealth.getInstance().recordSlow(current, I18N.get("task.t0026"));
                     Files.deleteIfExists(tempFile);
                     return DownloadOutcome.RETRY_EMPTY;
                 }
@@ -1725,9 +1950,9 @@ public class GameResourceCompleter {
             // 此时工作线程【没有】被中断（本机制不依赖线程中断），所以不需要清中断位。
             long stalledSec = readTimeoutMs(lastResort) / 1000L;
             log.warn("源停滞（{}s 无数据）{}，入等待池重试: {}", stalledSec,
-                    lastResort ? "[最后候选，已放宽]" : "", urlStr);
+                    lastResort ? I18N.get("task.t0072") : "", urlStr);
             // 2026-09-30：首见只记软计数（§2.3），重试仍失败才由批级核算 recordTimeout
-            SourceHealth.getInstance().recordSlow(urlStr, "资源补全");
+            SourceHealth.getInstance().recordSlow(urlStr, I18N.get("task.t0027"));
             deleteQuietly(tempFile);
             return DownloadOutcome.RETRY_STALL;
         }
@@ -1742,12 +1967,22 @@ public class GameResourceCompleter {
         }
     }
 
-    /** 读超时：最后候选放宽，避免把唯一可用但偏慢的源反复掐断 */
+    /**
+     * socket 读超时：作为「连接彻底无响应」的兜底，<b>不承担</b>慢速判定。
+     *
+     * <p>2026-10-20 修正（本次提速的主要修复之一）：原实现在非最后候选上用
+     * {@code getFirstTryStallMs()}（默认 5 秒）当读超时，而实测本机到
+     * {@code resources.download.minecraft.net} 的首包延迟就有 5.7~8.85 秒 —— 慢但完全正常的
+     * 响应会在建连阶段被判成「停滞」，换源后又要再付一遍首包延迟。日志见过 90 秒下 255 个文件、
+     * 71 条停滞告警，就是这个放大链。
+     *
+     * <p>现在读超时统一用 {@link DownloadSettings#getStallTimeoutMs()}（默认 15s，可在开发者选项调），
+     * 真正的「慢到该换源」由正文读取循环里的<b>速率窗口</b>判定
+     * （{@link DownloadSettings#isStalled}），语义对齐 PCL2 ModNet.vb:1025-1028。
+     */
     private static int readTimeoutMs(boolean lastResort) {
         int base = DownloadSettings.getStallTimeoutMs();
-        // 2026-09-30 增强 B（停滞判定分级）：只有「最后可用候选」才用 DownloadStallTimeoutSec × 放大系数，
-        // 前面的候选统一用更快的首试判定（默认 5s），坏源代价从 15s 降到 5s。
-        return lastResort ? base * LAST_RESORT_TIMEOUT_FACTOR : DownloadSettings.getFirstTryStallMs();
+        return lastResort ? base * LAST_RESORT_TIMEOUT_FACTOR : base;
     }
 
     /**
@@ -1914,7 +2149,7 @@ public class GameResourceCompleter {
      */
     private static void recordHttpFailure(String urlStr, int status) {
         if (status == 404 || status == 410) {
-            SourceHealth.getInstance().record404(urlStr, status, "资源补全");
+            SourceHealth.getInstance().record404(urlStr, status, I18N.get("task.t0028"));
         } else {
             SourceHealth.getInstance().recordOtherFailure(urlStr);
         }
@@ -1925,7 +2160,7 @@ public class GameResourceCompleter {
             return;
         }
         int percent = total > 0 ? Math.min(completed * 100 / total, 100) : 0;
-        String msg = String.format("%s: %d/%d (失败: %d)", label, completed, total, failed);
+        String msg = String.format(I18N.get("task.t0029"), label, completed, total, failed);
         progress.onProgress(percent, msg);
     }
 

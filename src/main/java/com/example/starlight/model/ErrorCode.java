@@ -1,38 +1,41 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.model;
 
+
+import com.example.starlight.util.I18N;
 /**
  * 游戏启动错误码分类
  */
 public enum ErrorCode {
 
-    E0001("未知错误", "无法确定具体原因的启动失败"),
+    E0001(I18N.get("model.t0001"), I18N.get("model.t0002")),
 
     // JVM 相关 (E1xxx) //
-    E1001("JVM创建失败", "Java虚拟机无法创建或启动"),
-    E1002("内存不足", "Java堆内存分配失败，可尝试增加最大内存"),
-    E1003("无效JVM参数", "JVM启动参数中存在无法识别的选项或格式错误"),
+    E1001(I18N.get("model.t0003"), I18N.get("model.t0004")),
+    E1002(I18N.get("model.t0005"), I18N.get("model.t0006")),
+    E1003(I18N.get("model.t0007"), I18N.get("model.t0008")),
 
     // 模组相关 (E2xxx) //
-    E2001("模组加载冲突", "多个模组之间存在冲突，无法同时加载"),
-    E2002("模组缺失依赖", "加载的模组缺少必要的依赖模组"),
-    E2003("模组版本不兼容", "模组版本与当前游戏版本不兼容"),
+    E2001(I18N.get("model.t0009"), I18N.get("model.t0010")),
+    E2002(I18N.get("model.t0011"), I18N.get("model.t0012")),
+    E2003(I18N.get("model.t0013"), I18N.get("model.t0014")),
 
     // 文件/资源相关 (E3xxx) //
-    E3001("游戏文件损坏", "必要的游戏文件缺失或损坏"),
-    E3002("资源文件缺失", "资源包或资源文件无法加载"),
+    E3001(I18N.get("model.t0015"), I18N.get("model.t0016")),
+    E3002(I18N.get("model.t0017"), I18N.get("model.t0018")),
 
     // Java环境相关 (E4xxx) //
-    E4001("Java版本不兼容", "当前Java版本不符合游戏要求"),
-    E4002("Java位宽错误", "需要32位Java但使用了64位（或反之）"),
+    E4001(I18N.get("model.t0019"), I18N.get("model.t0020")),
+    E4002(I18N.get("model.t0021"), I18N.get("model.t0022")),
 
     // 图形/渲染相关 (E5xxx) //
-    E5001("显卡驱动错误", "显卡驱动异常或OpenGL版本不满足要求"),
-    E5002("渲染初始化失败", "游戏渲染管线初始化失败"),
+    E5001(I18N.get("model.t0023"), I18N.get("model.t0024")),
+    E5002(I18N.get("model.t0025"), I18N.get("model.t0026")),
 
     // 启动参数相关 (E6xxx) //
-    E6001("类路径错误", "游戏库文件类路径异常"),
-    E6002("原生库加载失败", "操作系统原生库无法正确加载");
+    E6001(I18N.get("model.t0027"), I18N.get("model.t0028")),
+    E6002(I18N.get("model.t0029"), I18N.get("model.t0030")),
+    E6003(I18N.get("model.t0031"), I18N.get("model.t0032"));
 
     private final String displayName;
     private final String description;
@@ -83,6 +86,21 @@ public enum ErrorCode {
                 || text.contains("java.lang.outofmemoryerror")
                 || text.contains("gc overhead limit")) {
             return E1002;
+        }
+
+        // 原生崩溃（访问冲突 / 非法指令）：Java 层不会抛异常，证据只在退出码与 hs_err 日志里。
+        // 放在图形 / 类路径判断之前：这类文本里常同时出现驱动名、dll 名，先判原生崩溃才不会误报成
+        // 「显卡驱动错误」或「类路径错误」
+        if (text.contains("0xc0000005")
+                || text.contains("0xc000001d")
+                || text.contains("0xc00000fd")
+                || text.contains("0xc0000409")
+                || text.contains("exception_access_violation")
+                || text.contains("access violation")
+                || text.contains("访问冲突")
+                || text.contains("problematic frame")
+                || text.contains("sigsegv")) {
+            return E6003;
         }
 
         // 模组相关

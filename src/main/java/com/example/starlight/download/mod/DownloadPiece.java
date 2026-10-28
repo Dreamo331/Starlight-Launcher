@@ -1,5 +1,7 @@
 package com.example.starlight.download.mod;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.util.DebugLog;
 import com.example.starlight.util.NetTrafficStats;
 
@@ -72,6 +74,9 @@ public final class DownloadPiece {
 
     private volatile State state = State.WAITING;
 
+    /** 当前正在用的连接（取消时由 {@link #abort()} 断开，让阻塞中的 read 立刻返回） */
+    private volatile java.net.HttpURLConnection activeConn;
+
     public DownloadPiece(int index, long start, long end, Path partFile, boolean firstThread) {
         this.index = index;
         this.start = start;
@@ -143,10 +148,15 @@ public final class DownloadPiece {
      * @param limiter   全局令牌桶限速
      */
     public void run(DownloadFileTask task, GlobalSpeedLimiter limiter) throws IOException {
+        // 任务已取消时不再建连：取消后调度器仍可能把排队中的分块提交上来
+        if (task.isCancelled()) {
+            state = State.CANCELLED;
+            return;
+        }
         state = State.CONNECTING;
         DownloadSource src = mountedSource;
         if (src == null) {
-            throw new IOException("分块无可用源: piece-" + index);
+            throw new IOException(I18N.get("mod.p0015", index));
         }
         // HttpURLConnection（HTTP/1.1）而非 java.net.http.HttpClient（h2）——2026-10-11 实测结论：
         // 同一 client.jar 地址浏览器可下载，HttpClient「响应头即达、正文静默」挂死（多次复现，
@@ -155,6 +165,12 @@ public final class DownloadPiece {
         java.net.HttpURLConnection conn = null;
         try {
             conn = (java.net.HttpURLConnection) URI.create(src.getUrl()).toURL().openConnection();
+            activeConn = conn;
+            // 取消可能刚好发生在建连之前（abort 那时还看不到连接）：这里再确认一次，
+            // 避免已经取消的任务又发出一个请求
+            if (task.isCancelled()) {
+                throw new IOException(I18N.get("mod.t0004"));
+            }
             conn.setConnectTimeout(com.example.starlight.download.DownloadSettings.getConnectTimeoutMs());
             conn.setReadTimeout(com.example.starlight.download.DownloadSettings.getStallTimeoutMs());
             conn.setInstanceFollowRedirects(true);
@@ -170,24 +186,24 @@ public final class DownloadPiece {
             if (status == 416) {
                 // 416 只是本次 Range 不合法（如远端文件已变），不算地址段失效
                 src.recordFailure(new IOException("HTTP 416"));
-                throw new SourceDisabledException("Range 不合法: HTTP 416 " + src.getUrl());
+                throw new SourceDisabledException(I18N.get("mod.p0016", src.getUrl()));
             }
             if (status < 200 || status >= 300) {
                 // 404/410：镜像「这个地址段不存在」的确定性信号，计入容器级健康表
                 if (status == 404 || status == 410) {
-                    SourceHealth.getInstance().record404(src.getUrl(), status, "分块下载");
+                    SourceHealth.getInstance().record404(src.getUrl(), status, I18N.get("mod.t0005"));
                 }
                 task.onSourceHttpError(src, status);
-                throw new SourceDisabledException("源被禁用: HTTP " + status + " " + src.getUrl());
+                throw new SourceDisabledException(I18N.get("mod.p0017", status + " " + src.getUrl()));
             }
             if (!firstThread && status == 200) {
                 task.onRangeNotSupported(src);
-                throw new RangeNotSupportedException("服务器忽略 Range (HTTP 200): " + src.getUrl());
+                throw new RangeNotSupportedException(I18N.get("mod.p0018", src.getUrl()));
             }
             if (!firstThread && status != 206) {
                 src.recordFailure(new IOException("HTTP " + status));
                 task.onSourceHttpError(src, status);
-                throw new SourceDisabledException("源异常: HTTP " + status);
+                throw new SourceDisabledException(I18N.get("mod.p0019", status));
             }
             if (firstThread) {
                 // 首线程：不带 Range，从 Content-Length 探测总大小（大小不符在 onFileSizeKnown 内切源）
@@ -205,7 +221,7 @@ public final class DownloadPiece {
                 long bytesInGap = 0;
                 int n;
                 while ((n = in.read(buf)) != -1) {
-                    if (task.isCancelled()) throw new IOException("已取消");
+                    if (task.isCancelled()) throw new IOException(I18N.get("mod.t0006"));
                     limiter.acquire(n);
                     NetTrafficStats.recordBytes(n); // 全局流量统计（下载速度悬浮窗）
                     out.write(buf, 0, n);
@@ -216,15 +232,15 @@ public final class DownloadPiece {
                     long nowNs = System.nanoTime();
                     long gapMs = (nowNs - lastPackNs) / 1_000_000L;
                     if (RetryPolicy.isTooSlow(gapMs, bytesInGap, src.isSingleThread())) {
-                        throw new IOException("慢速掐线: gap=" + gapMs + "ms");
+                        throw new IOException(I18N.get("mod.p0020", gapMs + "ms"));
                     }
                     // 速度下限护栏：开跑 30s 平均仍低于 ~26KB/s 判为「半死源」掐断换源。
                     // 2026-10-11 实测 BMCLAPI 病态之一是 3-5KB/s 涓流——不触发静默超时也不触发
                     // 慢速掐线（包间隔 <5s），41MB 要拖 2 小时；正常弱网（>100KB/s）不受影响。
                     long elapsedMs = (nowNs - pieceStartNs) / 1_000_000L;
                     if (elapsedMs > 30_000L && done.get() < 768L * 1024L) {
-                        throw new IOException("源速度过低（30s 仅 "
-                                + done.get() / 1024 + "KB），掐断换源");
+                        throw new IOException(I18N.get("dp.r0001",
+                                done.get() / 1024));
                     }
                     lastPackNs = nowNs;
                     bytesInGap = n;
@@ -237,6 +253,7 @@ public final class DownloadPiece {
             // 失败归类（驱动换源）：连接阶段失败 / 正文停滞（读超时、慢速掐线）计入
             // SourceHealth 超时计数（3 次拉黑 60s），其余计入源 failCount（建连超时自适应）。
             // 404/410 与 Range 异常在上面的分支里已各自记录过不重复计；用户取消不算源的错
+            // i18n-lock: 不要翻译此行中文——本进程内部抛出的稳定异常消息，翻译即功能失效
             if (!("已取消".equals(e.getMessage()) || task.isCancelled())
                     && !(e instanceof SourceDisabledException)
                     && !(e instanceof RangeNotSupportedException)) {
@@ -248,7 +265,25 @@ public final class DownloadPiece {
             state = State.FAILED;
             throw e;
         } finally {
+            activeConn = null;
             if (conn != null) conn.disconnect();
+        }
+    }
+
+    /**
+     * 由 {@link DownloadFileTask#cancel()} 调用：断开本分块正在进行的连接。
+     *
+     * <p>这样「取消下载」不必等读超时或当前缓冲区读完——阻塞在 {@code read} 上的线程
+     * 会立刻拿到流关闭异常而退出（异常会被 {@code task.isCancelled()} 判为取消，不计入源健康）。
+     */
+    void abort() {
+        java.net.HttpURLConnection conn = activeConn;
+        if (conn != null) {
+            try {
+                conn.disconnect();
+            } catch (Exception ignored) {
+                // 断开失败无补救手段：分块本身还会在读取循环里检查取消标志
+            }
         }
     }
 

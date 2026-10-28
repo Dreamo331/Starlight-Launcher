@@ -1,5 +1,7 @@
 package com.example.starlight.util;
 
+
+import com.example.starlight.util.I18N;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,12 +48,12 @@ public final class GameProcessTweaks {
 
     /** 优先级选项：{值, 界面文案}（顺序即下拉框顺序） */
     public static final String[][] PRIORITY_OPTIONS = {
-            {"low", "低"},
-            {"below_normal", "低于正常"},
-            {"normal", "正常（默认）"},
-            {"above_normal", "高于正常"},
-            {"high", "高"},
-            {"realtime", "实时（可能影响系统响应，不建议）"}
+            {"low", I18N.get("util.t0010")},
+            {"below_normal", I18N.get("util.t0011")},
+            {"normal", I18N.get("util.t0012")},
+            {"above_normal", I18N.get("util.t0013")},
+            {"high", I18N.get("util.t0014")},
+            {"realtime", I18N.get("util.t0015")}
     };
 
     /** 窗口标题长度上限：Windows 窗口标题本身也有长度限制，超长会被截断，这里主动截 */
@@ -79,10 +81,10 @@ public final class GameProcessTweaks {
         if (!PRIORITY_NORMAL.equals(priority)) {
             try {
                 boolean ok = setPriority(pid, priority);
-                LOG.info("游戏进程优先级设置{}：PID {} → {}", ok ? "成功" : "失败（可能权限不足）",
+                LOG.info(I18N.get("util.t0041"), ok ? I18N.get("util.t0042") : I18N.get("util.t0043"),
                         pid, priorityLabel(priority));
             } catch (Throwable t) {
-                LOG.warn("设置游戏进程优先级异常：{}", t.getMessage());
+                LOG.warn(I18N.get("util.t0016"), t.getMessage());
             }
         }
 
@@ -188,11 +190,11 @@ public final class GameProcessTweaks {
                         // 只记一次：轮询期间反复重写同值属正常行为，全打出来会把启动日志灌满
                         if (!logged) {
                             logged = true;
-                            LOG.info("游戏窗口标题已设置为：{}（PID {}）", title, pid);
+                            LOG.info(I18N.get("util.t0017"), title, pid);
                         }
                     }
                 } catch (Throwable e) {
-                    LOG.debug("设置游戏窗口标题失败：{}", e.getMessage());
+                    LOG.debug(I18N.get("util.t0018"), e.getMessage());
                 }
                 try {
                     Thread.sleep(TITLE_WATCH_INTERVAL_MS);
@@ -311,7 +313,7 @@ public final class GameProcessTweaks {
             if (title != null && !text.contains("TITLE=True")) return false;
             return true;
         } catch (Exception e) {
-            LOG.debug("PowerShell 进程微调失败：{}", e.getMessage());
+            LOG.debug(I18N.get("util.t0019"), e.getMessage());
             return false;
         }
     }
@@ -496,7 +498,7 @@ public final class GameProcessTweaks {
                 };
                 u32.EnumWindows(callback, null);
             } catch (Throwable t) {
-                LOG.debug("枚举窗口失败：{}", t.getMessage());
+                LOG.debug(I18N.get("util.t0020"), t.getMessage());
                 return false;
             }
             return changed[0];

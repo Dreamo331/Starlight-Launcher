@@ -1,5 +1,7 @@
 package com.example.starlight.community;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AppDirs;
 import com.example.starlight.config.Endpoints;
 import com.example.starlight.util.DebugLog;
@@ -132,7 +134,7 @@ public class CommunityApi {
         }
         if (verify != null && !verify.ok && ("it".equals(verify.code) || "nl".equals(verify.code))) {
             logout();
-            return ApiResult.failure(verify.code, "登录成功但返回的令牌无效，请联系社区管理员");
+            return ApiResult.failure(verify.code, I18N.get("community.t0001"));
         }
         // profile() 成功时已刷新 currentUser，网络异常时保留登录接口返回的用户信息
         if (verify == null || !verify.ok) {
@@ -156,7 +158,7 @@ public class CommunityApi {
             trimmed = trimmed.substring(7).trim();
         }
         if (trimmed.isEmpty()) {
-            return ApiResult.failure("it", "令牌不能为空");
+            return ApiResult.failure("it", I18N.get("community.t0002"));
         }
         this.token = trimmed;
         // 换账号登录后重置本地签到记录，避免误显示已签到
@@ -185,7 +187,7 @@ public class CommunityApi {
      */
     public ApiResult<CommunityUser> profile() throws IOException, InterruptedException {
         if (!hasToken()) {
-            return ApiResult.failure("nl", "未登录");
+            return ApiResult.failure("nl", I18N.get("community.t0003"));
         }
         String json = sendGet(appendParam(BASE_URL, "action", "launcher_profile"));
         JsonObject root = parseRoot(json);
@@ -325,7 +327,7 @@ public class CommunityApi {
     /** 查询当前用户是否已点赞（需登录） */
     public ApiResult<Boolean> isPostLiked(int id) throws IOException, InterruptedException {
         if (!hasToken()) {
-            return ApiResult.failure("nl", "未登录");
+            return ApiResult.failure("nl", I18N.get("community.t0004"));
         }
         String url = appendParam(BASE_URL, "action", "post_liked");
         url = appendParam(url, "id", String.valueOf(id));
@@ -350,7 +352,7 @@ public class CommunityApi {
         if (avatarCache.containsKey(uid)) {
             String cached = avatarCache.get(uid);
             return cached == null || cached.isEmpty()
-                    ? ApiResult.failure("na", "未设置头像")
+                    ? ApiResult.failure("na", I18N.get("community.t0005"))
                     : ApiResult.success(cached, null);
         }
         String url = appendParam(BASE_URL, "action", "avatar_get");
@@ -369,7 +371,7 @@ public class CommunityApi {
         // 未设置头像时缓存空串（ConcurrentHashMap 不允许 null 值）
         avatarCache.put(uid, avatar == null ? "" : avatar);
         return avatar == null
-                ? ApiResult.failure("na", "未设置头像")
+                ? ApiResult.failure("na", I18N.get("community.t0006"))
                 : ApiResult.success(avatar, root);
     }
 
@@ -394,7 +396,7 @@ public class CommunityApi {
      */
     public ApiResult<CheckinResult> checkin() throws IOException, InterruptedException {
         if (!hasToken()) {
-            return ApiResult.failure("nl", "未登录");
+            return ApiResult.failure("nl", I18N.get("community.t0007"));
         }
         String url = appendParam(BASE_URL, "action", "checkin");
         HttpRequest.Builder builder = HttpRequest.newBuilder()
@@ -414,11 +416,12 @@ public class CommunityApi {
             CheckinResult result = new CheckinResult();
             result.reward = root.has("reward") ? root.get("reward").getAsInt() : 0;
             result.tear = root.has("tear") ? root.get("tear").getAsInt() : 0;
-            result.msg = root.has("msg") && !root.get("msg").isJsonNull() ? root.get("msg").getAsString() : "签到成功";
+            result.msg = root.has("msg") && !root.get("msg").isJsonNull() ? root.get("msg").getAsString() : I18N.get("community.t0008");
             return ApiResult.success(result, root);
         }
         // "今天已签到"：服务端以 ok=false + msg 表达，同样视为已完成
         String msg = root.has("msg") && !root.get("msg").isJsonNull() ? root.get("msg").getAsString() : "";
+        // i18n-lock: 不要翻译此行中文——服务端返回的 msg 文本，翻译即功能失效
         if (msg.contains("已签到")) {
             this.checkinDate = LocalDate.now().toString();
             saveTokenToDisk();
@@ -617,17 +620,17 @@ public class CommunityApi {
         /** 将服务端错误码映射为可读中文描述 */
         public static String describeError(String code) {
             switch (code == null ? "" : code) {
-                case "0":   return "成功";
-                case "ue":  return "用户名错误";
-                case "pe":  return "密码错误";
-                case "nl":  return "未登录或登录已过期";
-                case "it":  return "令牌无效或已过期，请重新登录";
-                case "np":  return "帖子不存在";
-                case "ec":  return "评论内容为空";
-                case "el":  return "评论超长（最多 500 字）";
-                case "al":  return "已经点过赞了";
-                case "nla": return "尚未点赞";
-                default:    return "请求失败（" + code + "）";
+                case "0":   return I18N.get("community.t0009");
+                case "ue":  return I18N.get("community.t0010");
+                case "pe":  return I18N.get("community.t0011");
+                case "nl":  return I18N.get("community.t0012");
+                case "it":  return I18N.get("community.t0013");
+                case "np":  return I18N.get("community.t0014");
+                case "ec":  return I18N.get("community.t0015");
+                case "el":  return I18N.get("community.t0016");
+                case "al":  return I18N.get("community.t0017");
+                case "nla": return I18N.get("community.t0018");
+                default:    return I18N.get("community.p0019", code + "）");
             }
         }
     }

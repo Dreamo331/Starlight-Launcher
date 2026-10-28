@@ -14,6 +14,8 @@
  */
 package com.example.starlight.slan;
 
+
+import com.example.starlight.util.I18N;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
@@ -60,7 +62,7 @@ public final class SLanServerChecker {
 
         String url = SLanConfig.normalizeRelayServer(wsUrl);
         if (url.isBlank()) {
-            future.complete(new Result(false, false, -1, "未填写中继服务器地址"));
+            future.complete(new Result(false, false, -1, I18N.get("slan.t0016")));
             return future;
         }
 
@@ -70,15 +72,15 @@ public final class SLanServerChecker {
             String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
             if (!scheme.equals("ws") && !scheme.equals("wss")) {
                 future.complete(new Result(false, false, -1,
-                        "地址协议不支持: " + scheme + "（应为 ws:// 或 wss://）"));
+                        I18N.get("slanchk.r0001", scheme)));
                 return future;
             }
             if (uri.getHost() == null || uri.getHost().isEmpty()) {
-                future.complete(new Result(false, false, -1, "地址无效，缺少主机名: " + url));
+                future.complete(new Result(false, false, -1, I18N.get("slan.p0027", url)));
                 return future;
             }
         } catch (RuntimeException e) {
-            future.complete(new Result(false, false, -1, "地址格式错误: " + url + "（" + e.getMessage() + "）"));
+            future.complete(new Result(false, false, -1, I18N.get("slan.p0028", url + "（" + e.getMessage() + "）")));
             return future;
         }
 
@@ -93,19 +95,19 @@ public final class SLanServerChecker {
                     .whenComplete((ws, err) -> {
                         if (err != null) {
                             // 握手阶段失败（拒绝连接 / DNS / 超时 / 非 WebSocket 服务）
-                            listener.fail("无法连接服务器: " + describeFailure(err));
+                            listener.fail(I18N.get("slan.p0029", describeFailure(err)));
                         } else {
                             listener.attach(ws);
                         }
                     });
         } catch (RuntimeException e) {
-            listener.fail("检测发起失败: " + describeFailure(e));
+            listener.fail(I18N.get("slan.p0030", describeFailure(e)));
         }
 
         // 总超时保护：超时按失败返回（连接可能仍挂着，尽力关闭）
         return future.orTimeout(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
                 .exceptionally(err -> new Result(false, false, -1,
-                        "检测超时（" + TIMEOUT.toSeconds() + " 秒）: " + url))
+                        I18N.get("slanchk.r0002", TIMEOUT.toSeconds(), url)))
                 .thenApply(r -> {
                     listener.closeQuietly();
                     return r;
@@ -143,7 +145,7 @@ public final class SLanServerChecker {
             frame.flip();
             ws.sendBinary(frame, true).whenComplete((v, err) -> {
                 if (err != null) {
-                    fail("握手成功但发送探测帧失败: " + rootMessage(err));
+                    fail(I18N.get("slan.p0031", rootMessage(err)));
                 } else {
                     ws.request(1);
                 }
@@ -179,8 +181,8 @@ public final class SLanServerChecker {
         @Override
         public CompletionStage<?> onClose(WebSocket ws, int statusCode, String reason) {
             if (!answered) {
-                fail("服务器关闭了连接（code=" + statusCode
-                        + (reason == null || reason.isEmpty() ? "" : ", " + reason) + "）");
+                fail(I18N.get("slan.p0032", statusCode
+                        + (reason == null || reason.isEmpty() ? "" : ", " + reason) + "）"));
             }
             return null;
         }
@@ -188,7 +190,7 @@ public final class SLanServerChecker {
         @Override
         public void onError(WebSocket ws, Throwable error) {
             if (!answered) {
-                fail("连接出错: " + rootMessage(error));
+                fail(I18N.get("slan.p0033", rootMessage(error)));
             }
         }
 
@@ -205,9 +207,10 @@ public final class SLanServerChecker {
             answered = true;
             String json = new String(bytes, 3, len, StandardCharsets.UTF_8);
             long latency = handshakeDoneAt > 0 ? System.currentTimeMillis() - handshakeDoneAt : -1;
+            // i18n-lock: 不要翻译此行中文——解析外部服务响应内容，翻译即功能失效
             String detail = json.contains("error") ? json : "(响应内容: " + json + ")";
             future.complete(new Result(true, true, latency,
-                    "服务器可用（已确认是本联机中继服务器），延迟 " + latency + " ms"));
+                    I18N.get("slan.p0034", latency + " ms")));
             closeQuietly();
         }
 
@@ -253,22 +256,22 @@ public final class SLanServerChecker {
         String lower = msg.toLowerCase(java.util.Locale.ROOT);
 
         if (t instanceof java.net.http.WebSocketHandshakeException || cls.contains("Handshake")) {
-            return "WebSocket 握手失败（该地址可能不是中继服务器，或经过代理/需要 wss）";
+            return I18N.get("slan.t0017");
         }
         if (cur instanceof java.net.UnknownHostException || cls.contains("UnknownHost")
                 || cls.contains("UnresolvedAddress") || lower.contains("unknownhost")) {
-            return "无法解析主机名（请检查域名是否正确、DNS 是否可用）";
+            return I18N.get("slan.t0018");
         }
         // 注意：ConnectException 既可能是"拒绝连接"也可能是"连接超时"，需先判断超时关键字
         if (lower.contains("timed out") || lower.contains("timeout") || cls.contains("Timeout")) {
-            return "连接超时（服务器不可达，或被防火墙/安全组拦截）";
+            return I18N.get("slan.t0019");
         }
         if (cur instanceof java.net.ConnectException || cls.contains("ClosedChannel")
                 || lower.contains("connection refused") || lower.contains("no further information")) {
-            return "连接被拒绝（服务器未启动，或端口未开放/被防火墙拦截）";
+            return I18N.get("slan.t0020");
         }
         if (cur instanceof javax.net.ssl.SSLException || cls.contains("SSL")) {
-            return "TLS 握手失败（wss 地址的证书或端口不匹配）";
+            return I18N.get("slan.t0021");
         }
         return msg.isBlank() ? cls : cls + ": " + msg;
     }

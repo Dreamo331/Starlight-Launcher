@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.startmc;
 
+
+import com.example.starlight.util.I18N;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -70,8 +72,8 @@ public class LaunchInfo {
      * @throws NullPointerException 当 gameDirPath 或 version 未设置
      */
     public Path resolveVersionDir() {
-        Objects.requireNonNull(gameDirPath, "gameDirPath 未设置，请先调用 setGameDirPath()");
-        Objects.requireNonNull(version, "version 未设置，请先调用 setVersion()");
+        Objects.requireNonNull(gameDirPath, I18N.get("startmc.t0001"));
+        Objects.requireNonNull(version, I18N.get("startmc.t0002"));
         return gameDirPath.resolve("versions").resolve(version);
     }
 
@@ -80,7 +82,7 @@ public class LaunchInfo {
      * @throws NullPointerException 当 gameDirPath 未设置
      */
     public Path resolveAssetsDir() {
-        Objects.requireNonNull(gameDirPath, "gameDirPath 未设置");
+        Objects.requireNonNull(gameDirPath, I18N.get("startmc.t0003"));
         return gameDirPath.resolve("assets");
     }
 
@@ -89,7 +91,7 @@ public class LaunchInfo {
      * @throws NullPointerException 当 gameDirPath 未设置
      */
     public Path resolveLibrariesRoot() {
-        Objects.requireNonNull(gameDirPath, "gameDirPath 未设置");
+        Objects.requireNonNull(gameDirPath, I18N.get("startmc.t0004"));
         return gameDirPath.resolve("libraries");
     }
 
@@ -246,10 +248,51 @@ public class LaunchInfo {
     public void setJvmArgs(String jvmArgs) {
         this.jvmArgs = new ArrayList<>();
         if (jvmArgs != null && !jvmArgs.isEmpty()) {
-            for (String arg : jvmArgs.split("\\s+")) {
+            for (String arg : splitCommandLine(jvmArgs)) {
                 if (!arg.isEmpty()) this.jvmArgs.add(arg);
             }
         }
+    }
+
+    /**
+     * 按「双引号分组」切分参数串（等价于 shell 的引号语义，但不做变量展开）。
+     *
+     * <p>不能直接用 {@code split("\\s+")}：注入的 {@code -javaagent:<路径>=<端口>} 指向
+     * 用户数据目录下的绝对路径，而 Windows 用户名常常含空格（{@code C:\Users\Zhang San\...}）。
+     * 朴素切分会把一条参数拆成两条，JVM 认不出 {@code -javaagent} 前缀之外的半截路径，
+     * 启动即失败。这里把 {@code "..."} 内的空白原样保留，并剥掉外层引号——
+     * 交给 {@code ProcessBuilder} 的是已分词好的列表，不再需要引号。
+     *
+     * <p>单引号不参与分组：Windows 上它不是合法引用符，路径里出现 {@code '} 时按普通字符处理。
+     */
+    public static List<String> splitCommandLine(String raw) {
+        List<String> result = new ArrayList<>();
+        if (raw == null || raw.isEmpty()) {
+            return result;
+        }
+        StringBuilder cur = new StringBuilder();
+        boolean inQuote = false;
+        boolean hasToken = false;
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (c == '"') {
+                inQuote = !inQuote;
+                hasToken = true;   // "" 也要算一个空参数，避免把 --foo="" 吞掉
+            } else if (Character.isWhitespace(c) && !inQuote) {
+                if (hasToken) {
+                    result.add(cur.toString());
+                    cur.setLength(0);
+                    hasToken = false;
+                }
+            } else {
+                cur.append(c);
+                hasToken = true;
+            }
+        }
+        if (hasToken) {
+            result.add(cur.toString());
+        }
+        return result;
     }
 
     /** @return 额外游戏参数列表 */

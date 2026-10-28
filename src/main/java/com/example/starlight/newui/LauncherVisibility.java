@@ -1,5 +1,7 @@
 package com.example.starlight.newui;
 
+
+import com.example.starlight.util.I18N;
 import javafx.application.Platform;
 import javafx.stage.Stage;
 
@@ -36,11 +38,11 @@ public final class LauncherVisibility {
 
     /** 选项：{值, 界面文案}（顺序即下拉框顺序，与需求给出的五项一致） */
     public static final String[][] OPTIONS = {
-            {KEEP, "游戏启动后仍保持不变"},
-            {CLOSE, "游戏启动后立即关闭"},
-            {HIDE_CLOSE, "游戏启动后隐藏，游戏退出后自动关闭"},
-            {HIDE_RESTORE, "游戏启动后隐藏，游戏退出后重新打开"},
-            {MINIMIZE, "游戏启动后最小化"}
+            {KEEP, I18N.get("newui.t0073")},
+            {CLOSE, I18N.get("newui.t0074")},
+            {HIDE_CLOSE, I18N.get("newui.t0075")},
+            {HIDE_RESTORE, I18N.get("newui.t0076")},
+            {MINIMIZE, I18N.get("newui.t0077")}
     };
 
     /**

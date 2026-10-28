@@ -1,5 +1,7 @@
 package com.example.starlight.newui.download;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.LauncherContext;
 import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.newui.ui.PageKit;
@@ -25,6 +27,8 @@ import javafx.util.Duration;
  * 统一登记到 下载管理页，由下载管理页集中展示；任务在后台跑，切走再切回不丢进度。
  *
  * <p>取消标志是<b>每任务一份</b>的：多个任务并行时点某一个的「取消下载」只中断它自己。
+ * 标志置位后调用方必须把它传进下载链路（下载引擎每读 64KB 检查一次），
+ * 这样点击取消是<b>立即中断</b>，不需要等当前分块下完。
  *
  * <p>线程约定：所有更新方法内部都用 {@link Platform#runLater} 派发，后台线程可直接调用。
  */
@@ -33,13 +37,13 @@ public final class DownloadTaskCard {
     /** 任务卡片根节点（下载管理页里的一项） */
     final VBox card;
     private final String title;
-    private final Label stageLabel = new Label("准备中...");
+    private final Label stageLabel = new Label(I18N.get("download.t0020"));
     private final Label percentLabel = new Label("0%");
     private final ProgressBar bar = new ProgressBar(0);
     private final Label messageLabel = new Label();
     private final Label speedLabel = new Label();
     private final VBox fileList = new VBox(2);
-    private final Button cancelBtn = AppIcons.button("close", "取消下载");
+    private final Button cancelBtn = AppIcons.button("close", I18N.get("download.t0021"));
     private final HBox footer = new HBox(10);
     private final long startedAt = System.nanoTime();
 
@@ -74,10 +78,11 @@ public final class DownloadTaskCard {
 
         Label titleLabel = new Label(title);
         titleLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: 600;");
-        titleLabel.setWrapText(true);
+        // 标题可能很长（版本名 + 加载器 + 版本号）：单行省略，悬停看全文，任务卡片保持紧凑
+        PageKit.cardTooltip(titleLabel);
         Region titleSpacer = new Region();
         HBox.setHgrow(titleSpacer, Priority.ALWAYS);
-        Label statusChip = new Label("进行中");
+        Label statusChip = new Label(I18N.get("download.t0022"));
         statusChip.setStyle("-fx-font-size: 10px; -fx-padding: 1 7; -fx-background-radius: 4;"
                 + " -fx-background-color: rgba(59,130,246,0.16); -fx-text-fill: #3b82f6;");
         statusLabel = statusChip;
@@ -96,8 +101,9 @@ public final class DownloadTaskCard {
         bar.getStyleClass().add("memory-bar");   // 标准渐变款进度条（扫光动画见 ProgressBars）
         bar.setProgress(0);
 
-        messageLabel.setWrapText(true);
         messageLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: -sl-text-dim;");
+        // 明细消息也可能很长：单行省略 + Tooltip 全文（Tooltip 会跟随文本实时更新）
+        PageKit.cardTooltip(messageLabel);
         speedLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: -sl-text-dim;");
 
         fileList.setStyle("-fx-padding: 2;");
@@ -115,9 +121,12 @@ public final class DownloadTaskCard {
         footer.setAlignment(Pos.CENTER_RIGHT);
         footer.getChildren().add(cancelBtn);
         cancelBtn.setOnAction(e -> {
-            cancelledFlag.set(true);
-            stage("正在取消...");
-            message("等待当前下载片段结束");
+            // 取消标志置位后下载引擎在下一次读取（64KB）时立即中断，
+            // 所以这里不再提示「等待当前片段结束」——点击即停。
+            if (!cancelledFlag.compareAndSet(false, true)) return;
+            cancelBtn.setDisable(true);
+            stage(I18N.get("download.t0023"));
+            message(I18N.get("download.t0024"));
         });
 
         card.getChildren().addAll(titleRow, infoRow, bar, messageLabel, speedLabel,
@@ -165,7 +174,25 @@ public final class DownloadTaskCard {
      */
     public void totalBytes(long bytes) {
         this.totalBytes = bytes;
+        // 总量变了（多文件下载切到下一个文件）速度采样必须重新开始，
+        // 否则上一次的百分比会让差值变成负数，新文件一直不显示速度
+        this.lastSamplePct = -1;
         this.lastSampleTime = System.nanoTime();
+    }
+
+    /**
+     * 多文件下载切到下一个文件时调用：进度条 / 百分比 / 速度全部归零，
+     * 避免下一个文件还在探测时就显示上一个文件的 100%。
+     */
+    public void resetForNextFile() {
+        this.totalBytes = -1;
+        this.lastSamplePct = -1;
+        this.lastSampleTime = System.nanoTime();
+        Platform.runLater(() -> {
+            bar.setProgress(0);
+            percentLabel.setText("0%");
+            speedLabel.setText("");
+        });
     }
 
     /** 更新百分比进度（0-100） */
@@ -189,9 +216,9 @@ public final class DownloadTaskCard {
             bar.setProgress(clamped / 100.0);
             percentLabel.setText(clamped + "%");
             if (speedText != null) {
-                speedLabel.setText("速度 " + speedText);
+                speedLabel.setText(I18N.get("download.p0076", speedText));
             } else if (totalBytes <= 0) {
-                speedLabel.setText("已用时 " + elapsedText());
+                speedLabel.setText(I18N.get("download.p0077", elapsedText()));
             }
         });
     }
@@ -255,24 +282,24 @@ public final class DownloadTaskCard {
         boolean userCancelled = cancelledFlag.get();
         Platform.runLater(() -> {
             bar.setProgress(success ? 1.0 : bar.getProgress());
-            percentLabel.setText(success ? "100%" : "已停止");
-            stageLabel.setText(success ? "完成" : (userCancelled ? "已取消" : "已停止"));
+            percentLabel.setText(success ? "100%" : I18N.get("download.t0025"));
+            stageLabel.setText(success ? I18N.get("download.t0057") : (userCancelled ? I18N.get("download.t0058") : I18N.get("download.t0059")));
             messageLabel.setText(summary == null ? "" : summary);
-            speedLabel.setText("总用时 " + elapsedText());
+            speedLabel.setText(I18N.get("download.p0078", elapsedText()));
             cancelBtn.setVisible(false);
             cancelBtn.setManaged(false);
             if (success) {
-                setStatus(DownloadTaskStatus.SUCCESS, "已完成",
+                setStatus(DownloadTaskStatus.SUCCESS, I18N.get("download.t0026"),
                         " -fx-background-color: rgba(76,175,80,0.16); -fx-text-fill: #4caf50;");
             } else if (userCancelled) {
-                setStatus(DownloadTaskStatus.CANCELLED, "已取消",
+                setStatus(DownloadTaskStatus.CANCELLED, I18N.get("download.t0027"),
                         " -fx-background-color: rgba(148,163,184,0.2); -fx-text-fill: #94a3b8;");
             } else {
-                setStatus(DownloadTaskStatus.FAILED, "失败",
+                setStatus(DownloadTaskStatus.FAILED, I18N.get("download.t0028"),
                         " -fx-background-color: rgba(239,83,80,0.16); -fx-text-fill: #ef5350;");
             }
 
-            Button doneBtn = AppIcons.button("back", "返回");
+            Button doneBtn = AppIcons.button("back", I18N.get("download.t0029"));
             doneBtn.getStyleClass().add("modal-btn-ok");
             doneBtn.setMinWidth(Region.USE_PREF_SIZE);
             doneBtn.setOnAction(e -> {
@@ -292,7 +319,7 @@ public final class DownloadTaskCard {
             } else {
                 // 失败 / 取消：给「重新下载」和「删除任务」
                 if (retryAction != null) {
-                    Button retryBtn = AppIcons.button("refresh", "重新下载");
+                    Button retryBtn = AppIcons.button("refresh", I18N.get("download.t0030"));
                     retryBtn.getStyleClass().add("modal-btn-ok");
                     retryBtn.setMinWidth(Region.USE_PREF_SIZE);
                     retryBtn.setOnAction(e -> {
@@ -301,7 +328,7 @@ public final class DownloadTaskCard {
                     });
                     footer.getChildren().add(0, retryBtn);
                 }
-                Button deleteBtn = AppIcons.button("trash", "删除任务");
+                Button deleteBtn = AppIcons.button("trash", I18N.get("download.t0031"));
                 deleteBtn.getStyleClass().add("modal-btn-cancel");
                 deleteBtn.setMinWidth(Region.USE_PREF_SIZE);
                 deleteBtn.setOnAction(e -> manager.remove(this));
@@ -312,7 +339,9 @@ public final class DownloadTaskCard {
 
     private String elapsedText() {
         long seconds = (System.nanoTime() - startedAt) / 1_000_000_000L;
-        return seconds >= 60 ? (seconds / 60) + " 分 " + (seconds % 60) + " 秒" : seconds + " 秒";
+        return seconds >= 60
+                ? I18N.get("dtc.r0001", seconds / 60, seconds % 60)
+                : I18N.get("dtc.r0002", seconds);
     }
 }
 // BODY //

@@ -1,5 +1,7 @@
 package com.example.starlight.service;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.config.StarlightConfig;
 import com.example.starlight.loginmicrosoft.MinecraftAuthLauncherDeviceCode;
@@ -71,10 +73,10 @@ public final class SilentLoginManager {
         }
         long now = System.currentTimeMillis();
         if (now - lastRefreshTime < REFRESH_COOLDOWN_MS) {
-            report(progress, 4, "距上次刷新不足 5 分钟，跳过刷新");
+            report(progress, 4, I18N.get("service.t0058"));
             return null;
         }
-        report(progress, 2, "检测到令牌已过期，正在静默刷新...");
+        report(progress, 2, I18N.get("service.t0059"));
         try {
             MinecraftAuthLauncherDeviceCode.RefreshResult refreshed =
                     MinecraftAuthLauncherDeviceCode.silentRefresh(currentAccount.refreshToken);
@@ -90,12 +92,12 @@ public final class SilentLoginManager {
                 );
                 AccountManager.addAccount(updated);
                 lastRefreshTime = now;
-                report(progress, 4, "令牌刷新成功");
+                report(progress, 4, I18N.get("service.t0060"));
                 return updated;
             }
         } catch (Exception e) {
             log.warn("Silent token refresh failed: {}", e.getMessage());
-            report(progress, 4, "令牌刷新失败，使用现有凭证继续: " + e.getMessage());
+            report(progress, 4, I18N.get("service.p0109", e.getMessage()));
         }
         return null;
     }

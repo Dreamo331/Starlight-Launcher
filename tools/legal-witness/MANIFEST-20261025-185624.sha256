@@ -1,0 +1,15 @@
+﻿# Starlight Launcher — legal documents SHA-256 manifest
+# generated: 2026-10-25 18:56:24 +08:00
+# host: PCOS-2023LFDOAX
+# format: <sha256>  <relative path>
+19bc3ed88de37140c143aac58318e9291fc21d91fd4fd6140c301bbf4ff50041  LICENSE
+dd49677ea4ce1dae1f39fc4864bd340b926b5d46e86d40340edb391ecb6a8f4d  docs/README.md
+e26ced5c48b311c0a61ead6b04d25b23d4199edb047314da0af8e050edf34945  docs/LICENSE-EN.md
+ca33311fe84a6e1d05095c1d90525129b6877d14bd6396542db58da98bea53d5  docs/LICENSE-ZH.md
+14b1a65a68003c7c5551eea501f4103bd375d8c66ffb863ef858cec41fbc1df6  docs/用户服务协议.md
+bf5fa7a604909888a065d0e4dd0bd086b5710d75a241111c5e0164d079c562df  docs/免责声明.md
+73130cfcbf580c8ae0144be337698d69d67638ce1240ada10b316cc4df0ef78d  docs/隐私政策.md
+3584a7ff8caa79426aca1a8be399f48a32c4327d19fc09febb6c5a91898d5158  docs/安全与合规.md
+e19960a5968167dcfb35ee411c3c8b450dc400f7c854d01117a139e5978523f6  docs/商标与品牌使用规范.md
+fd7ec721f68e181f8fecf9a4f4f9b8814a9a6d6542bbd7d8297e29ce18efddfc  docs/第三方声明-Third-Party-Notices.md
+34817ea6799ccb12d9cc520e0efc520eb76dc7e6af89fe5d7d59068fbc49240c  docs/第三方声明-Third-Party-Notices-中文.md

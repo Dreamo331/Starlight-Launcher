@@ -137,7 +137,7 @@ public final class RippleEffect {
         parent.getChildren().add(layer);
         ensureFill(ripple);
         // 布局/滚动让按钮动起来时，水波纹层要跟着走，否则会「脱开」按钮
-        trackTo(parent, layer, button);
+        trackTo(parent, layer, ripple, button, w, h, x, y);
 
         ScaleTransition grow = new ScaleTransition(DURATION, ripple);
         grow.setToX(1);
@@ -147,14 +147,45 @@ public final class RippleEffect {
         grow.play();
     }
 
-    /** 让水波纹层始终贴合按钮：按钮位置/尺寸一变就同步（最多跟到动画结束，层被移除后监听自动失效） */
-    private static void trackTo(Pane parent, Pane layer, ButtonBase button) {
+    /**
+     * 让水波纹层始终贴合按钮：按钮位置/尺寸一变就同步。
+     *
+     * <p>不只是「跟着走」——按钮自己也可能在做尺寸动画（首页「启动游戏」按下去会从胶囊收成
+     * 圆形），这时必须同时更新两样东西，否则光效会露到按钮外面：
+     * <ul>
+     *   <li><b>圆角裁剪按新尺寸重算</b>：裁剪层是按下瞬间按旧尺寸建的，按钮收窄后旧裁剪仍然
+     *       生效，水波纹就还能画到「大按钮原来的位置」——用户看到的就是「光效跑到按钮右侧」；</li>
+     *   <li><b>点击点按当前尺寸等比折算</b>：光效始终从按钮内部同一个相对位置扩散，
+     *       不会停在按下去那一刻的绝对坐标上。</li>
+     * </ul>
+     *
+     * @param baseW/baseH   按下瞬间的按钮尺寸（折算点击点用）
+     * @param clickX/clickY 按下瞬间点击点在按钮局部坐标里的位置
+     */
+    private static void trackTo(Pane parent, Pane layer, Region ripple, ButtonBase button,
+                                double baseW, double baseH, double clickX, double clickY) {
         Runnable sync = () -> {
             if (layer.getParent() != parent) return;
             Bounds lb = button.getLayoutBounds();
+            double w = lb.getWidth();
+            double h = lb.getHeight();
+            if (w <= 0 || h <= 0) return;
             layer.resizeRelocate(button.getLayoutX() + lb.getMinX() + button.getTranslateX(),
                     button.getLayoutY() + lb.getMinY() + button.getTranslateY(),
-                    lb.getWidth(), lb.getHeight());
+                    w, h);
+            // 裁剪跟着新尺寸走：矩形原地改尺寸，避免动画期间每帧新建节点
+            if (layer.getClip() instanceof Rectangle clip) {
+                double radius = clipRadius(button, w, h);
+                clip.setWidth(w);
+                clip.setHeight(h);
+                clip.setArcWidth(radius * 2);
+                clip.setArcHeight(radius * 2);
+            } else {
+                layer.setClip(roundedClip(button, w, h));
+            }
+            // 光效圆心按比例跟随按钮当前尺寸（半径保持按下那一刻的扩散半径）
+            double r = ripple.getWidth() / 2;
+            ripple.relocate(clickX * (w / baseW) - r, clickY * (h / baseH) - r);
         };
         button.layoutXProperty().addListener((o, a, b) -> sync.run());
         button.layoutYProperty().addListener((o, a, b) -> sync.run());
@@ -164,8 +195,8 @@ public final class RippleEffect {
         button.heightProperty().addListener((o, a, b) -> sync.run());
     }
 
-    /** 圆角矩形裁剪：半径取按钮背景自身的圆角（拿不到就按 6px 兜底） */
-    private static Rectangle roundedClip(Region button, double w, double h) {
+    /** 圆角半径：取按钮背景自身的圆角（拿不到就按 6px 兜底），并钳到不超过半宽/半高 */
+    private static double clipRadius(Region button, double w, double h) {
         double radius = 6;
         Background bg = button.getBackground();
         if (bg != null && !bg.getFills().isEmpty()) {
@@ -176,7 +207,12 @@ public final class RippleEffect {
                         : Math.max(radii.getTopLeftHorizontalRadius(), radii.getBottomRightHorizontalRadius());
             }
         }
-        radius = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+        return Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+    }
+
+    /** 圆角矩形裁剪：半径取按钮背景自身的圆角 */
+    private static Rectangle roundedClip(Region button, double w, double h) {
+        double radius = clipRadius(button, w, h);
         Rectangle clip = new Rectangle(w, h);
         clip.setArcWidth(radius * 2);
         clip.setArcHeight(radius * 2);

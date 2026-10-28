@@ -4,6 +4,8 @@ import com.example.starlight.newui.ui.AppIcons;
 import com.example.starlight.Controllers.PageView;
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.config.GameDirManager;
+import com.example.starlight.config.LegacyVersionMigration;
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.config.VersionConfigManager;
 import com.example.starlight.colorblind.ColorBlindOverlayManager;
 import com.example.starlight.crash.CrashDiagnosticData;
@@ -73,7 +75,6 @@ import com.example.starlight.newui.page.settings.AboutPage;
 import com.example.starlight.newui.page.settings.AccessibilityPage;
 import com.example.starlight.newui.page.CommunityPage;
 import com.example.starlight.newui.framegen.FrameGenCoordinator;
-import com.example.starlight.newui.login.LoginCoordinator;
 import com.example.starlight.newui.ui.LaunchOverlay;
 import com.example.starlight.newui.page.settings.DevPage;
 import com.example.starlight.newui.ui.FabMenu;
@@ -104,6 +105,7 @@ import com.example.starlight.newui.page.settings.MainUiPage;
 import com.example.starlight.newui.page.settings.SponsorPage;
 import com.example.starlight.newui.page.settings.ThemePage;
 import com.example.starlight.newui.page.settings.VersionSettingsPage;
+import com.example.starlight.newui.ui.NavSearchPill;
 import com.example.starlight.newui.ui.PageKit;
 import com.example.starlight.newui.ui.SkeletonFactory;
 import com.example.starlight.newui.ui.UiService;
@@ -191,6 +193,14 @@ public class LauncherView implements PageView, LauncherContext {
     private final VBox sidebar;
     private final ScrollPane sidebarScroll;
     private final Button homeTab, downloadTab, resourcesTab, newsTab, multiplayerTab, settingsTab, modTab;
+    /** 顶部导航栏左侧的搜索胶囊：点击展开、失焦收起（实现在 newui.ui.NavSearchPill） */
+    private NavSearchPill navSearch;
+    /** 本次按压是否落在搜索胶囊里：标签栏的窗口拖拽要让位，否则在输入框里拖动选词会连窗口一起拖跑 */
+    private boolean windowDragDisabled;
+    /** 搜索胶囊的左边距（px） */
+    private static final double SEARCH_LEFT_INSET = 12;
+    /** 胶囊展开后与第一个页签之间至少留的缝隙（px） */
+    private static final double SEARCH_TAB_GAP = 10;
     /** 标题栏右上角的窗口按钮容器（样式可切换，见 rebuildWindowControls） */
     private final HBox windowControls = new HBox(8);
     private final Stage stage;
@@ -247,18 +257,21 @@ public class LauncherView implements PageView, LauncherContext {
     /** 首页：快捷启动 / 游戏信息 / 系统监控（实现在 newui.page.HomePage） */
     private HomePage homePage;
 
+    // 启动状态广播：只驱动首页启动按钮的收圈 / 加载环 / 对勾动效，不参与启动流程 //
+    private final List<Consumer<LauncherContext.LaunchState>> launchStateListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    /** 当前启动状态（null=未启动 / 已复位；页面重建时用它立即同步新按钮） */
+    private LauncherContext.LaunchState launchState;
+
     // 最小化标志
     private boolean hasBeenIconified = false;
 
     /** 社区页（登录 / 签到 / 发帖 / 评论 / 点赞，实现在 newui.page.CommunityPage） */
     private final CommunityPage communityPage;
-    /** 联机页（陶瓦 / FRP / EasyTier，实现在 newui.page.MultiplayerPage） */
+    /** 联机页（陶瓦 / SakuraFrp / SLAN，实现在 newui.page.MultiplayerPage） */
     private final MultiplayerPage multiplayerPage;
 
     /** 游戏启动动画弹窗（实现在 newui.ui.LaunchOverlay） */
     private final LaunchOverlay overlay;
-    /** 登录流程（微软设备码 / 第三方 / 离线，实现在 newui.login.LoginCoordinator） */
-    private final LoginCoordinator login;
     /** 主题与背景管理（实现在 newui.ui.ThemeManager） */
     private final ThemeManager themeMgr;
     /** 更新流程（检查 / 升级对话框 / 自替换，实现在 newui.update.UpdateCoordinator） */
@@ -351,6 +364,13 @@ public class LauncherView implements PageView, LauncherContext {
     public LauncherView(Stage stage) {
         this.stage = stage;
 
+        // 语言必须在**任何界面控件构建之前**应用：
+        // 顶部标签（createTab）、侧边栏（buildSidebar）、搜索胶囊（NavSearchPill）
+        // 都在构造函数早期创建，若等到后面的 buildAllPages 才切语言，
+        // 这些控件会永久停留在默认语言（表现为「英文模式下导航仍是中文」）。
+        // 这里只读配置取 Language 一个键，不触发 loadConfig 的磁盘副作用。
+        applyLanguageEarly();
+
         rootPane = new StackPane();
         this.ui = new UiService(rootPane);
         this.communityPage = new CommunityPage(this);
@@ -377,7 +397,6 @@ public class LauncherView implements PageView, LauncherContext {
         this.frameGen = new FrameGenCoordinator(this);
         this.overlay = new LaunchOverlay(this);
         this.updater = new UpdateCoordinator(this);
-        this.login = new LoginCoordinator(this);
         this.themeMgr = new ThemeManager(this);
         this.devPage = new DevPage(this);
         contentPane = new BorderPane();
@@ -401,19 +420,50 @@ public class LauncherView implements PageView, LauncherContext {
         tabBar.setPadding(new Insets(6, 0, 4, 0));
         tabBar.getStyleClass().add("tab-bar");
 
-        homeTab = createTab("首页", "homeTab", true);
-        downloadTab = createTab("下载", "downloadTab", false);
-        resourcesTab = createTab("资源", "resourcesTab", false);
-        newsTab = createTab("社区", "newsTab", false);
-        multiplayerTab = createTab("联机", "multiplayerTab", false);
-        settingsTab = createTab("设置", "settingsTab", false);
+        homeTab = createTab(I18N.get("shell.t0001"), "homeTab", true);
+        downloadTab = createTab(I18N.get("shell.t0002"), "downloadTab", false);
+        resourcesTab = createTab(I18N.get("shell.t0003"), "resourcesTab", false);
+        newsTab = createTab(I18N.get("shell.t0004"), "newsTab", false);
+        multiplayerTab = createTab(I18N.get("shell.t0005"), "multiplayerTab", false);
+        settingsTab = createTab(I18N.get("shell.t0006"), "settingsTab", false);
         // 模组页：默认隐藏，由「首页快速管理MOD」开关控制（loadConfig 后调用 updateModTabVisibility 同步显隐）
-        modTab = createTab("模组", "modTab", false);
+        modTab = createTab(I18N.get("shell.t0007"), "modTab", false);
         modTab.setVisible(false);
         modTab.setManaged(false);
 
         tabBar.getChildren().addAll(homeTab, downloadTab, resourcesTab, newsTab, multiplayerTab, settingsTab, modTab);
-        topContainer.getChildren().addAll(windowControls, tabBar);
+
+        // 搜索胶囊：叠在标签栏左侧、垂直居中。页签位置保持不动 —— tabBar 仍旧铺满整行、
+        // 内容居中，胶囊不参与页签的居中计算，只是浮在它左上方的一层控件。
+        navSearch = new NavSearchPill();
+        // 回车 / 点 Bing 标识：拉起系统默认浏览器搜（见 search.BingSearchUtil，只拼链接不发请求）
+        navSearch.setOnSubmit(keyword -> {
+            if (!com.example.starlight.search.BingSearchUtil.search(keyword)) {
+                ui.toast(I18N.get("shell.k0001", keyword), "warning");
+            }
+        });
+        StackPane tabRow = new StackPane(tabBar, navSearch);
+        StackPane.setAlignment(navSearch, Pos.CENTER_LEFT);
+        StackPane.setMargin(navSearch, new Insets(0, 0, 0, SEARCH_LEFT_INSET));
+
+        // 展开宽度按「首页页签左边界 - 留白」实时封顶：窗口很窄、或打开了「模组」页签时，
+        // 展开的输入框也不会盖住第一个导航按钮
+        Runnable clampSearchWidth = () -> navSearch.setMaxExpandedWidth(
+                homeTab.getLayoutX() - SEARCH_LEFT_INSET - SEARCH_TAB_GAP);
+        tabBar.widthProperty().addListener((o, a, b) -> clampSearchWidth.run());
+        tabBar.layoutBoundsProperty().addListener((o, a, b) -> clampSearchWidth.run());
+        homeTab.layoutXProperty().addListener((o, a, b) -> clampSearchWidth.run());
+
+        // 点到胶囊外面也收起：页面空白处不是可聚焦控件，光等输入框失焦会一直停在展开态
+        rootPane.sceneProperty().addListener((obs, oldScene, scene) -> {
+            if (scene == null || scene.getProperties().containsKey("starlight.navSearchBlur")) return;
+            scene.getProperties().put("starlight.navSearchBlur", Boolean.TRUE);
+            scene.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
+                if (navSearch.isExpanded() && !isInsideNavSearch(e.getTarget())) navSearch.collapse();
+            });
+        });
+
+        topContainer.getChildren().addAll(windowControls, tabRow);
 
         // 顶部导航动效：弹性滑动指示条 + 页签水波纹 + 图标微交互（滚动收缩由切页时 watchScroll 接）
         com.example.starlight.newui.ui.NavEffects.install(tabBar);
@@ -451,16 +501,17 @@ public class LauncherView implements PageView, LauncherContext {
         HBox.setHgrow(mainContent, Priority.ALWAYS);
         VBox.setVgrow(mainContent, Priority.ALWAYS);
 
-        // 标题栏拖拽
+        // 标题栏拖拽（搜索胶囊里的按压不算拖窗口，见 windowDragDisabled）
         topContainer.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
+            windowDragDisabled = isInsideNavSearch(e.getTarget());
+            if (windowDragDisabled) return;
             xOffset = stage.getX() - e.getScreenX();
             yOffset = stage.getY() - e.getScreenY();
         });
         topContainer.addEventFilter(MouseEvent.MOUSE_DRAGGED, e -> {
-            if (!stage.isMaximized()) {
-                stage.setX(e.getScreenX() + xOffset);
-                stage.setY(e.getScreenY() + yOffset);
-            }
+            if (windowDragDisabled || stage.isMaximized()) return;
+            stage.setX(e.getScreenX() + xOffset);
+            stage.setY(e.getScreenY() + yOffset);
         });
 
         mainBody.getChildren().addAll(sidebarScroll, mainContent);
@@ -504,13 +555,9 @@ public class LauncherView implements PageView, LauncherContext {
         // 初始化页面 //
         loadConfig();        // 根据「首页快速管理MOD」开关同步顶部导航栏「模组」页显隐
         updateModTabVisibility();
-        // 应用语言配置（I18N 资源包；NEWUI 界面文本为硬编码，切换仅对 I18N 体系生效）
-        String lang = configCache.getOrDefault("Language", "zh_CN");
-        switch (lang) {
-            case "en_US" -> I18N.setLocale(java.util.Locale.ENGLISH);
-            case "ja_JP" -> I18N.setLocale(java.util.Locale.JAPANESE);
-            default -> I18N.setLocale(java.util.Locale.CHINA);
-        }
+        // 语言在构造函数最前面已应用（applyLanguageEarly）。这里再按最新配置同步一次：
+        // 极少数情况下 loadConfig 会合并客户端配置覆盖 Language，保持幂等即可。
+        I18N.applyConfig(configCache.getOrDefault("Language", "zh_CN"));
         // 先设置 currentTheme，确保 buildAllPages 中 buildThemePage 能正确标识选中项
         themeMgr.setCurrentTheme(configCache.getOrDefault("Theme", "light"));
         buildAllPages();
@@ -656,16 +703,21 @@ public class LauncherView implements PageView, LauncherContext {
         return btn;
     }
 
-    /** 顶部标签页的图标：按标签文案取 */
-    private static String tabIcon(String text) {
-        return switch (text) {
-            case "首页" -> "home";
-            case "下载" -> "download";
-            case "资源" -> "library";
-            case "社区" -> "people";
-            case "联机" -> "wifi";
-            case "设置" -> "gear";
-            case "模组" -> "puzzle";
+    /**
+     * 顶部标签页的图标：按标签 id 取。
+     *
+     * <p>旧实现按<b>标签文案</b>匹配（switch 中文常量），既不能换语言（文案一变就全落 default），
+     * 也无法用 i18n 键做 case 标签（case 要求编译期常量）。id 是稳定标识，永不被翻译。
+     */
+    private static String tabIcon(String id) {
+        return switch (id) {
+            case "homeTab" -> "home";
+            case "downloadTab" -> "download";
+            case "resourcesTab" -> "library";
+            case "newsTab" -> "people";
+            case "multiplayerTab" -> "wifi";
+            case "settingsTab" -> "gear";
+            case "modTab" -> "puzzle";
             default -> null;
         };
     }
@@ -673,7 +725,7 @@ public class LauncherView implements PageView, LauncherContext {
     private Button createTab(String text, String id, boolean selected) {
         Button btn = new Button(text);
         btn.setId(id);
-        AppIcons.apply(btn, tabIcon(text), 15, null);
+        AppIcons.apply(btn, tabIcon(id), 15, null);
         btn.getStyleClass().add("tab-item");
         if (selected) btn.getStyleClass().add("selected");
         btn.setOnAction(this::switchTab);
@@ -681,12 +733,20 @@ public class LauncherView implements PageView, LauncherContext {
         return btn;
     }
 
+    /** 事件目标是否落在顶部搜索胶囊里（含其子节点）：落在里面就让开窗口拖拽，交给输入框自己处理 */
+    private boolean isInsideNavSearch(Object target) {
+        if (!(target instanceof Node node) || navSearch == null) return false;
+        for (Node cur = node; cur != null; cur = cur.getParent()) {
+            if (cur == navSearch) return true;
+        }
+        return false;
+    }
+
     /** 侧边栏各项图标（键与 buildSidebar 里的 id 一致；旧 id 的图标供深链高亮兜底） */
     private static final java.util.Map<String, String> SIDEBAR_ICONS = java.util.Map.ofEntries(
             java.util.Map.entry("sidebarAccount", "user"),
             java.util.Map.entry("sidebarAbout", "help"),
             java.util.Map.entry("sidebarLicense", "scale"),
-            java.util.Map.entry("sidebarGameAccount", "user-cog"),
             java.util.Map.entry("sidebarMod", "puzzle"),
             java.util.Map.entry("sidebarJvm", "cpu"),
             java.util.Map.entry("sidebarGameDir", "folder"),
@@ -784,12 +844,9 @@ public class LauncherView implements PageView, LauncherContext {
         return Math.min(off, PageKit.SETTINGS_NAV_ITEMS.length);
     }
 
-    /** 导航 id → 显示名（SETTINGS_NAV_ITEMS 查表，查不到回退 id 本身） */
+    /** 导航 id → 显示名（当前语言下现取，见 PageKit.navLabel） */
     private static String navLabelOf(String id) {
-        for (String[] item : PageKit.SETTINGS_NAV_ITEMS) {
-            if (item[0].equals(id)) return item[1];
-        }
-        return id;
+        return PageKit.navLabel(id);
     }
 
     /** 重绘「最近修改」子列表（保序：最新在上；跳转经 switchToSettings 统一走 NavRouter） */
@@ -806,7 +863,7 @@ public class LauncherView implements PageView, LauncherContext {
 
     private void buildSidebar() {
         // 顶部：设置搜索框（重构 §4.5：输入即过滤导航项） //
-        TextField searchField = PageKit.searchField("搜索设置...", settingsSearchKeyword, kw -> {
+        TextField searchField = PageKit.searchField(I18N.get("shell.t0015"), settingsSearchKeyword, kw -> {
             settingsSearchKeyword = kw == null ? "" : kw;
             refreshSidebarSearch();
         });
@@ -834,15 +891,6 @@ public class LauncherView implements PageView, LauncherContext {
                 sidebar.getChildren().add(btn);
             }
         }
-
-        // 底部：最近修改（重构 §4.5：记录最近 5 项，点击直达） //
-        Label recentTitle = new Label("最近修改");
-        recentTitle.setId("sidebarRecentTitle");
-        recentTitle.getStyleClass().add("sidebar-section-title");
-        VBox recentBox = new VBox(2);
-        recentBox.setId("sidebarRecentBox");
-        sidebar.getChildren().addAll(recentTitle, recentBox);
-        rebuildRecentItems(recentBox);
     }
 
     /** 把 SETTINGS_NAV_ITEMS 按分组大小切回「组名 + 键值对」结构（保留 buildSidebar 原消费形态） */
@@ -856,12 +904,14 @@ public class LauncherView implements PageView, LauncherContext {
         for (int s = 0; s < PageKit.SETTINGS_NAV_SECTIONS.length; s++) {
             int size = PageKit.SETTINGS_NAV_SECTION_SIZES[s];
             String[] row = new String[1 + size * 2];
-            row[0] = PageKit.SETTINGS_NAV_SECTIONS[s];
+            // 这里做一次译文解析：切分结果只用于当次渲染，不缓存在静态数组里，
+            // 所以不会把语言冻结在类初始化那一刻。
+            row[0] = PageKit.sectionLabel(s);
             for (int k = 0; k < size; k++) {
                 if (offset + k >= itemCount) break;
                 String[] item = PageKit.SETTINGS_NAV_ITEMS[offset + k];
                 row[1 + k * 2] = item[0];
-                row[2 + k * 2] = item[1];
+                row[2 + k * 2] = I18N.get(item[1]);
             }
             result[s] = row;
             offset += size;
@@ -974,7 +1024,7 @@ public class LauncherView implements PageView, LauncherContext {
         } else {
             newPage = pageCache.get(key);
             if (newPage == null) {
-                Label label = new Label("页面开发中: " + key);
+                Label label = new Label(I18N.get("shell.k0002", key));
                 label.setStyle("-fx-text-fill: inherit; -fx-font-size: 16px;");
                 newPage = new StackPane(label);
             }
@@ -988,13 +1038,23 @@ public class LauncherView implements PageView, LauncherContext {
         // （恢复默认 / 保存设置），套外层滚动条会把固定栏一起滚走。
         // 注意：downloadDetail（资源详情页）**在**这个列表之外——它整页套外层滚动条，
         //       内部各标签页都不再自带滚动区（见 buildModGalleryTab / buildModVersionsTab）。
+        // 账户页（sidebarAccount）也自带内部滚动区（账号列表滚动、卡片面板切换），
+        // 且卡片要始终居中显示——套外层滚动条后内容按自身首选高排版、拿不到整页高度就没法居中。
+        // 游戏目录页（sidebarGameDir）同理：整页就是一个居中面板，列表自己滚动。
         boolean noScroll = "home".equals(key) || "resources".equals(key) || "multiplayer".equals(key)
                 || "download".equals(key) || "downloadVersionPick".equals(key)
                 || "downloadVersionConfig".equals(key)
                 || "downloadManager".equals(key) || "news".equals(key)
                 || "postDetail".equals(key) || "versionSelect".equals(key)
+                || "sidebarAccount".equals(key)
+                || "sidebarGameDir".equals(key)
                 || "sidebarVersionSettings".equals(key);
         if (noScroll) {
+            // mainContent 是 VBox：不设 vgrow 的话子页面只拿首选高。账户页和游戏目录页要靠整页高度
+            // 把卡片垂直居中，拿不到高度就只能顶在内容区上方。
+            if ("sidebarAccount".equals(key) || "sidebarGameDir".equals(key)) {
+                VBox.setVgrow(newPage, Priority.ALWAYS);
+            }
             mainContent.getChildren().add(newPage);
             newPage.setOpacity(0);
             newPage.setTranslateY(6);
@@ -1113,7 +1173,7 @@ public class LauncherView implements PageView, LauncherContext {
         devPage.detachLogListener();
         for (String[] item : PageKit.SETTINGS_NAV_ITEMS) {
             switch (item[0]) {
-                // 账户状态卡并入 GameAccountPage（重构 §6.1）：sidebarAccount 与 sidebarGameAccount 共用一页
+                // 账户页（重构 §6.1）；sidebarGameAccount 已从侧边栏移除，该旧 id 仅作深链兼容保留
                 case "sidebarAccount", "sidebarGameAccount" -> pageCache.put(item[0], buildGameAccountPage());
                 // LicensePage 并入 AboutPage（重构 §6.2）
                 case "sidebarAbout" -> pageCache.put(item[0], buildAboutPage());
@@ -1140,6 +1200,8 @@ public class LauncherView implements PageView, LauncherContext {
         pageCache.put("sidebarMod", pageCache.get("sidebarGameDir"));
         pageCache.put("sidebarLanguage", pageCache.get("sidebarMainUi"));
         pageCache.put("sidebarColorBlind", pageCache.get("sidebarAccessibility"));
+        // 「游戏账户档案」已并入「账户」：旧 id 指到同一实例，历史深链不会落空
+        pageCache.put("sidebarGameAccount", pageCache.get("sidebarAccount"));
     }
 
     @Override
@@ -1147,7 +1209,7 @@ public class LauncherView implements PageView, LauncherContext {
         // NavRouter（重构 §5.2 / §7）：旧导航 id 重定向到新归属页（深链与页内跳转统一入口）
         String target = com.example.starlight.newui.ui.NavRouter.resolve(id);
         if (!target.equals(id)) {
-            ui.toast("该设置已移至「" + navLabelOf(target) + "」");
+            ui.toast(I18N.get("shell.navRedirected", navLabelOf(target) + "」"));
         }
         id = target;
         if (currentTab != null) currentTab.getStyleClass().remove("selected");
@@ -1173,15 +1235,18 @@ public class LauncherView implements PageView, LauncherContext {
         return new GameAccountPage(this).build();
     }
 
-    /** 账号数据变化后刷新「游戏账户档案」页缓存（账户状态卡已并入本页，重构 §6.1）；停留时原地刷新 */
+    /** 账号数据变化后刷新「账户」页缓存（重构 §6.1）；用户正停留在该页时原地刷新 */
     @Override
     public void refreshAccountPages() {
-        Node oldCached = pageCache.get("sidebarGameAccount");
-        pageCache.put("sidebarAccount", buildGameAccountPage());
-        pageCache.put("sidebarGameAccount", buildGameAccountPage());
+        Node oldCached = pageCache.get("sidebarAccount");
+        if (oldCached == null) oldCached = pageCache.get("sidebarGameAccount");
+        // 两个 key 指向同一实例：旧导航 id 的历史引用仍能命中，刷新后也不会出现两份不一致的页面
+        Node fresh = buildGameAccountPage();
+        pageCache.put("sidebarAccount", fresh);
+        pageCache.put("sidebarGameAccount", fresh);
         // 当前显示的正是旧缓存实例（用户停留在此页）时，原地刷新为新页面
         if (oldCached != null && currentPage == oldCached) {
-            switchToPage("sidebarGameAccount");
+            switchToPage("sidebarAccount");
         }
     }
 
@@ -1220,7 +1285,7 @@ public class LauncherView implements PageView, LauncherContext {
         try {
             java.awt.Desktop.getDesktop().browse(java.net.URI.create(url));
         } catch (Exception e) {
-            ui.toast("打开链接失败: " + e.getMessage());
+            ui.toast(I18N.get("shell.k0003", e.getMessage()));
         }
     }
 
@@ -1309,14 +1374,14 @@ public class LauncherView implements PageView, LauncherContext {
         try {
             Desktop.getDesktop().open(new File(path));
         } catch (Exception ex) {
-            ui.toast("打开失败: " + ex.getMessage());
+            ui.toast(I18N.get("shell.k0004", ex.getMessage()));
         }
     }
 
     /** 删除确认面板（异步回调风格）：确认后执行 onConfirm */
     @Override
     public void confirmDelete(String message, Runnable onConfirm) {
-        ui.confirm("确认删除", message, "删除", true, onConfirm);
+        ui.confirm(I18N.get("shell.t0016"), message, I18N.get("shell.t0017"), true, onConfirm);
     }
 
     /**
@@ -1382,6 +1447,11 @@ public class LauncherView implements PageView, LauncherContext {
             Map<String, String> cfg = UIGeneralControlClass.readConfig();
             configCache.putAll(cfg);
         }
+        // 版本选择的唯一真源是「各游戏目录内的 starlight.json」（ini 不再保存 Version）：
+        // 先做一次旧 ini 值的幂等迁移，再把当前活动目录的选择同步进内存镜像。
+        // 镜像不是真源，只用于兜底尚未收口的读取点，永不落盘。
+        LegacyVersionMigration.runOnce();
+        SelectedVersion.syncCache(configCache);
         applyDownloadConfig();
         // 启动时检测当前游戏目录：未初始化则补齐骨架，launcher_profiles.json 缺失/不合法则重新生成
         ensureActiveGameDirHealth();
@@ -1391,6 +1461,26 @@ public class LauncherView implements PageView, LauncherContext {
         AppConfig.DEBUG_MODE = "true".equalsIgnoreCase(configCache.getOrDefault("DebugMode", "false"));
         AppConfig.CHINESE_LOG = !"false".equalsIgnoreCase(configCache.getOrDefault("ChineseLog", "true"));
         DebugLog.applyMode(AppConfig.DEBUG_MODE); // 同步 logback root 级别（DEBUG/INFO）
+    }
+
+    /**
+     * 构造函数最早期应用界面语言。
+     *
+     * <p>顶部标签、侧边栏、搜索胶囊在构造期就创建并取值，必须赶在它们之前。
+     * 这里只读配置里的 Language 一个键，不调用 {@link #loadConfig()}：
+     * 后者会做磁盘扫描 / 迁移 / 网络代理应用，早期调用既慢又有副作用。
+     */
+    private void applyLanguageEarly() {
+        String lang = "zh_CN";
+        try {
+            lang = ConfigManager.readConfig().getOrDefault("Language", "zh_CN");
+            // 客户端配置优先级更高（与 loadConfig 的合并顺序一致）
+            Map<String, String> clientCfg = ConfigManager.readClientConfig();
+            if (clientCfg.containsKey("Language")) lang = clientCfg.get("Language");
+        } catch (Exception ignored) {
+            // 配置读不出来就用默认语言，绝不因为语言问题阻断启动
+        }
+        I18N.applyConfig(lang);
     }
 
     /**
@@ -1408,6 +1498,12 @@ public class LauncherView implements PageView, LauncherContext {
         // 下载参数：缺失键回落默认值（老配置文件无需迁移），限速一并压到全局令牌桶
         DownloadSettings.applyAll(configCache);
         DownloadCoordinator.getInstance().setThreadLimit(DownloadSettings.getDownloadThreads());
+        // 2026-10-20：资源补全的全局文件并发配额同样按配置初始化（三阶段并行后共用一份）
+        GameResourceCompleter.applyGlobalConcurrency();
+        // 2026-10-21：PCL 引擎的 HTTP 层必须在任何 HttpURLConnection 创建之前初始化
+        // （http.maxConnections 由 JDK 的 KeepAliveCache 在类初始化时读取一次，晚设无效）。
+        // 这里在启动早期调用，早于版本清单等首批网络请求。
+        com.example.starlight.download.pcl.PclDownloadManager.get().applyConcurrency();
         // 单线程 Host 黑名单用户片段（开发者选项页持久化）启动即注入，不依赖是否打开过该页
         String singleThreadHosts = configCache.getOrDefault("SingleThreadHosts", "");
         if (singleThreadHosts != null && !singleThreadHosts.isBlank()) {
@@ -1452,8 +1548,9 @@ public class LauncherView implements PageView, LauncherContext {
 
     private String getScreenshotDir() {
         // 隔离按当前版本的有效配置判定（版本独立设置页可单版本开关）
-        String gameDir = configCache.getOrDefault("GameDir", ".minecraft");
-        String version = configCache.getOrDefault("Version", "");
+        // 目录与版本都走真源：版本读的是该游戏目录自己的 starlight.json
+        String gameDir = GameDirManager.activePath(configCache);
+        String version = SelectedVersion.of(gameDir);
         return ResourceScanner.resolveScreenshotDir(
                 configCache.get("ScreenshotDir"),
                 gameDir,
@@ -1473,7 +1570,7 @@ public class LauncherView implements PageView, LauncherContext {
     private void buildFab() {
         fab = new FabMenu();
         // 上扇形槽位：0=左上（下载管理，见 DownloadTaskManager.FAB_SLOT）1=正上 2=右上（关闭游戏进程，红色危险样式）
-        fab.setItem(2, "power", "关闭游戏进程", true, this::openGameProcessDialog);
+        fab.setItem(2, "power", I18N.get("shell.t0018"), true, this::openGameProcessDialog);
         downloads.buildFab(fab);
 
         StackPane.setAlignment(fab.node(), Pos.BOTTOM_RIGHT);
@@ -1487,10 +1584,17 @@ public class LauncherView implements PageView, LauncherContext {
         gameStopFabWatch.play();
     }
 
-    /** 按「游戏进程是否还在跑」切换「关闭游戏进程」子按钮的可用性（不可用时不出现在 FAB 里） */
+    /**
+     * 按「游戏进程是否还在跑」切换「关闭游戏进程」子按钮的可用性（不可用时不出现在 FAB 里）。
+     *
+     * <p>启动动画还开着时一律不放出：这一刻游戏窗口还没（或刚刚）出现，右下角先挂一个
+     * 「关闭游戏进程」既误导又容易被误点。真正放出的时机是「游戏窗口已出现 + 启动动画已收起」，
+     * 由启动成功回调里 exitTimer 的收尾调用一次。
+     */
     private void syncGameStopFab() {
         if (fab == null) return;
-        fab.setItemEnabled(FAB_STOP_SLOT, UIGeneralControlClass.isGameRunning());
+        fab.setItemEnabled(FAB_STOP_SLOT,
+                UIGeneralControlClass.isGameRunning() && !overlay.isLaunching());
     }
 
     /**
@@ -1501,6 +1605,29 @@ public class LauncherView implements PageView, LauncherContext {
      */
     private void openGameProcessDialog() {
         new GameProcessPanel(this, ui, ui::toast, ui::closeModal).show();
+    }
+
+    // 启动状态广播（首页启动按钮动效） //
+
+    @Override
+    public Runnable addLaunchStateListener(Consumer<LauncherContext.LaunchState> listener) {
+        if (listener == null) return () -> { };
+        launchStateListeners.add(listener);
+        // 页面刚重建（刷新首页）时立即同步当前状态：启动中的按钮不会闪回常态
+        if (launchState != null) listener.accept(launchState);
+        return () -> launchStateListeners.remove(listener);
+    }
+
+    /** 广播启动状态：只驱动界面动效，任何异常都不能中断启动流程 */
+    private void fireLaunchState(LauncherContext.LaunchState state) {
+        launchState = state;
+        for (Consumer<LauncherContext.LaunchState> listener : launchStateListeners) {
+            try {
+                listener.accept(state);
+            } catch (Exception ignored) {
+                // 按钮动效失败不影响启动
+            }
+        }
     }
 
     @Override
@@ -1523,15 +1650,20 @@ public class LauncherView implements PageView, LauncherContext {
             }
         }
 
+        // 启动前把真源（该游戏目录内的 starlight.json）刷进内存镜像：
+        // 防止界面/后续读取点残留上一个目录留下的版本
+        SelectedVersion.syncCache(configCache);
+
         final LaunchConfig config;
         final String version;
         if (presetConfig != null) {
             config = presetConfig;
             version = config.version;
         } else {
-            version = configCache.getOrDefault("Version", "");
+            // 版本选择真源：当前游戏目录内的 starlight.json（不是 ini，也不是残留的内存值）
+            version = SelectedVersion.of(configCache);
             if (version.isEmpty()) {
-                ui.toast("请先选择游戏版本");
+                ui.toast(I18N.get("shell.t0019"));
                 switchToSettings("sidebarGameDir");
                 return;
             }
@@ -1544,6 +1676,9 @@ public class LauncherView implements PageView, LauncherContext {
         // 检测加载器类型（用于记录）
         String loaderType = detectLoaderForVersion(config.gameDir, config.version);
 
+        // P0 防护：GraalVM 运行时启动前给一次明确选择（用户选完会回调 launchGame 重新进入）
+        if (!passGraalVmGuard(config, loaderType)) return;
+
         // 启动器可见性（高级设置）：策略在启动时读一次，游戏启动与退出两个时机都用它，
         // 避免中途改配置导致「已经隐藏了却不还原」
         final String visibilityMode = LauncherVisibility.normalize(
@@ -1552,8 +1687,10 @@ public class LauncherView implements PageView, LauncherContext {
         // 上一轮启动若走过「关闭启动器」又没真退出成（极端情况），清掉标记避免本次误判已退出
         LauncherVisibility.resetExitRequested();
 
+        // 启动按钮进入「启动中」：收成圆形、转起加载环（只改按钮外观，弹窗照常弹出）
+        fireLaunchState(LauncherContext.LaunchState.STARTED);
         // 显示启动动画
-        overlay.show("版本: " + version);
+        overlay.show(I18N.get("shell.k0005", version));
 
         // 实际启动游戏（异步，进度回调驱动真实进度）
         UIGeneralControlClass.launchMinecraftAsync(config,
@@ -1583,17 +1720,21 @@ public class LauncherView implements PageView, LauncherContext {
                             // 用户主动结束（取消启动 / 从关闭进程弹窗关掉）：不再弹提示与崩溃面板。
                             // stoppedByUser 是按实例记的，多实例下关掉一个不会连累另一个的崩溃提示
                             if (overlay.isCancelledByUser() || result.stoppedByUser) {
+                                // 用户主动结束：启动按钮从「启动中」展开回胶囊
+                                fireLaunchState(LauncherContext.LaunchState.FAILED);
                                 overlay.hide();
                                 refreshHomePage();
                                 return;
                             }
                             if (result.isNormal()) {
-                                ui.toast("游戏已退出");
+                                ui.toast(I18N.get("shell.t0020"));
                             } else {
                                 // 异常退出：弹出集成式崩溃诊断面板（替代独立 GameCrashWindow）
                                 showGameCrashPanel(result);
                             }
                             overlay.hide();
+                            // 游戏已退出：按钮复位，刷新首页时不要重播对勾
+                            launchState = null;
                             // 游戏退出后刷新首页：存档列表（快速进入存档）、最近游玩等实时数据更新
                             refreshHomePage();
                         });
@@ -1609,22 +1750,29 @@ public class LauncherView implements PageView, LauncherContext {
                             syncGameStopFab();
                             // 色盲辅助：启动失败（含被取消）时游戏窗口不会出现，矫正工具不该留在后台
                             ColorBlindOverlayManager.notifyGameStopped();
+                            // 启动失败 / 取消：启动按钮从「启动中」展开回胶囊
+                            fireLaunchState(LauncherContext.LaunchState.FAILED);
                             // 用户主动取消：后台检查点回调的「启动已取消」不再误报为启动失败
                             if (overlay.isCancelledByUser()) {
                                 overlay.hide();
                                 return;
                             }
-                            ui.toast("启动失败: " + error);
+                            ui.toast(I18N.get("shell.k0006", error));
                             overlay.hide();
                         });
                     }
                 },
                 () -> Platform.runLater(() -> {
+                    // 迟到的「游戏已启动」回调必须丢弃：检测线程不响应取消时会在取消后 25~60 秒
+                    // 补报一次。不挡掉就会给启动按钮补一个对勾、写一条假的「最近游玩」、
+                    // 误拉起色盲辅助，甚至按启动器可见性策略把启动器隐藏 / 最小化 / 关闭。
+                    if (overlay.isCancelledByUser() || launchState != LauncherContext.LaunchState.STARTED) return;
+
                     // 通知帧生成器：游戏已由启动器拉起（权威信号，进程扫描可能因启动器差异而滞后/失败）
                     fgNotifyGameStarted(config, version);
 
-                    // 游戏已运行 → 右下角显示「关闭游戏进程」悬浮按钮（进程引用此时已就绪）
-                    syncGameStopFab();
+                    // 「关闭游戏进程」不在这里放出：启动动画还要停 1.5 秒才收起，
+                    // 按交互要求等它收掉之后再显示（见下面 exitTimer 的收尾）
 
                     // 色盲辅助：游戏窗口已出现 → 按配置拉起 ColorBlindOverlay（只抓游戏窗口）
                     ColorBlindOverlayManager.notifyGameStarted();
@@ -1635,10 +1783,18 @@ public class LauncherView implements PageView, LauncherContext {
                     // 关闭启动动画（进度补满 + 对勾转场 + 文案收尾）
                     overlay.markSuccess();
 
+                    // 启动成功：启动按钮也补一个对勾（弹窗 1.5s 后关闭，重建的首页按钮会同步到该状态）
+                    fireLaunchState(LauncherContext.LaunchState.SUCCEEDED);
+
                     Timeline exitTimer = new Timeline(new KeyFrame(Duration.seconds(1.5), ev -> {
                         overlay.hide();
-                        // 启动记录已保存，刷新首页 UI
+                        // 先清状态再重建首页：反过来的话 refreshHomePage() 时 launchState 还是
+                        // SUCCEEDED，重建出来的新按钮会被立即刷成对勾（对勾又粘住不放）
+                        launchState = null;
                         refreshHomePage();
+                        // 启动动画已收起（overlay.hide() 之前已把 isLaunching 置 false）、
+                        // 游戏窗口确实在跑 → 这一刻才放出「关闭游戏进程」
+                        syncGameStopFab();
                     }));
                     exitTimer.play();
 
@@ -1662,6 +1818,115 @@ public class LauncherView implements PageView, LauncherContext {
         LauncherVisibility.onGameExited(stage, visibilityMode, true);
     }
 
+    // GraalVM 防护（P0） //
+
+    /** 用户已选择「仍用这个 GraalVM 运行时」时记录的 java 路径：同一个运行时不再重复询问 */
+    private static final String KEY_GRAAL_GUARD_SKIP = "GraalVmGuardSkip";
+
+    /**
+     * GraalVM 启动前的一次确认。不静默改用户的 Java（换运行时影响所有版本），也不硬拦
+     * （有人就是要用 GraalVM），但必须把「已知会无 Java 堆栈地原生崩溃」这件事摆在启动现场。
+     *
+     * @return true = 继续启动；false = 已弹出选择框，用户选完会重新进入 {@link #launchGame(LaunchConfig)}
+     */
+    private boolean passGraalVmGuard(LaunchConfig config, String loaderType) {
+        String javaPath = config == null ? null : config.javaPath;
+        if (!com.example.starlight.startmc.launcher.PlatformUtils.isGraalVmRuntime(javaPath)) return true;
+        // 已明确选过「仍用」：这个运行时不再打扰
+        if (javaPath.equals(configCache.getOrDefault(KEY_GRAAL_GUARD_SKIP, ""))) return true;
+        showGraalVmGuard(config, loaderType, findNonGraalJdk());
+        return false;
+    }
+
+    /** 在已扫描到的 Java 里挑一个非 GraalVM 的标准 JDK：优先 21，其次 17，再其次更新的版本 */
+    private static String findNonGraalJdk() {
+        try {
+            String best = null;
+            int bestScore = -1;
+            for (FindAllJavaWindows.JavaEntry entry : JavaCacheManager.getAvailable()) {
+                if (entry == null || !entry.isJDK) continue;
+                if (com.example.starlight.startmc.launcher.PlatformUtils
+                        .isGraalVmRuntime(entry.homePath)) continue;
+                if (entry.majorVersion < 17) continue;
+                // 21 是文档给出的兼容基线；17 次之；更高的标准 JDK 仍比 GraalVM 稳
+                int score = entry.majorVersion == 21 ? 30 : entry.majorVersion == 17 ? 20 : 10;
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = entry.getJavaExePath();
+                }
+            }
+            return best;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** java.exe 路径 → 人读的短名（取 JAVA_HOME 目录名，如 graalvm-25.2.4 / jdk-21.0.5） */
+    private static String shortJavaName(String javaExe) {
+        try {
+            java.nio.file.Path exe = java.nio.file.Paths.get(javaExe);
+            java.nio.file.Path home = exe.getParent() != null ? exe.getParent().getParent() : null;
+            return home != null && home.getFileName() != null
+                    ? home.getFileName().toString() : javaExe;
+        } catch (Exception e) {
+            return javaExe;
+        }
+    }
+
+    /** 三选一：改用标准 JDK / 仍用 GraalVM（不再提示）/ 取消本次启动 */
+    private void showGraalVmGuard(LaunchConfig config, String loaderType, String candidate) {
+        VBox body = new VBox(10);
+        body.setAlignment(Pos.CENTER);
+        body.setPadding(new Insets(22, 24, 18, 24));
+
+        Label title = new Label(I18N.get("shell.t0021"));
+        title.getStyleClass().add("modal-card-title");
+
+        Label desc = new Label(I18N.get("shell.p0028", config.version, loaderType));
+        desc.getStyleClass().add("modal-desc");
+        desc.setWrapText(true);
+        desc.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        Button useJdk = new Button(candidate != null
+                ? I18N.get("shell.r0001", shortJavaName(candidate))
+                : I18N.get("shell.t0022"));
+        useJdk.getStyleClass().add("modal-btn-ok");
+        useJdk.setMaxWidth(Double.MAX_VALUE);
+        useJdk.setDisable(candidate == null);
+        useJdk.setOnAction(e -> {
+            // 同时关掉「自动选择 Java」：否则启动流程会用自动挑的那个（很可能还是 GraalVM）
+            configCache.put("JavaPath", candidate);
+            configCache.put("AutoJava", "false");
+            configCache.put(KEY_GRAAL_GUARD_SKIP, "");
+            saveConfig();
+            config.javaPath = candidate;
+            ui.closeModal();
+            ui.toast(I18N.get("shell.k0007", shortJavaName(candidate)));
+            launchGame(config);
+        });
+
+        Button keep = new Button(I18N.get("shell.t0023"));
+        keep.getStyleClass().add("modal-btn-cancel");
+        keep.setMaxWidth(Double.MAX_VALUE);
+        keep.setOnAction(e -> {
+            configCache.put(KEY_GRAAL_GUARD_SKIP, config.javaPath);
+            saveConfig();
+            ui.closeModal();
+            launchGame(config);
+        });
+
+        Button cancel = new Button(I18N.get("shell.t0024"));
+        cancel.getStyleClass().add("modal-btn-cancel");
+        cancel.setMaxWidth(Double.MAX_VALUE);
+        cancel.setOnAction(e -> {
+            ui.closeModal();
+            ui.toast(I18N.get("shell.t0025"));
+        });
+
+        body.getChildren().addAll(title, desc, useJdk, keep, cancel);
+        ui.modal("", body, 460, -1, false);
+    }
+
     // 崩溃诊断面板（集成在启动器内，替代独立 GameCrashWindow / AIDiagnosisWindow） //
 
     /** 游戏异常退出：收集崩溃数据并弹出诊断面板 */
@@ -1683,7 +1948,7 @@ public class LauncherView implements PageView, LauncherContext {
                 () -> showAIDiagnosisPanel(data),
                 ui::closeModal,
                 stage);
-        ui.modal("游戏崩溃诊断", panel, 780, 540);
+        ui.modal(I18N.get("shell.t0026"), panel, 780, 540);
     }
 
     /** AI 诊断面板：从崩溃面板打开，关闭后回到崩溃面板 */
@@ -1695,20 +1960,23 @@ public class LauncherView implements PageView, LauncherContext {
                     ui.closeModal();
                     switchToSettings("sidebarAdvanced");
                 });
-        ui.modal("AI 诊断分析", panel, 780, 540);
+        ui.modal(I18N.get("shell.t0027"), panel, 780, 540);
     }
 
     // 快捷工具 //
 
     @Override
     public void handleQuickTool(String toolName) {
-        switch (toolName) {
-            case "内存" -> switchToPage("memory");
-            case "网络" -> switchToPage("networkCheck");
-            case "截图" -> switchToPage("screenshots");
-            case "设置" -> switchToSettings("sidebarJvm");
-            case "帧生成" -> switchToPage("frameGen");
-            case "色盲辅助" -> switchToSettings("sidebarColorBlind");
+        // 派发键是稳定 id（图标名），不是显示文案——见 HomePage 快捷工具格子的注释。
+        // 旧实现按中文文案 switch，一旦界面语言变化，所有入口都会静默失效。
+        switch (toolName == null ? "" : toolName) {
+            case "memory" -> switchToPage("memory");
+            case "globe" -> switchToPage("networkCheck");
+            case "clapper" -> switchToPage("screenshots");
+            case "wrench" -> switchToSettings("sidebarJvm");
+            case "bolt" -> switchToPage("frameGen");
+            case "view" -> switchToSettings("sidebarColorBlind");
+            default -> { }
         }
     }
 
@@ -1716,16 +1984,6 @@ public class LauncherView implements PageView, LauncherContext {
 
     private Node buildSystemStats() {
         return homePage.buildSystemStats();
-    }
-
-    @Override
-    public void microsoftLogin() {
-        login.microsoftLogin();
-    }
-
-    @Override
-    public void thirdPartyLogin() {
-        login.thirdPartyLogin();
     }
 
     @Override
@@ -1739,11 +1997,6 @@ public class LauncherView implements PageView, LauncherContext {
         if (!on) {
             configCache.put(ColorBlindOverlayManager.KEY_AUTO_ENABLE, "false");
         }
-    }
-
-    @Override
-    public void offlineLogin() {
-        login.offlineLogin();
     }
 
     // 设置页功能 //

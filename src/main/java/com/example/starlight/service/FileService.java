@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.service;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.model.ActionResult;
 import com.example.starlight.model.LauncherProfileInfo;
 import com.example.starlight.model.NativesStatus;
@@ -53,16 +55,16 @@ public class FileService {
                                                CallbackInterfaces.ResultCallback<Boolean> onResult) {
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             try {
-                onProgress.onProgress(10, "正在读取版本 JSON...");
+                onProgress.onProgress(10, I18N.get("service.t0005"));
                 Path jsonPath = Paths.get(gameDir, "versions", version, version + ".json");
                 if (!Files.exists(jsonPath)) {
-                    onResult.onError("版本 JSON 文件不存在");
+                    onResult.onError(I18N.get("service.t0006"));
                     return;
                 }
                 String jsonStr = Files.readString(jsonPath, StandardCharsets.UTF_8);
                 JsonObject versionJson = new Gson().fromJson(jsonStr, JsonObject.class);
 
-                onProgress.onProgress(30, "正在初始化启动器...");
+                onProgress.onProgress(30, I18N.get("service.t0007"));
                 LaunchInfo info = new LaunchInfo();
                 info.setGameDirPath(Path.of(gameDir));
                 info.setVersion(version);
@@ -75,20 +77,20 @@ public class FileService {
                 launcher.initPaths();
                 launcher.setVersionJson(versionJson);
 
-                onProgress.onProgress(60, "正在下载并提取原生库...");
+                onProgress.onProgress(60, I18N.get("service.t0008"));
                 boolean ok = launcher.processNatives();
                 if (!ok) {
-                    onResult.onError("原生库提取失败，无法继续补全");
+                    onResult.onError(I18N.get("service.t0009"));
                     return;
                 }
 
-                onProgress.onProgress(90, "正在清理多余文件...");
+                onProgress.onProgress(90, I18N.get("service.t0010"));
                 runNativeCleanup(gameDir, version);
 
-                onProgress.onProgress(100, "原生库补全完成");
+                onProgress.onProgress(100, I18N.get("service.t0011"));
                 onResult.onSuccess(true);
             } catch (JsonSyntaxException | IOException e) {
-                onResult.onError("原生库补全失败 " + e.getMessage());
+                onResult.onError(I18N.get("service.p0069", e.getMessage()));
             }
         });
     }
@@ -118,7 +120,7 @@ public class FileService {
     /** 修改 options.txt 中的某个值 */
     public static ActionResult updateOptionsTxt(String gameDir, String key, String newValue) {
         Path optFile = Paths.get(gameDir, "options.txt");
-        if (!Files.exists(optFile)) return ActionResult.fail("options.txt 不存在");
+        if (!Files.exists(optFile)) return ActionResult.fail(I18N.get("service.t0012"));
         try {
             List<String> lines = Files.readAllLines(optFile, StandardCharsets.UTF_8);
             boolean found = false;
@@ -132,9 +134,9 @@ public class FileService {
             }
             if (!found) lines.add(key + ":" + newValue);
             Files.write(optFile, lines, StandardCharsets.UTF_8);
-            return ActionResult.ok("已更新 " + key + " = " + newValue);
+            return ActionResult.ok(I18N.get("service.p0070", key + " = " + newValue));
         } catch (IOException e) {
-            return ActionResult.fail("写入失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("service.p0071", e.getMessage()));
         }
     }
 
@@ -165,7 +167,7 @@ public class FileService {
                 for (String key : profObj.keySet()) {
                     JsonObject prof = profObj.getAsJsonObject(key);
                     String name = prof.has("name") ? prof.get("name").getAsString() : key;
-                    String lastVer = prof.has("lastVersionId") ? prof.get("lastVersionId").getAsString() : "(未设置)";
+                    String lastVer = prof.has("lastVersionId") ? prof.get("lastVersionId").getAsString() : I18N.get("service.t0013");
                     profiles.put(name, lastVer);
                 }
             }
@@ -181,14 +183,14 @@ public class FileService {
     public static ActionResult openInExplorer(String path) {
         try {
             java.io.File file = new java.io.File(path);
-            if (!file.exists()) return ActionResult.fail("路径不存在 " + path);
+            if (!file.exists()) return ActionResult.fail(I18N.get("service.p0072", path));
             String os = System.getProperty("os.name").toLowerCase();
             if (os.contains("win")) Runtime.getRuntime().exec(new String[]{"explorer.exe", "/select,", file.getAbsolutePath()});
             else if (os.contains("mac")) Runtime.getRuntime().exec(new String[]{"open", file.getParent()});
             else Runtime.getRuntime().exec(new String[]{"xdg-open", file.getParent()});
-            return ActionResult.ok("已打开");
+            return ActionResult.ok(I18N.get("service.t0014"));
         } catch (IOException e) {
-            return ActionResult.fail("打开失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("service.p0073", e.getMessage()));
         }
     }
 
@@ -196,14 +198,14 @@ public class FileService {
     public static ActionResult openDirectory(String path) {
         try {
             java.io.File dir = new java.io.File(path);
-            if (!dir.isDirectory()) return ActionResult.fail("不是目录: " + path);
+            if (!dir.isDirectory()) return ActionResult.fail(I18N.get("service.p0074", path));
             String os = System.getProperty("os.name").toLowerCase();
             if (os.contains("win")) Runtime.getRuntime().exec(new String[]{"explorer.exe", dir.getAbsolutePath()});
             else if (os.contains("mac")) Runtime.getRuntime().exec(new String[]{"open", dir.getAbsolutePath()});
             else Runtime.getRuntime().exec(new String[]{"xdg-open", dir.getAbsolutePath()});
-            return ActionResult.ok("已打开目录");
+            return ActionResult.ok(I18N.get("service.t0015"));
         } catch (IOException e) {
-            return ActionResult.fail("打开失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("service.p0075", e.getMessage()));
         }
     }
 
@@ -214,9 +216,9 @@ public class FileService {
             if (os.contains("win")) Runtime.getRuntime().exec(new String[]{"cmd", "/c", "start", url});
             else if (os.contains("mac")) Runtime.getRuntime().exec(new String[]{"open", url});
             else Runtime.getRuntime().exec(new String[]{"xdg-open", url});
-            return ActionResult.ok("已打开浏览器");
+            return ActionResult.ok(I18N.get("service.t0016"));
         } catch (IOException e) {
-            return ActionResult.fail("打开失败: " + e.getMessage());
+            return ActionResult.fail(I18N.get("service.p0076", e.getMessage()));
         }
     }
 

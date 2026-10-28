@@ -1,5 +1,7 @@
 package com.example.starlight.util;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.listsaves.listsaves;
 
@@ -80,16 +82,16 @@ public final class ResourceScanner {
 
     /** 资源目录归属标签：全局目录返回“全局”，版本隔离目录返回版本名，其他自定义目录返回目录名 */
     public static String dirOriginLabel(Path dir, String gameDir) {
-        if (dir == null) return "全局";
+        if (dir == null) return I18N.get("util.t0027");
         Path versionsDir = Paths.get(gameDir, "versions");
         Path parent = dir.getParent();
         if (parent != null && parent.getParent() != null && parent.getParent().equals(versionsDir)) {
             return parent.getFileName().toString();
         }
         if (parent != null && parent.equals(Paths.get(gameDir))) {
-            return "全局";
+            return I18N.get("util.t0028");
         }
-        return dir.getFileName() != null ? dir.getFileName().toString() : "全局";
+        return dir.getFileName() != null ? dir.getFileName().toString() : I18N.get("util.t0029");
     }
 
 

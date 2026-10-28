@@ -8,6 +8,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ForgeProvider implements LoaderProvider {
+
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(ForgeProvider.class);
+
     public String name() { return "Forge"; }
     public String icon() { return ""; }
     public String fallbackUrl() { return "https://files.minecraftforge.net/"; }
@@ -22,7 +26,9 @@ public class ForgeProvider implements LoaderProvider {
                 String ver = VersionDownloadService.getJsonString(arr.get(0).getAsJsonObject(), "version");
                 return new LoaderVersion(name(), ver, true, getInstallerUrl(mcVersion, ver));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LOG.warn("Forge version query failed for {}: {}", mcVersion, e.getMessage());
+        }
         return new LoaderVersion(name(), null, false, null);
     }
 
@@ -35,7 +41,9 @@ public class ForgeProvider implements LoaderProvider {
             if (json == null) return list;
             JsonArray arr = new Gson().fromJson(json, JsonArray.class);
             if (arr != null) {
-                int maxShow = 30;
+                // 截断从 30 放宽到 200：老 Forge 推荐版（如 1.7.10 的 10.13.x）排在第 31 位
+                // 开外，此前永远搜不到；BMCLAPI 返回的全量 JSON 只有几十 KB
+                int maxShow = 200;
                 for (int i = 0; i < arr.size() && i < maxShow; i++) {
                     String ver = VersionDownloadService.getJsonString(arr.get(i).getAsJsonObject(), "version");
                     if (ver != null) {
@@ -43,7 +51,9 @@ public class ForgeProvider implements LoaderProvider {
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LOG.warn("Forge version list query failed for {}: {}", mcVersion, e.getMessage());
+        }
         return list;
     }
 

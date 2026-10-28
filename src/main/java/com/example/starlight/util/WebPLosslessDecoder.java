@@ -1,5 +1,7 @@
 package com.example.starlight.util;
 
+
+import com.example.starlight.util.I18N;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 
@@ -63,11 +65,11 @@ public final class WebPLosslessDecoder {
             boolean alphaUsed = br.readBits(1) != 0;
             int version = br.readBits(3);
             if (version != 0) return null;
-            debug("尺寸 " + width + "x" + height + " alpha=" + alphaUsed);
+            debug(I18N.get("util.p0061", width + "x" + height + " alpha=" + alphaUsed));
 
             int[] argb = new Decoder(br).decodeImage(width, height, true);
             if (argb == null) {
-                debug("decodeImage 返回 null");
+                debug(I18N.get("util.t0035"));
                 return null;
             }
             if (!alphaUsed) {
@@ -278,7 +280,7 @@ public final class WebPLosslessDecoder {
 
             int width = curW[0], height = curH[0];
             HuffmanGroup[] groups = readHuffmanCodes(width, height, colorCacheBits, level0);
-            if (groups == null) { debug("readHuffmanCodes 失败 " + width + "x" + height); return null; }
+            if (groups == null) { debug(I18N.get("util.p0062", width + "x" + height)); return null; }
             debug("Huffman 组数=" + groups.length + " 缓存位=" + colorCacheBits + " 图 " + width + "x" + height);
 
             int[] huffmanImage = null;
@@ -293,11 +295,11 @@ public final class WebPLosslessDecoder {
 
             int[] pixels = decodeImageData(groups, width, height, colorCacheBits,
                     huffmanImage, huffmanBits, huffmanXSize);
-            if (pixels == null) { debug("decodeImageData 失败 " + width + "x" + height); return null; }
+            if (pixels == null) { debug(I18N.get("util.p0063", width + "x" + height)); return null; }
 
             if (level0) {
                 if (debugEnabled()) {
-                    StringBuilder sb = new StringBuilder("变换链(定义顺序): ");
+                    StringBuilder sb = new StringBuilder(I18N.get("util.t0036"));
                     for (Transform t0 : transforms) sb.append("type=").append(t0.type)
                             .append("/bits=").append(t0.bits)
                             .append("/dataLen=").append(t0.data == null ? 0 : t0.data.length).append(" ");
@@ -468,7 +470,7 @@ public final class WebPLosslessDecoder {
                 }
                 debug("  规范码 alphabet=" + alphabetSize + " 非零符号=" + nonZero
                         + " 最长码=" + maxLen + " 码长和=" + total
-                        + (total == (1 << maxLen) ? " (完整树)" : " (不完整!)"));
+                        + (total == (1 << maxLen) ? I18N.get("util.t0044") : I18N.get("util.t0045")));
             }
             return HuffmanTree.build(codeLengths, alphabetSize);
         }
@@ -672,7 +674,7 @@ public final class WebPLosslessDecoder {
                 }
             }
             if (modeHist != null) {
-                StringBuilder sb = new StringBuilder("预测模式直方图 bits=" + t.bits + ": ");
+                StringBuilder sb = new StringBuilder(I18N.get("util.p0064", t.bits + ": "));
                 for (int m = 0; m < 16; m++) if (modeHist[m] > 0) sb.append(m).append("=").append(modeHist[m]).append(" ");
                 debug(sb.toString());
             }

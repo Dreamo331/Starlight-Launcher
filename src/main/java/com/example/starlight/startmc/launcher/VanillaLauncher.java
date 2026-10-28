@@ -3,6 +3,8 @@
 // 不需要特殊的 classpath 处理或模块路径。
 package com.example.starlight.startmc.launcher;
 
+
+import com.example.starlight.util.I18N;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +27,7 @@ public class VanillaLauncher extends BaseLauncher {
 
     @Override
     public int launch() throws IOException, InterruptedException {
-        writeLog("[模式] 原版 Minecraft", "INFO");
+        writeLog(I18N.get("launcher.t0026"), "INFO");
 
         // 确保占位符键已初始化
         if (placeholderKeys == null) buildPlaceholderKeys();
@@ -42,7 +44,7 @@ public class VanillaLauncher extends BaseLauncher {
         // 类路径：版本 JAR + 所有 libraries
         List<String> libs = getLibraries(true);
         String cp = formatClassPath(libs);
-        writeLog("类路径条目数: " + libs.size(), "INFO");
+        writeLog(I18N.get("launcher.p0064", libs.size()), "INFO");
 
         // 有效游戏数据目录（考虑版本隔离）
         String effectiveGameDir = launchInfo.resolveEffectiveGameDir().toString();
@@ -56,8 +58,8 @@ public class VanillaLauncher extends BaseLauncher {
         startArgs.addAll(buildGameArgs(effectiveGameDir));
 
         // 启动进程 //
-        writeLog("启动命令构建完成，正在启动 " + launchInfo.getVersion() + " ...", "INFO");
-        writeLog("日志文件: " + logFile, "INFO");
+        writeLog(I18N.get("launcher.p0065", launchInfo.getVersion() + " ..."), "INFO");
+        writeLog(I18N.get("launcher.p0066", logFile), "INFO");
 
         int exitCode = startProcessWithMonitoring(launchInfo.getJavaPath(), startArgs);
 

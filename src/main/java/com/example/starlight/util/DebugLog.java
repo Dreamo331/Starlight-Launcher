@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.util;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.newui.AppConfig;
 
 import java.time.LocalTime;
@@ -75,7 +77,7 @@ public final class DebugLog {
     /** 记录底层事件日志（如页面刷新）；调试模式关闭时忽略 */
     public static void log(String msg) {
         if (!AppConfig.DEBUG_MODE || msg == null || msg.isEmpty()) return;
-        String tag = AppConfig.CHINESE_LOG ? "[内部] " : "[APP] ";
+        String tag = AppConfig.CHINESE_LOG ? I18N.get("util.t0001") : "[APP] ";
         emit(tag + msg);
     }
 
@@ -112,8 +114,8 @@ public final class DebugLog {
         if (!AppConfig.DEBUG_MODE) return;
         boolean zh = AppConfig.CHINESE_LOG;
         String dir = direction
-                ? (zh ? "发送" : "SEND")
-                : (zh ? "接收" : "RECV");
+                ? (zh ? I18N.get("util.t0037") : "SEND")
+                : (zh ? I18N.get("util.t0038") : "RECV");
         String methodPart = (method == null || method.isEmpty()) ? "" : method + " ";
         String statusPart = status > 0 ? " " + status + (zh ? " " : " ") : "";
         String sizePart = formatBytes(bytes);
@@ -122,24 +124,24 @@ public final class DebugLog {
                 : "";
         String detail = content == null ? "" : maskSensitive(content);
         if (detail.length() > MAX_CONTENT_LEN) {
-            detail = detail.substring(0, MAX_CONTENT_LEN) + (zh ? "…(已截断)" : "…(truncated)");
+            detail = detail.substring(0, MAX_CONTENT_LEN) + (zh ? I18N.get("util.t0002") : "…(truncated)");
         }
         StringBuilder sb = new StringBuilder();
-        sb.append(zh ? "[网络 " : "[NET ")
+        sb.append(zh ? I18N.get("util.t0039") : "[NET ")
           .append(dir).append("] ")
           .append(methodPart).append(url)
           .append(statusPart)
-          .append(" | ").append(zh ? "数据包 " : "pkt ").append(sizePart)
+          .append(" | ").append(zh ? I18N.get("util.t0040") : "pkt ").append(sizePart)
           .append(costPart);
         if (!detail.isEmpty()) {
-            sb.append(zh ? "\n    内容: " : "\n    body: ").append(detail);
+            sb.append(zh ? I18N.get("util.t0003") : "\n    body: ").append(detail);
         }
         emit(sb.toString());
     }
 
     /** 字节大小格式化：B / KB / MB */
     private static String formatBytes(long bytes) {
-        if (bytes < 0) return AppConfig.CHINESE_LOG ? "未知" : "unknown";
+        if (bytes < 0) return AppConfig.CHINESE_LOG ? I18N.get("util.t0004") : "unknown";
         if (bytes < 1024) return bytes + " B";
         if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
         return String.format("%.2f MB", bytes / (1024.0 * 1024.0));

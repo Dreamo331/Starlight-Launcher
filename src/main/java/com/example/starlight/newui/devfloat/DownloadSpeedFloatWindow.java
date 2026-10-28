@@ -1,6 +1,8 @@
 /** (C) Copyright 2026 Starlight. All rights reserved. */
 package com.example.starlight.newui.devfloat;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.util.FormatUtils;
 import com.example.starlight.util.NetTrafficStats;
 
@@ -26,7 +28,7 @@ public final class DownloadSpeedFloatWindow extends DevFloatWindow {
     private long lastNanos = -1;
 
     private DownloadSpeedFloatWindow() {
-        super("下载速度", 344, 226);
+        super(I18N.get("devfloat.t0001"), 344, 226);
     }
 
     @Override
@@ -34,9 +36,9 @@ public final class DownloadSpeedFloatWindow extends DevFloatWindow {
         // 本方法在父类构造器内被回调，子类字段初始化器此时尚未执行——控件必须在这里创建
         chart = new FloatLineChart(320, 160);
         summary = new Label();
-        chart.addSeries("速度", Color.web("#22d3ee"), v -> FormatUtils.formatSpeed(v));
+        chart.addSeries(I18N.get("devfloat.t0002"), Color.web("#22d3ee"), v -> FormatUtils.formatSpeed(v));
         summary.setStyle("-fx-text-fill: #d1d5db; -fx-font-size: 11px; -fx-font-family: 'Consolas', monospace;");
-        root.getChildren().addAll(chart, summary, dimLabel("全局令牌桶字节差分，1s 一点；覆盖新下载引擎"));
+        root.getChildren().addAll(chart, summary, dimLabel(I18N.get("devfloat.t0003")));
     }
 
     @Override
@@ -51,7 +53,7 @@ public final class DownloadSpeedFloatWindow extends DevFloatWindow {
         lastBytes = bytes;
         lastNanos = now;
         chart.push(bps);
-        summary.setText("当前 " + FormatUtils.formatSpeed(bps) + "  ·  累计 " + FormatUtils.formatFileSize(bytes));
+        summary.setText(I18N.get("dsfw.r0001", FormatUtils.formatSpeed(bps), FormatUtils.formatFileSize(bytes)));
     }
 
     @Override

@@ -197,6 +197,9 @@ public final class ChunkedDownloader {
                 }
                 // 206 Partial Content
                 long totalRead = 0L;
+                long windowStartMs = System.currentTimeMillis();
+                long bytesInWindow = 0L;
+                long windowMs = DownloadSettings.getStallWindowMs(lastResort);
                 try (InputStream in = conn.getInputStream();
                      OutputStream out = Files.newOutputStream(chunkFile,
                              StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
@@ -210,6 +213,21 @@ public final class ChunkedDownloader {
                         out.write(buffer, 0, read);
                         NetTrafficStats.recordBytes(read); // 全局流量统计（下载速度悬浮窗）
                         totalRead += read;
+                        bytesInWindow += read;
+                        // 速率型停滞判定：数据在动就继续（慢但可用），滴流/不动才判卡死。
+                        // 与单连接路径同一套语义（DownloadSettings.isStalled），避免首包慢被误杀。
+                        long nowMs = System.currentTimeMillis();
+                        long elapsed = nowMs - windowStartMs;
+                        if (elapsed >= windowMs) {
+                            if (DownloadSettings.isStalled(elapsed, bytesInWindow)) {
+                                log.warn("分片停滞（{}s 窗口内仅 {} 字节），放弃该源: {} 段 {}",
+                                        elapsed / 1000L, bytesInWindow, urlStr, index);
+                                deleteQuietly(chunkFile);
+                                return new ChunkResult(ChunkOutcome.RETRY, false);
+                            }
+                            windowStartMs = nowMs;
+                            bytesInWindow = 0L;
+                        }
                     }
                 }
                 DebugLog.http(false, null, current, code, totalRead, "[分片]", -1L);
@@ -237,11 +255,16 @@ public final class ChunkedDownloader {
         }
     }
 
-    /** 读超时：最后候选放宽（与补全链路单连接下载同一套分级） */
+    /**
+     * socket 读超时：作为「连接彻底无响应」的兜底，<b>不承担</b>慢速判定。
+     *
+     * <p>2026-10-20 修正：原来首试用 5 秒（{@code getFirstTryStallMs()}），与实测 5.7~8.85 秒的
+     * 首包延迟重叠，导致合法慢响应在建连阶段就被判停滞。现在统一用 {@link DownloadSettings#getStallTimeoutMs()}
+     * （默认 15s，用户可调），慢速/滴流由正文循环里的速率窗口（{@link DownloadSettings#isStalled}）负责。
+     */
     private static int readTimeoutMs(boolean lastResort) {
-        return lastResort
-                ? DownloadSettings.getStallTimeoutMs() * 2
-                : DownloadSettings.getFirstTryStallMs();
+        int base = DownloadSettings.getStallTimeoutMs();
+        return lastResort ? base * 2 : base;
     }
 
     private static void cleanupChunks(Path dir, String baseName, int chunks) {

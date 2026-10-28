@@ -1,5 +1,7 @@
 package com.example.starlight.newui.ai;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.config.AiConfig;
 
 import javafx.scene.image.Image;
@@ -66,17 +68,17 @@ public final class AiProviders {
                     "moonshot.png",
                     List.of("moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k",
                             "kimi-k2-0711-preview")),
-            new Provider("zhipu", "智谱 GLM", "https://open.bigmodel.cn/api/paas/v4", "glm-4-flash",
+            new Provider("zhipu", I18N.get("ai.t0018"), "https://open.bigmodel.cn/api/paas/v4", "glm-4-flash",
                     "zhipu.png",
                     List.of("glm-4-flash", "glm-4-air", "glm-4-plus", "glm-4-long", "glm-z1-air")),
-            new Provider("qwen", "通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            new Provider("qwen", I18N.get("ai.t0019"), "https://dashscope.aliyuncs.com/compatible-mode/v1",
                     "qwen-plus", "qwen.png",
                     List.of("qwen-plus", "qwen-turbo", "qwen-max", "qwen-long",
                             "qwen2.5-72b-instruct")),
-            new Provider("doubao", "豆包", "https://ark.cn-beijing.volces.com/api/v3", "doubao-pro-32k",
+            new Provider("doubao", I18N.get("ai.t0020"), "https://ark.cn-beijing.volces.com/api/v3", "doubao-pro-32k",
                     "doubao.png",
                     List.of("doubao-pro-32k", "doubao-pro-128k", "doubao-lite-32k")),
-            new Provider("siliconflow", "硅基流动", "https://api.siliconflow.cn/v1",
+            new Provider("siliconflow", I18N.get("ai.t0021"), "https://api.siliconflow.cn/v1",
                     "Qwen/Qwen2.5-7B-Instruct", "siliconflow.png",
                     List.of("Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-72B-Instruct",
                             "deepseek-ai/DeepSeek-V3")),
@@ -91,19 +93,19 @@ public final class AiProviders {
             new Provider("minimax", "MiniMax", "https://api.minimaxi.com/v1", "MiniMax-Text-01",
                     "minimax.png",
                     List.of("MiniMax-Text-01", "MiniMax-M1", "abab6.5s-chat")),
-            new Provider("hunyuan", "腾讯混元", "https://api.hunyuan.cloud.tencent.com/v1",
+            new Provider("hunyuan", I18N.get("ai.t0022"), "https://api.hunyuan.cloud.tencent.com/v1",
                     "hunyuan-turbos-latest", "hunyuan.png",
                     List.of("hunyuan-turbos-latest", "hunyuan-turbo-latest", "hunyuan-large-latest")),
-            new Provider("wenxin", "文心一言", "https://qianfan.baidubce.com/v2",
+            new Provider("wenxin", I18N.get("ai.t0023"), "https://qianfan.baidubce.com/v2",
                     "ernie-4.0-8k", "wenxin.png",
                     List.of("ernie-4.0-8k", "ernie-4.0-turbo-8k", "ernie-speed-128k")),
-            new Provider("spark", "讯飞星火", "https://spark-api-open.xf-yun.com/v1", "generalv3.5",
+            new Provider("spark", I18N.get("ai.t0024"), "https://spark-api-open.xf-yun.com/v1", "generalv3.5",
                     "spark.png",
                     List.of("generalv3.5", "4.0Ultra", "max-32k", "lite")),
-            new Provider("stepfun", "阶跃星辰", "https://api.stepfun.com/v1", "step-1-8k",
+            new Provider("stepfun", I18N.get("ai.t0025"), "https://api.stepfun.com/v1", "step-1-8k",
                     "stepfun.png",
                     List.of("step-1-8k", "step-1-32k", "step-2-16k")),
-            new Provider("baichuan", "百川智能", "https://api.baichuan-ai.com/v1", "Baichuan4",
+            new Provider("baichuan", I18N.get("ai.t0026"), "https://api.baichuan-ai.com/v1", "Baichuan4",
                     "baichuan.png",
                     List.of("Baichuan4", "Baichuan3-Turbo", "Baichuan3-Turbo-128k")));
 

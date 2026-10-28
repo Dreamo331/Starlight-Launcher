@@ -1,5 +1,7 @@
 // 星光启动器\src\main\java\com\example\starlight\download\engine\MultiThreadDownloader.java
 package com.example.starlight.download.engine;
+
+import com.example.starlight.util.I18N;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -315,7 +317,7 @@ public class MultiThreadDownloader {
                 int responseCode = conn.getResponseCode();
                 if (responseCode != HttpURLConnection.HTTP_PARTIAL && responseCode != HttpURLConnection.HTTP_OK) {
                     return new DownloadResult(false, partFilePath, 0,
-                            "服务器返回错误码: " + responseCode);
+                            I18N.get("engine.p0012", responseCode));
                 }
 
                 // 检查服务器返回的Content-Range确认区间

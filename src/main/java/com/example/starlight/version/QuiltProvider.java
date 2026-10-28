@@ -15,6 +15,10 @@ import java.util.List;
  * 返回格式与 Fabric Loader API 一致
  */
 public class QuiltProvider implements LoaderProvider {
+
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(QuiltProvider.class);
+
     private static final String QUILT_META = "https://meta.quiltmc.org/v3/versions/loader";
 
     public String name() { return "Quilt"; }
@@ -40,7 +44,7 @@ public class QuiltProvider implements LoaderProvider {
             JsonArray arr = new Gson().fromJson(json, JsonArray.class);
             if (arr == null) return list;
 
-            int maxShow = 20;
+            int maxShow = 200;   // 与其他 Provider 一致放宽：老版本交给 UI 搜索，不在源头砍掉
             for (int i = 0; i < arr.size() && i < maxShow; i++) {
                 JsonObject entry = arr.get(i).getAsJsonObject();
                 if (entry == null) continue;
@@ -55,7 +59,9 @@ public class QuiltProvider implements LoaderProvider {
                 String launchMetaUrl = QUILT_META + "/" + mcVersion + "/" + ver;
                 list.add(new LoaderVersion(name(), ver, true, launchMetaUrl));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LOG.warn("Quilt version list query failed for {}: {}", mcVersion, e.getMessage());
+        }
         return list;
     }
 

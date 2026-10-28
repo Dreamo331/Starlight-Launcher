@@ -1,5 +1,7 @@
 package com.example.starlight.download.mod;
 
+
+import com.example.starlight.util.I18N;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -280,7 +282,7 @@ public final class SourceHealth {
      */
     public void recordTimeout(String url, String reason) {
         report(url, consecutiveTimeout, DEFAULT_TIMEOUT_THRESHOLD,
-                DEFAULT_TIMEOUT_COOLDOWN_MS, "请求超时", reason);
+                DEFAULT_TIMEOUT_COOLDOWN_MS, I18N.get("mod.t0007"), reason);
     }
 
     /**
@@ -294,7 +296,31 @@ public final class SourceHealth {
      */
     public void recordEmpty(String url, String reason) {
         report(url, consecutiveEmpty, DEFAULT_EMPTY_THRESHOLD,
-                DEFAULT_EMPTY_COOLDOWN_MS, "空正文(200)", reason);
+                DEFAULT_EMPTY_COOLDOWN_MS, I18N.get("mod.t0008"), reason);
+    }
+
+    /**
+     * 端点预探测判定「整段无响应」时直接拉黑（2026-10-20）。
+     *
+     * <p>与 {@link #recordTimeout} 的区别：预探测是<b>一次</b>探测就能确定的结论
+     * （用极短超时打一个必然 404 的假路径，连 404 都回不来说明该地址段整体不干活），
+     * 不应该等「连续 3 次」才生效——那样前两个文件仍要各白等一轮。
+     * 冷却时间仍与超时拉黑一致，源恢复后会自动放行探测。
+     *
+     * @param url    探测用的地址段 URL
+     * @param reason 触发来源说明（写进日志）
+     */
+    public void recordEndpointDead(String url, String reason) {
+        String key = blockKey(url);
+        if (key == null) return;
+        blockedUntil.put(key, System.currentTimeMillis() + DEFAULT_TIMEOUT_COOLDOWN_MS);
+        log.warn("端点预探测确认该地址段不可用，{}ms 内整段跳过: {}（来源: {}）",
+                DEFAULT_TIMEOUT_COOLDOWN_MS, key, reason);
+    }
+
+    /** 供诊断 / 预探测使用：暴露「这段 URL 会落到哪个拉黑键」 */
+    public static String debugBlockKey(String url) {
+        return blockKey(url);
     }
 
     // 2026-09-30 下载等待池：软计数 / 源排序数据 / 批次慢源拉黑 //
@@ -533,10 +559,64 @@ public final class SourceHealth {
         }
     }
 
+    /**
+     * 内容寻址端点前缀（2026-10-20 修复）。
+     *
+     * <p>{@code /assets/<sha1前两位>/<sha1>}、{@code /libraries/<group>/<artifact>/<ver>/<file>}、
+     * {@code /version/<id>/client} 这几类路径的<b>下一级目录是内容散列或坐标</b>，本身不携带
+     * 「这个镜像的这段服务是否可用」的信息。
+     *
+     * <p>旧实现按「到最后一个斜杠」取前缀，于是每个 sha1 前两位各成一个 bin
+     * （{@code .../assets/d3/}、{@code .../assets/0b/}…最多 256 个），把 {@link #MAX_TRACKED}
+     * 撑满后互相淘汰，熔断器在系统性故障下永远合不上——表现为<b>每个新前缀的资产都先撞一次死镜像</b>。
+     * 真实日志：90 秒只下完 255 个文件，71 条「源停滞」告警。
+     *
+     * <p>现在把这些段收敛成端点级前缀（{@code .../assets/}、{@code .../libraries/}），
+     * 连续 3 次超时即可整段跳过 60 秒，而不是一个 bin 一个 bin 地重新学。
+     */
+    private static final java.util.Set<String> CONTENT_ADDRESSED_SEGMENTS =
+            java.util.Set.of("assets", "libraries", "version", "maven", "objects");
+
     private static String pathPrefix(String path) {
         if (path == null || path.isEmpty()) return "/";
+        String[] segs = path.split("/");
+        // segs[0] 为空串（路径以 '/' 开头），真实段从 1 开始
+        for (int i = 1; i < segs.length; i++) {
+            if (CONTENT_ADDRESSED_SEGMENTS.contains(segs[i].toLowerCase(java.util.Locale.ROOT))) {
+                // 收敛到「内容寻址端点的目录」为止，例如 /assets/ 、/libraries/
+                StringBuilder sb = new StringBuilder();
+                for (int j = 1; j <= i; j++) {
+                    sb.append('/').append(segs[j]);
+                }
+                sb.append('/');
+                return sb.toString();
+            }
+        }
+        // Mojang 官方资产域名用的是顶级对象布局 /<2位散列>/<40位 sha1>
+        // （resources.download.minecraft.net/d3/d35f…），没有 "assets" 段可依，按形状识别。
+        if (segs.length == 3 && isShortBucket(segs[1]) && isSha1Like(segs[2])) {
+            return "/";
+        }
         int lastSlash = path.lastIndexOf('/');
         return lastSlash <= 0 ? "/" : path.substring(0, lastSlash + 1);
+    }
+
+    /** 是否是「2 位十六进制」分桶目录 */
+    private static boolean isShortBucket(String seg) {
+        if (seg == null || seg.length() != 2) return false;
+        for (int i = 0; i < 2; i++) {
+            if (Character.digit(seg.charAt(i), 16) < 0) return false;
+        }
+        return true;
+    }
+
+    /** 是否是 40 位十六进制 sha1 */
+    private static boolean isSha1Like(String seg) {
+        if (seg == null || seg.length() != 40) return false;
+        for (int i = 0; i < 40; i++) {
+            if (Character.digit(seg.charAt(i), 16) < 0) return false;
+        }
+        return true;
     }
 
     /**

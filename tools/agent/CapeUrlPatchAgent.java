@@ -17,6 +17,18 @@
  *   java.lang.SecurityException: class "dut"'s signer information does not
  *   match signer information of other classes in the same package
  *   （最小复现见 temp/signer-repro，Bad/Fixed 两场景）。
+ *
+ * 重新打包（改完本文件后必须做，且产物路径固定为 lib/cape-url-patch-agent.jar）：
+ * <pre>
+ *   javac --release 17 -d temp\agent-build tools\agent\CapeUrlPatchAgent.java
+ *   @echo Premain-Class: com.example.starlight.agent.CapeUrlPatchAgent> temp\agent-mf.txt
+ *   @echo Can-Retransform-Classes: true>> temp\agent-mf.txt
+ *   jar --create --file lib\cape-url-patch-agent.jar --manifest temp\agent-mf.txt -C temp\agent-build .
+ * </pre>
+ * 打完包**不要再放回无包名类**。单 EXE 形态下本 jar 作为内置资源分发
+ * （pom 的 &lt;resource&gt; 把 lib/ 打进 assets/agent），运行期由
+ * CapeAgentInstaller 释放到 ~/.starlight/；重建后请同步
+ * CapeAgentInstaller.EXPECTED_SHA256，否则「内置资源缺失时的联网兜底」会校验失败。
  */
 package com.example.starlight.agent;
 

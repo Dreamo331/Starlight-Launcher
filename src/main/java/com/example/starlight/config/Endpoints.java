@@ -1,5 +1,7 @@
 package com.example.starlight.config;
 
+import com.example.starlight.util.I18N;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -10,6 +12,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -84,14 +88,14 @@ public final class Endpoints {
         try (InputStream in = Endpoints.class.getResourceAsStream(resource)) {
             if (in == null) {
                 if (required) {
-                    throw new IllegalStateException("缺少内置资源 " + resource + "（打包配置遗漏？）");
+                    throw new IllegalStateException(I18N.get("endp.r0001", resource));
                 }
                 return null;
             }
             return JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8))
                     .getAsJsonObject();
         } catch (IOException e) {
-            throw new IllegalStateException("读取 " + resource + " 失败", e);
+            throw new IllegalStateException(I18N.get("endp.r0002", resource), e);
         }
     }
 
@@ -127,7 +131,34 @@ public final class Endpoints {
     }
 
     private static IllegalStateException missing(String path) {
-        return new IllegalStateException(RESOURCE + " 缺少配置项 " + path);
+        return new IllegalStateException(I18N.get("endp.r0003", RESOURCE, path));
+    }
+
+    /**
+     * 按点路径取字符串值，缺失时返回默认值（必填项请用 {@link #str(String)}）。
+     *
+     * <p>用于后续新增、老配置文件里可能还不存在的可选键：不写默认值就会让
+     * {@code ~/.starlight/endpoints.local.json} 这种历史覆盖文件把新键顶成「缺失」。</p>
+     */
+    private static String optStr(String path, String fallback) {
+        try {
+            JsonObject node = Holder.ROOT;
+            String[] parts = path.split("\\.");
+            for (int i = 0; i < parts.length - 1; i++) {
+                if (!node.has(parts[i]) || !node.get(parts[i]).isJsonObject()) {
+                    return fallback;
+                }
+                node = node.getAsJsonObject(parts[i]);
+            }
+            String leaf = parts[parts.length - 1];
+            if (!node.has(leaf) || node.get(leaf).isJsonNull()) {
+                return fallback;
+            }
+            String value = node.get(leaf).getAsString();
+            return value == null ? fallback : value;
+        } catch (RuntimeException e) {
+            return fallback;
+        }
     }
 
     // 密钥（keys 节） //
@@ -206,14 +237,23 @@ public final class Endpoints {
         return str("services.logUploadUrl");
     }
 
-    /** FRP 联机控制服务器主机名 */
-    public static String frpControlHost() {
-        return str("services.frpControlHost");
+    /**
+     * SakuraFrp 开放 API 基址（联机页 FRP 隧道管理）。
+     *
+     * <p>第三方服务地址单一真源在 {@code /assets/endpoints.json}，业务代码不写字面量。
+     */
+    public static String sakuraFrpApiBase() {
+        return str("services.sakuraFrpApiBase");
     }
 
-    /** FRP 联机控制服务器端口 */
-    public static int frpControlPort() {
-        return Integer.parseInt(str("services.frpControlPort"));
+    /** SakuraFrp 官网（账号注册、访问密钥获取入口） */
+    public static String sakuraFrpSiteUrl() {
+        return str("services.sakuraFrpSiteUrl");
+    }
+
+    /** SakuraFrp 访问密钥页面（联机页「获取密钥」按钮打开） */
+    public static String sakuraFrpTokenUrl() {
+        return str("services.sakuraFrpTokenUrl");
     }
 
     /** 爱发电赞助页链接 */
@@ -224,5 +264,59 @@ public final class Endpoints {
     /** 色盲辅助矫正工具（ColorBlindOverlay.exe）的下载地址 */
     public static String colorBlindOverlayUrl() {
         return str("services.colorBlindOverlayUrl");
+    }
+
+    /**
+     * 披风 URL 补丁 agent（{@code cape-url-patch-agent.jar}）的兜底下载地址。
+     *
+     * <p>正常路径是「从 exe 内置资源释放」，只有 exe 没打到该资源时才会用到本地址。
+     * 允许为空串：为空即视为「不做联网兜底」，披风注入直接跳过。</p>
+     */
+    public static String capeAgentUrl() {
+        return optStr("services.capeAgentUrl", "");
+    }
+
+    /**
+     * 第三方（外置登录）皮肤站预设：每项 {@code {名称, Yggdrasil API 地址, 官网注册页}}。
+     *
+     * <p>地址单一真源在 {@code /assets/endpoints.json} 的 {@code services.thirdPartyPresets}，
+     * 用户级覆盖（{@code ~/.starlight/endpoints.local.json}）同样生效——和其它第三方地址一样，
+     * 页面里不写字面量。预设只用于填充「第三方登录」的地址下拉框，<b>选中不发起任何请求</b>；
+     * 真正的网络请求由用户点击登录触发。登记见 docs/第三方声明第四节与 docs/隐私政策 3.3。
+     *
+     * <p>配置缺失或被本地覆盖写坏时返回空列表（页面退化为只能手动填写地址），不抛异常。
+     */
+    public static List<String[]> thirdPartyPresets() {
+        List<String[]> presets = new ArrayList<>();
+        try {
+            JsonObject services = Holder.ROOT.getAsJsonObject("services");
+            if (services == null || !services.has("thirdPartyPresets")) return presets;
+            JsonElement node = services.get("thirdPartyPresets");
+            if (node == null || !node.isJsonArray()) return presets;
+            for (JsonElement el : node.getAsJsonArray()) {
+                if (el == null || !el.isJsonObject()) continue;
+                JsonObject entry = el.getAsJsonObject();
+                String name = nonBlank(entry, "name");
+                String api = nonBlank(entry, "api");
+                if (name == null || api == null) continue;
+                String register = nonBlank(entry, "register");
+                presets.add(new String[]{name, api, register == null ? "" : register});
+            }
+        } catch (RuntimeException ignored) {
+            // 预设读不出来不影响第三方登录本身：页面仍可手动填写 API 地址
+            return presets;
+        }
+        return presets;
+    }
+
+    /** 取对象里的非空字符串字段；缺失、JSON null 或空白都返回 null */
+    private static String nonBlank(JsonObject obj, String key) {
+        if (obj == null || !obj.has(key) || obj.get(key).isJsonNull()) return null;
+        try {
+            String value = obj.get(key).getAsString();
+            return value == null || value.isBlank() ? null : value;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 }

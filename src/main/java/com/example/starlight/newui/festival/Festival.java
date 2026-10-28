@@ -1,5 +1,7 @@
 package com.example.starlight.newui.festival;
 
+import com.example.starlight.util.I18N;
+
 /**
  * 一个节日的定义（数据驱动）：日期规则、问候语、按钮配色、图标、灯笼色。
  *
@@ -48,6 +50,6 @@ public final class Festival {
 
     /** 启动按钮文案 */
     public String launchLabel() {
-        return name + "限定 · 启动游戏";
+        return I18N.get("fest.r0001", name);
     }
 }

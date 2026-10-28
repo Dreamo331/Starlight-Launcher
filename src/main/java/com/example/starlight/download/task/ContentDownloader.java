@@ -1,5 +1,7 @@
 package com.example.starlight.download.task;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.ModsApi.RemoteMod;
 import com.example.starlight.download.engine.HttpDownloadEngine;
 import com.example.starlight.modpack.PackFile;
@@ -118,7 +120,7 @@ public final class ContentDownloader {
             HttpDownloadEngine.downloadContentFile(ver, zipFile, progress, cancel);
 
             if (stageCb != null) {
-                stageCb.accept("正在解压...");
+                stageCb.accept(I18N.get("task.t0001"));
             }
             Path extractDir = tempDir.resolve("extracted");
             Files.createDirectories(extractDir);
@@ -212,7 +214,7 @@ public final class ContentDownloader {
                                     progress.accept(Math.max(0, Math.min(99, overall)));
                                 }
                                 if (fileCb != null) {
-                                    fileCb.accept("下载整合包文件 " + Math.min(done + 1, total) + "/" + total);
+                                    fileCb.accept(I18N.get("task.p0075", Math.min(done + 1, total) + "/" + total));
                                 }
                             }, cancel);
                 } catch (IOException e) {
@@ -240,7 +242,7 @@ public final class ContentDownloader {
                         if (cause instanceof IOException ioe) {
                             dlError.compareAndSet(null, ioe);
                         } else {
-                            dlError.compareAndSet(null, new IOException("整合包文件下载线程异常: " + cause, cause));
+                            dlError.compareAndSet(null, new IOException(I18N.get("task.p0076", cause), cause));
                         }
                     }
                 }
@@ -250,8 +252,7 @@ public final class ContentDownloader {
         }
         IOException err = dlError.get();
         if (err != null) {
-            throw new IOException("整合包文件下载失败（已成功 "
-                    + (total - failedFiles.get()) + "/" + total + "）: " + err.getMessage(), err);
+            throw new IOException(I18N.get("task.p0077", (total - failedFiles.get()) + "/" + total + "）: " + err.getMessage()), err);
         }
     }
 }

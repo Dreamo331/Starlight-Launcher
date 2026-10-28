@@ -1,5 +1,7 @@
 package com.example.starlight.listjava;
 
+
+import com.example.starlight.util.I18N;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -114,7 +116,7 @@ public final class JavaCacheManager {
                 // 校验 java.exe 仍存在：任一失效即整体视为缓存过期（可能有新装/卸载的 Java）
                 Path javaExe = Paths.get(homePath, "bin", "java.exe");
                 if (!Files.isExecutable(javaExe)) return null;
-                String version = obj.has("version") ? obj.get("version").getAsString() : "未知";
+                String version = obj.has("version") ? obj.get("version").getAsString() : I18N.get("listjava.t0004");
                 String vendor = obj.has("vendor") && !obj.get("vendor").isJsonNull()
                         ? obj.get("vendor").getAsString() : null;
                 boolean isJDK = obj.has("isJDK") && obj.get("isJDK").getAsBoolean();

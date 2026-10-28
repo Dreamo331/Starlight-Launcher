@@ -57,6 +57,9 @@ public final class AppIcons {
      */
     private static final Map<String, String> BRAND = new ConcurrentHashMap<>();
 
+    /** 位图品牌图标（PNG，如微软四色 logo）：名字 → classpath 资源路径。彩色位图不重着色，按原图显示 */
+    private static final Map<String, String> IMAGE = new ConcurrentHashMap<>();
+
     /** 描边宽度：Lucide 默认 2，缩放后随尺寸等比变化 */
     private static final double STROKE_WIDTH = 2.0;
 
@@ -89,6 +92,11 @@ public final class AppIcons {
         } catch (Exception ignored) {
             // 图标读不出来就不显示图标，不抛异常
         }
+    }
+
+    /** 登记位图品牌图标（彩色 logo 不能按文字色重着色）；资源缺失时静默跳过 */
+    private static void loadImage(String name, String resource) {
+        if (AppIcons.class.getResource(resource) != null) IMAGE.put(name, resource);
     }
 
     static {
@@ -172,6 +180,8 @@ public final class AppIcons {
                 "M7 8A5 5 0 1 0 17 8A5 5 0 1 0 7 8zM20 21a8 8 0 0 0-16 0");
         put("user",
                 "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M8 7A4 4 0 1 0 16 7A4 4 0 1 0 8 7z");
+        put("user-plus",
+                "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7A4 4 0 1 0 13 7A4 4 0 1 0 5 7zM19 8v6M22 11h-6");
         put("user-cog",
                 "M10 15H6a4 4 0 0 0-4 4v2M14.305 16.53l.923-.382M15.228 13.852l-.923-.383M16.852 12.228l-.383-.923M16.852 17.772l-.383.924M19.148 12.228l.383-.923M19.53 18.696l-.382-.924M20.772 13.852l.924-.383M20.772 16.148l.924.383M15 15A3 3 0 1 0 21 15A3 3 0 1 0 15 15zM5 7A4 4 0 1 0 13 7A4 4 0 1 0 5 7z");
         put("view",
@@ -330,12 +340,15 @@ public final class AppIcons {
         // 品牌 logo：直接吃 src/main/resources/svg 下的官方 SVG 文件
         loadBrand("github", "/svg/GitHub_light.svg");
         loadBrand("gitee", "/svg/gitee_logo_black.svg");
+        loadImage("microsoft", "/images/microsoft.png");
+        // Bing 官方 logo（顶部搜索胶囊用）：已去白底、裁边成 256×256 透明 PNG
+        loadImage("bing", "/images/bing.png");
     }
 
     /** 该名字是否已有可用图标 */
     public static boolean has(String name) {
         if (name == null) return false;
-        if (BRAND.containsKey(name)) return true;
+        if (BRAND.containsKey(name) || IMAGE.containsKey(name)) return true;
         String p = STROKE.get(name);
         return p != null && !p.isBlank();
     }
@@ -358,6 +371,18 @@ public final class AppIcons {
         if (has(name)) {
             Paint paint = color != null ? color : DEFAULT_COLOR;
             double scale = size / VIEW_BOX;
+
+            String imageResource = IMAGE.get(name);
+            if (imageResource != null) {
+                javafx.scene.image.ImageView view = new javafx.scene.image.ImageView(
+                        new javafx.scene.image.Image(imageResource));
+                view.setFitWidth(size);
+                view.setFitHeight(size);
+                view.setPreserveRatio(true);
+                view.setSmooth(true);
+                holder.getChildren().add(view);
+                return holder;
+            }
 
             String brandD = BRAND.get(name);
             if (brandD != null) {
@@ -485,6 +510,7 @@ public final class AppIcons {
             if (e.getValue() != null && !e.getValue().isBlank()) set.add(e.getKey());
         }
         set.addAll(BRAND.keySet());
+        set.addAll(IMAGE.keySet());
         return set;
     }
 }

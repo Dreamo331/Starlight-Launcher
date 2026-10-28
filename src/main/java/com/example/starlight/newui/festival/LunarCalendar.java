@@ -1,5 +1,7 @@
 package com.example.starlight.newui.festival;
 
+
+import com.example.starlight.util.I18N;
 import java.time.LocalDate;
 
 /**
@@ -93,7 +95,7 @@ public final class LunarCalendar {
 
         @Override
         public String toString() {
-            return year + "-" + (leap ? "闰" : "") + month + "-" + day;
+            return year + "-" + (leap ? I18N.get("festival.t0001") : "") + month + "-" + day;
         }
     }
 

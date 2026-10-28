@@ -1,5 +1,7 @@
 package com.example.starlight.pluginapi.server;
 
+
+import com.example.starlight.util.I18N;
 import com.example.starlight.pluginapi.API;
 import com.example.starlight.pluginapi.ApiException;
 import com.example.starlight.pluginapi.ApiRequest;
@@ -125,7 +127,7 @@ public final class PluginApiServer {
      */
     public synchronized void start() throws IOException {
         if (server != null) {
-            throw new IllegalStateException("HTTP 服务已启动，请勿重复调用 start()");
+            throw new IllegalStateException(I18N.get("server.t0001"));
         }
 
         // 第 0 步：注册内置功能类（SystemPing / Region） //
@@ -245,7 +247,7 @@ public final class PluginApiServer {
             LOGGER.info("端口文件已写入: " + file.toAbsolutePath() + " -> " + port);
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE,
-                    "写入端口文件失败（HTTP 服务继续运行，插件将无法发现 API 端口）: " + file, e);
+                    I18N.get("server.p0005", file), e);
         }
     }
 
@@ -260,7 +262,7 @@ public final class PluginApiServer {
      */
     private void handleHandshake(HttpExchange exchange) throws IOException {
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-            sendJson(exchange, 405, errorJson(405, "握手端点仅支持 POST"));
+            sendJson(exchange, 405, errorJson(405, I18N.get("server.t0002")));
             return;
         }
 
@@ -269,13 +271,13 @@ public final class PluginApiServer {
         try {
             req = MAPPER.readValue(body, HandshakeRequest.class);
         } catch (Exception e) {
-            sendJson(exchange, 400, errorJson(400, "无效的握手请求 JSON: " + e.getMessage()));
+            sendJson(exchange, 400, errorJson(400, I18N.get("server.p0006", e.getMessage())));
             return;
         }
 
         // 1. 必填字段校验 //
         if (isBlank(req.pluginId) || isBlank(req.pluginName) || isBlank(req.pluginVersion)) {
-            sendJson(exchange, 400, errorJson(400, "plugin_id / plugin_name / plugin_version 不能为空"));
+            sendJson(exchange, 400, errorJson(400, I18N.get("server.t0003")));
             return;
         }
 
@@ -284,13 +286,11 @@ public final class PluginApiServer {
             try {
                 if (!SemVer.parse(LAUNCHER_API_VERSION).isCompatibleWith(SemVer.parse(req.launcherApiVersion))) {
                     sendJson(exchange, 400, errorJson(400,
-                            "launcher_api_version 不兼容：插件要求 " + req.launcherApiVersion
-                                    + "，启动器提供 " + LAUNCHER_API_VERSION
-                                    + "（主版本必须一致且启动器版本 >= 插件要求）"));
+                            I18N.get("pas.r0002", req.launcherApiVersion, LAUNCHER_API_VERSION)));
                     return;
                 }
             } catch (IllegalArgumentException e) {
-                sendJson(exchange, 400, errorJson(400, "launcher_api_version 非法: " + req.launcherApiVersion));
+                sendJson(exchange, 400, errorJson(400, I18N.get("server.p0007", req.launcherApiVersion)));
                 return;
             }
         }
@@ -303,18 +303,17 @@ public final class PluginApiServer {
                 String requiredVersion = entry.getValue();
                 String providedVersion = available.get(apiId);
                 if (providedVersion == null) {
-                    sendJson(exchange, 400, errorJson(400, "启动器未提供所需 API: " + apiId));
+                    sendJson(exchange, 400, errorJson(400, I18N.get("server.p0008", apiId)));
                     return;
                 }
                 try {
                     if (!SemVer.parse(providedVersion).isCompatibleWith(SemVer.parse(requiredVersion))) {
                         sendJson(exchange, 400, errorJson(400,
-                                "API 版本不兼容: " + apiId + " 插件要求 " + requiredVersion
-                                        + "，启动器提供 " + providedVersion));
+                                I18N.get("pas.r0001", apiId, requiredVersion, providedVersion)));
                         return;
                     }
                 } catch (IllegalArgumentException e) {
-                    sendJson(exchange, 400, errorJson(400, "required_apis 中存在非法版本号: " + apiId + "=" + requiredVersion));
+                    sendJson(exchange, 400, errorJson(400, I18N.get("server.p0009", apiId + "=" + requiredVersion)));
                     return;
                 }
             }
@@ -347,12 +346,12 @@ public final class PluginApiServer {
     private void handleData(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
         if (!path.startsWith(DATA_PATH_PREFIX)) {
-            sendJson(exchange, 404, errorJson(404, "未找到该端点: " + path));
+            sendJson(exchange, 404, errorJson(404, I18N.get("server.p0010", path)));
             return;
         }
         String apiId = URLDecoder.decode(path.substring(DATA_PATH_PREFIX.length()), StandardCharsets.UTF_8);
         if (apiId.isEmpty()) {
-            sendJson(exchange, 400, errorJson(400, "缺少 apiId，正确格式: " + DATA_PATH_PREFIX + "{apiId}"));
+            sendJson(exchange, 400, errorJson(400, I18N.get("server.p0011", DATA_PATH_PREFIX + "{apiId}")));
             return;
         }
 
@@ -362,7 +361,7 @@ public final class PluginApiServer {
             token = parseQuery(exchange.getRequestURI().getRawQuery()).get("session_token");
         }
         if (!sessions.isValid(token)) {
-            sendJson(exchange, 401, errorJson(401, "无效或缺失的 session_token（请先握手获取）"));
+            sendJson(exchange, 401, errorJson(401, I18N.get("server.t0004")));
             return;
         }
 
@@ -383,7 +382,7 @@ public final class PluginApiServer {
             sendJson(exchange, e.statusCode(), errorJson(e.statusCode(), e.getMessage()));
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "数据端点内部错误: apiId=" + apiId, e);
-            sendJson(exchange, 500, errorJson(500, "内部错误: " + e.getMessage()));
+            sendJson(exchange, 500, errorJson(500, I18N.get("server.p0012", e.getMessage())));
         }
     }
 

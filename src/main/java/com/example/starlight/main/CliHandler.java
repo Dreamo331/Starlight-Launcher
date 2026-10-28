@@ -6,6 +6,8 @@ import java.util.Scanner;
 
 import com.example.starlight.auth.AccountManager;
 import com.example.starlight.auth.AccountManager.Account;
+import com.example.starlight.config.LegacyVersionMigration;
+import com.example.starlight.config.SelectedVersion;
 import com.example.starlight.gamebat.MinecraftLauncherBuilder;
 import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.download.task.JavaInstall;
@@ -22,6 +24,8 @@ public class CliHandler {
      * 处理命令行参数
      */
     public static void processCommandArgs(String[] args) {
+        // 旧版 starlight.ini 的 Version 一次性迁移（幂等）：落到各游戏目录的 starlight.json 后删键
+        LegacyVersionMigration.runOnce();
         switch (args[0].toLowerCase()) {
             case "launch"  -> MenuHandler.launchMinecraft(null);
             case "quicklaunch" -> MenuHandler.quickLaunchMinecraft();
@@ -101,8 +105,8 @@ public class CliHandler {
                 }
             }
             case "frp" -> {
-                String addr = args.length >= 2 ? args[1] : "127.0.0.1:25565";
-                MenuHandler.startFrpTunnel(addr);
+                String tunnelId = args.length >= 2 ? args[1] : "";
+                MenuHandler.startFrpTunnel(tunnelId);
             }
             case "sendlogs" -> {
                 if (args.length >= 3) {
@@ -134,7 +138,7 @@ public class CliHandler {
             case "listmods" -> {
                 Map<String, String> cfg = UIGeneralControlClass.readConfig();
                 String gameDir = cfg.getOrDefault("GameDir", ".minecraft");
-                String version = cfg.getOrDefault("Version", "");
+                String version = SelectedVersion.of(cfg);
                 var mods = UIGeneralControlClass.listMods(gameDir, version);
                 System.out.println("Mod list (" + mods.size() + "):");
                 for (var m : mods) {
@@ -219,7 +223,7 @@ public class CliHandler {
             case "complementnatives" -> {
                 Map<String, String> cfg = UIGeneralControlClass.readConfig();
                 String gameDir = cfg.getOrDefault("GameDir", ".minecraft");
-                String version = cfg.getOrDefault("Version", "");
+                String version = SelectedVersion.of(cfg);
                 var status = UIGeneralControlClass.checkNativesStatus(gameDir, version);
                 System.out.println("Native library status: " + (status.ready ? "Ready ( " + status.fileCount + " files)" :
                     "Incomplete (currently " + status.fileCount + " files)"));
@@ -254,7 +258,7 @@ public class CliHandler {
         System.out.println("  listjava                 Find local Java installations");
         System.out.println("  installjava <version>    Install JDK (jdk8/jdk17/jdk21)");
         System.out.println("  listsaves <saves-dir> <version-dir>  List saves");
-        System.out.println("  frp [addr]               Start FRP tunnel (default 127.0.0.1:25565)");
+        System.out.println("  frp [tunnel-id]          Start a SakuraFrp tunnel (needs saved access key)");
         System.out.println("  sendlogs <log-path> <URL> Send logs");
         System.out.println("  ailog <log-path>         AI analyze error log");
         System.out.println("  genbat                   Generate launch script (.bat)");

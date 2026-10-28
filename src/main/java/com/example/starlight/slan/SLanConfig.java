@@ -12,6 +12,8 @@
  */
 package com.example.starlight.slan;
 
+import com.example.starlight.util.I18N;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -209,9 +211,7 @@ public final class SLanConfig {
                 Files.createDirectories(path.getParent());
                 com.google.gson.JsonObject override = new com.google.gson.JsonObject();
                 override.addProperty("__comment__",
-                        "本文件只保存你对联机设置的改动；未填写的键自动沿用启动器内置默认值，"
-                                + "因此换服务器时无需手动同步。relayServer: 中继(房间)服务器地址"
-                                + "（可只填主机:端口，程序自动补 ws://）；moduleDownloadUrl: 联机模块安装包下载地址。");
+                        I18N.get("slancfg.r0001"));
                 String json = new com.google.gson.GsonBuilder()
                         .setPrettyPrinting().disableHtmlEscaping().create().toJson(override);
                 Files.writeString(path, json, StandardCharsets.UTF_8);
