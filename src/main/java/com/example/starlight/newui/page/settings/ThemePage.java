@@ -12,6 +12,7 @@ import javafx.scene.layout.VBox;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
@@ -79,6 +80,11 @@ public final class ThemePage {
         bgRow.setAlignment(Pos.CENTER_LEFT);
         root.getChildren().add(PageKit.settingsCard(I18N.get("theme.t0010"), I18N.get("theme.t0011"), bgRow));
 
+        // 通透模式：卡片背景改用像素采样的玻璃（references/liquid-glass 那套方法），
+        // 关闭时卡片仍是原来的 CSS 背景 —— 两套渲染方式并存，切换即生效。
+        // 开关的显示、默认值、编译期开关全部由 GlassFeature 一个文件控制。
+        com.example.starlight.newui.ui.GlassFeature.maybeAddToggle(ctx, root);
+
         // 自定义背景色：折叠调色盘 + 十六进制输入 + 恢复默认 //
         root.getChildren().add(buildCustomColorCard());
 
@@ -104,18 +110,121 @@ public final class ThemePage {
         root.getChildren().add(PageKit.settingsCard(I18N.get("theme.t0018"),
                 I18N.get("theme.t0049"), macBtnToggle));
 
-        // 节日主题开关：默认开启；关闭后问候语/启动按钮/灯笼/节日壁纸全部恢复默认
+        // 窗口按钮排放位置：靠右（Windows 习惯，默认）/ 靠左（macOS 原生习惯）
+        root.getChildren().add(buildWindowButtonSideCard());
+
+        // 启动动画：星轨动画（默认）/ 应用图标 —— 下一次启动时生效
+        root.getChildren().add(buildSplashStyleCard());
+
+        // 节日主题开关：默认开启；关闭后问候语/启动按钮/灯笼/节日背景全部恢复默认
         boolean festivalOn = com.example.starlight.newui.festival.FestivalCalendar.isEnabled(ctx.config());
         CheckBox festivalToggle = PageKit.toggle(festivalOn);
+        Label festivalHint = PageKit.hintLabel(I18N.get("theme.t0056"));
+        VBox festivalBox = new VBox(6, festivalToggle, festivalHint);
         festivalToggle.setOnAction(e -> {
             ctx.config().put(com.example.starlight.newui.festival.FestivalCalendar.CONFIG_KEY,
                     festivalToggle.isSelected() ? "auto" : "off");
             ctx.saveConfig();
+            // 保存后立即重挂节日装饰：不重启也能看到灯笼与背景的变化，
+            // 否则用户会以为「开关没生效」（配置其实已经写进 starlight-client.ini）
+            ctx.applyFestivalTheme();
             ctx.toast(I18N.get("theme.p0051", (festivalToggle.isSelected() ? I18N.get("theme.t0019") : I18N.get("theme.t0020"))));
         });
         root.getChildren().add(PageKit.settingsCard(I18N.get("theme.t0021"),
-                I18N.get("theme.t0022"), festivalToggle));
+                I18N.get("theme.t0022"), festivalBox));
         return root;
+    }
+
+    // 窗口按钮排放位置 //
+
+    /** 配置值：right=靠右（Windows 习惯，默认），left=靠左（macOS 原生习惯） */
+    private static final String BUTTON_SIDE_RIGHT = "right";
+    private static final String BUTTON_SIDE_LEFT = "left";
+
+    private Node buildWindowButtonSideCard() {
+        ComboBox<String> combo = new ComboBox<>();
+        combo.getItems().addAll(BUTTON_SIDE_RIGHT, BUTTON_SIDE_LEFT);
+        String current = ctx.config().getOrDefault("WindowButtonSide", BUTTON_SIDE_RIGHT);
+        combo.setValue(BUTTON_SIDE_LEFT.equalsIgnoreCase(current)
+                ? BUTTON_SIDE_LEFT : BUTTON_SIDE_RIGHT);
+        combo.setCellFactory(cb -> buttonSideCell());
+        combo.setButtonCell(buttonSideCell());
+        combo.getStyleClass().add("select-field");
+        combo.setPrefWidth(PageKit.SETTINGS_CONTROL_WIDTH);
+        combo.setOnAction(e -> {
+            ctx.config().put("WindowButtonSide", combo.getValue());
+            ctx.saveConfig();
+            // 立即重建标题栏按钮，不重启也能看到位置变化
+            ctx.applyWindowButtonStyle();
+            ctx.toast(I18N.get("theme.k0044", buttonSideName(combo.getValue())));
+        });
+        return PageKit.settingsCard(I18N.get("theme.t0061"),
+                I18N.get("theme.t0062"), combo);
+    }
+
+    /** 下拉项承载稳定的配置值（right/left），显示名按当前语言翻译 */
+    private static javafx.scene.control.ListCell<String> buttonSideCell() {
+        return new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                setText(buttonSideName(item));
+            }
+        };
+    }
+
+    private static String buttonSideName(String key) {
+        return BUTTON_SIDE_LEFT.equalsIgnoreCase(key)
+                ? I18N.get("theme.t0063") : I18N.get("theme.t0064");
+    }
+
+    // 启动动画 //
+
+    /** 配置值：starlight=星轨动画（默认），icon=只显示应用图标的极简动画 */
+    private static final String SPLASH_STYLE_STARLIGHT = "starlight";
+    private static final String SPLASH_STYLE_ICON = "icon";
+
+    private Node buildSplashStyleCard() {
+        ComboBox<String> combo = new ComboBox<>();
+        combo.getItems().addAll(SPLASH_STYLE_STARLIGHT, SPLASH_STYLE_ICON);
+        String current = ctx.config().getOrDefault("SplashStyle", SPLASH_STYLE_STARLIGHT);
+        combo.setValue(SPLASH_STYLE_ICON.equalsIgnoreCase(current)
+                ? SPLASH_STYLE_ICON : SPLASH_STYLE_STARLIGHT);
+        combo.setCellFactory(cb -> splashStyleCell());
+        combo.setButtonCell(splashStyleCell());
+        combo.getStyleClass().add("select-field");
+        combo.setPrefWidth(PageKit.SETTINGS_CONTROL_WIDTH);
+        combo.setOnAction(e -> {
+            ctx.config().put("SplashStyle", combo.getValue());
+            ctx.saveConfig();
+            ctx.toast(I18N.get("theme.k0043", splashStyleName(combo.getValue())));
+        });
+        return PageKit.settingsCard(I18N.get("theme.t0057"),
+                I18N.get("theme.t0058"), combo);
+    }
+
+    /** 下拉项承载稳定的配置值（starlight/icon），显示名按当前语言翻译 */
+    private static javafx.scene.control.ListCell<String> splashStyleCell() {
+        return new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                setText(splashStyleName(item));
+            }
+        };
+    }
+
+    private static String splashStyleName(String key) {
+        return SPLASH_STYLE_ICON.equalsIgnoreCase(key)
+                ? I18N.get("theme.t0060") : I18N.get("theme.t0059");
     }
 
     // 自定义背景色 //

@@ -59,6 +59,42 @@ public final class AboutPage {
         repoButtons.setAlignment(Pos.CENTER_RIGHT);
         root.getChildren().add(PageKit.settingsCard(I18N.get("about.t0003"), I18N.get("about.t0004"), repoButtons));
 
+        // 卡片「法律文档」：三份文档全文（与首次启动同意页同一份正本） //
+        VBox docButtons = new VBox(8);
+        docButtons.setAlignment(Pos.CENTER_RIGHT);
+        for (com.example.starlight.legal.LegalDocument doc
+                : com.example.starlight.legal.LegalDocument.values()) {
+            Button docBtn = AppIcons.button("memo", doc.title());
+            docBtn.getStyleClass().add("btn-primary");
+            docBtn.setOnAction(e -> ctx.ui().legalDocDialog(doc));
+            docButtons.getChildren().add(docBtn);
+        }
+        root.getChildren().add(PageKit.settingsCard(I18N.get("legal.t0009"),
+                I18N.get("legal.t0010"), docButtons));
+
+        // 卡片「同意记录」：证明「同意过哪一版」，只存在本机、不上传 //
+        VBox recordBox = new VBox(8);
+        recordBox.setAlignment(Pos.CENTER_RIGHT);
+        java.util.Optional<com.example.starlight.legal.LegalConsentStore.ConsentSummary> record =
+                com.example.starlight.legal.LegalConsentStore.current();
+        Label recordStatus = new Label(record
+                .map(r -> I18N.get("legal.t0015", formatAcceptedAt(r.acceptedAt()),
+                        r.launcherVersion()))
+                .orElse(I18N.get("legal.t0016")));
+        recordStatus.getStyleClass().add("settings-card-desc");
+        recordStatus.setWrapText(true);
+        // 卡片右侧控件列固定有界宽度：状态文字过长时换行而不是把卡片撑宽
+        recordStatus.setMaxWidth(PageKit.SETTINGS_CONTROL_WIDTH);
+        recordStatus.setMinWidth(0);
+        recordStatus.setAlignment(Pos.CENTER_RIGHT);
+        Button openRecordBtn = AppIcons.button("view", I18N.get("legal.t0014"));
+        openRecordBtn.getStyleClass().add("btn-primary");
+        openRecordBtn.setOnAction(e -> ctx.openFile(
+                com.example.starlight.legal.LegalConsentStore.dir().toString()));
+        recordBox.getChildren().addAll(recordStatus, openRecordBtn);
+        root.getChildren().add(PageKit.settingsCard(I18N.get("legal.t0012"),
+                I18N.get("legal.t0013"), recordBox));
+
         // 卡片「许可信息」（原版权页内容并入，重构 §6.2 布局第 4 条） //
         Button mitBtn = AppIcons.button("view", I18N.get("about.t0005"));
         mitBtn.getStyleClass().add("btn-primary");
@@ -77,5 +113,16 @@ public final class AboutPage {
         root.getChildren().add(copyright);
 
         return root;
+    }
+
+    /** 同意时间（ISO-8601，带偏移）→ 本地可读的「年-月-日 时:分」；解析失败原样返回 */
+    private static String formatAcceptedAt(String iso) {
+        if (iso == null || iso.isBlank()) return "-";
+        try {
+            return java.time.OffsetDateTime.parse(iso)
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+        } catch (Exception e) {
+            return iso;
+        }
     }
 }

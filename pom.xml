@@ -202,6 +202,45 @@
         </resources>
 
         <plugins>
+            <!--
+              法律文档进 classpath：首次启动的同意页与「设置 → 关于」都要在单 EXE 里
+              展示《免责声明》《用户服务协议》《隐私政策》，而 docs/ 目录不会随 EXE 分发。
+
+              这里把 docs/ 下的三份正本原样复制到 /legal/，<b>不保留任何副本</b>：
+              法律条款的唯一真源仍然是 docs/*.md，改条款只改一份，打包自动带上。
+              运行期由 com.example.starlight.legal.LegalDocument 按固定路径读取。
+
+              注意：资源名保留中文（与 docs/ 一致），Java 的 getResourceAsStream 与
+              jar/native-image 都能处理 UTF-8 资源名（已实测目录与 jar 两种形态）。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-legal-docs</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/legal</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/docs</directory>
+                                    <includes>
+                                        <include>免责声明.md</include>
+                                        <include>用户服务协议.md</include>
+                                        <include>隐私政策.md</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- JavaFX Maven Plugin -->
             <plugin>
                 <groupId>org.openjfx</groupId>
@@ -414,7 +453,7 @@
                          写单反斜杠 \. 会让 resourceconfig-x86_64-windows.json 成为非法 JSON,
                          native-image 报 "Invalid escape character". step3-fix.ps1 里还有兜底修复. -->
                     <resourcesList>
-                        <list>.*\\.(fxml|css|png|jpg|jpeg|webp|ico|svg|properties|json|xml|html|txt|ttf|otf|dll|dat|so|dylib|jar)$</list>
+                        <list>.*\\.(fxml|css|png|jpg|jpeg|webp|ico|svg|properties|json|xml|html|txt|ttf|otf|dll|dat|so|dylib|jar|md)$</list>
                     </resourcesList>
                     <!-- jar 后缀是为 assets/agent/cape-url-patch-agent.jar 加的：它必须在
                          原生镜像里可被 CapeAgentInstaller 当资源读出来。注意不要把它打进
@@ -600,6 +639,33 @@
 
     <!-- Native packaging profile: jlink + jpackage (kept for alternative use) -->
     <profiles>
+        <!--
+            编译期关掉「通透模式」：把整个 newui.glass 实现包从编译里排除。
+
+            mvn -Pno-glass clean package
+
+            开关与参数集中在 src/main/java/com/example/starlight/newui/ui/GlassFeature.java；
+            该文件不直接引用被排除的包（实现类通过反射解析），所以排除后工程照常编译，
+            功能自动降级为「没有玻璃、设置页不显示开关」。
+        -->
+        <profile>
+            <id>no-glass</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <version>3.11.0</version>
+                        <configuration>
+                            <excludes>
+                                <exclude>com/example/starlight/newui/glass/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <profile>
             <id>native-package</id>
             <build>

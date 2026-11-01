@@ -233,18 +233,35 @@ public class ConfigManager {
         "DebugLogMaxEntries", "SingleThreadHosts",
         "ShowSplash", "LastPlayed",
         "WindowX", "WindowY", "WindowMaximized", "KeepWindowPosition",
+        // 窗口尺寸：原先漏登记，窗口大小从来没被存下来 —— 每次启动都按「场景首选尺寸」重算，
+        // 首页内容 pref 高度上千，窗口就会长到比屏幕还高（底边连同圆角跑到屏幕外，
+        // 设置页的滚动视口还被撑得比内容大，表现为「下方没有圆角 + 滚不动」）。
+        "WindowWidth", "WindowHeight",
         // 标题栏窗口按钮样式：true=仿 macOS 三点式（默认），false=减号 + 叉号
         "MacStyleWindowButtons",
+        // 标题栏窗口按钮排放位置（设置 → 主题与背景）：right=靠右（Windows 习惯，默认），
+        // left=靠左（macOS 原生习惯）。未登记的话切完位置写不进 starlight-client.ini，重启即丢。
+        "WindowButtonSide",
+        // 启动动画（设置 → 主题与背景）：starlight=星轨动画（默认），icon=应用图标动画。
+        // 未登记的话选完写不进 starlight-client.ini，重启后静默回到星轨动画。
+        "SplashStyle",
         "ScrollSpeed",
         // 「Java 与内存」页 JVM 参数输入框的拖拽高度（px，0 = 跟随默认行数）。
         // 未登记的话拖动把手改了高度也写不进 starlight-client.ini，重启即丢。
         "JvmArgsEditorHeight",
         // 个性化配置：侧边栏显隐 / 高对比度 / 背景图片 / 文件扫描 / 联机与反馈输入
         "ShowSidebar", "HighContrast", "BackgroundImage", "FileScan",
+        // 设置 → 主题与背景 → 通透模式：卡片背景是否改用像素采样的液态玻璃（默认 false＝原 CSS 卡片）。
+        // 未登记的话开关写不进 starlight-client.ini，重启后静默回到原来的渲染方式。
+        "GlassMode",
         // 设置 → 主题与背景 → 自定义背景色（#RRGGBB，空串=未启用）。
         // 与 BackgroundImage 一样属于个性化配置；未登记的话选完颜色点保存写不进
         // starlight-client.ini，重启后自定义色静默丢失，只剩默认渐变。
         "CustomThemeColor",
+        // 设置 → 主题与背景 → 节日主题开关（auto=按日期自动生效，off=关闭）。
+        // 未登记的话开关改完写不进 starlight-client.ini，重启后静默回到「开启」，
+        // 表现为「节日主题无法保存配置」。
+        "FestivalTheme",
         "SakuraFrpLocalPort", "SakuraFrpTunnelId", "FeedbackEmail", "SlanPassword",
         "HomeQuickLaunchSave", "HomeQuickManageMod",
         // GraalVM 防护：用户已选「仍用这个 GraalVM 运行时」时记录其 java 路径，

@@ -10,6 +10,10 @@ rem  to load them ("This app can't run on your PC").
 rem  NEW implementation: metadata.txt -> version.rc -> rc.exe -> .res
 rem  -> cvtres -> .obj -> relink (icon + version merged by the linker
 rem  in a single resource object, replacing gluonfx IconGroup.obj).
+rem
+rem  NOTE: keep this file pure ASCII + CRLF. It runs under "chcp 65001"
+rem  (set by build-single-exe.bat); non-ASCII bytes or LF-only endings
+rem  make the cmd parser mis-split lines into garbage commands.
 
 set "EXE=target\gluonfx\x86_64-windows\Starlight Launcher.exe"
 if not exist "%EXE%" (
@@ -18,7 +22,9 @@ if not exist "%EXE%" (
 )
 
 echo Writing icon + version metadata (safe linker merge) ...
-call "E:\visual studio\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+rem apply-metadata.ps1 invokes rc.exe/cvtres.exe/link.exe by full path
+rem with explicit SDK/MSVC include+lib dirs, so vcvars64.bat is NOT
+rem needed (it shells out to reg.exe and depends on terminal env).
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0apply-metadata.ps1"
 if errorlevel 1 (
     echo [ERROR] metadata apply failed. EXE remains usable without version info.

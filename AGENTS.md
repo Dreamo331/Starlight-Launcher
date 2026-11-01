@@ -45,6 +45,7 @@ starlight-launcher/
 │
 ├── tools/                 构建与辅助脚本
 │   ├── legal-witness/     法律文档时间戳存证（重点）（清单 / .tsr / 台账 / witness.ps1）
+│   ├── wallpaper-gen/     节日壁纸生成器（可复现，输出 resources/wallpaper/*.jpg）
 │   ├── agent/             CapeUrlPatchAgent.java（披风 URL 补丁 agent 源码）
 │   ├── rcedit-x64.exe     写入 EXE 元数据的工具
 │   └── *.ps1 / *.bat / *.cmd  构建流水线脚本
@@ -64,6 +65,7 @@ starlight-launcher/
 │   ├── plugin/ pluginapi/ 插件系统与本机 HTTP API（仅绑定 127.0.0.1）
 │   ├── config/            AppDirs（数据目录唯一真源）、SelectedVersion（版本选择唯一真源）、Endpoints、迁移
 │   ├── community/         第三方社区站点 API 客户端
+│   ├── legal/             法律文档同意（首启同意页 / 同意记录 / Markdown 渲染）
 │   └── util/              更新检查、网络、图片、WebP 解码等
 │
 ├── src/main/resources/    图片、i18n、css、字体、游戏资源模板、logback.xml
@@ -118,6 +120,8 @@ starlight-launcher/
 | **不提供开服/服务端能力** | 不加开服向导、不生成 `server.properties`/`eula.txt`、不做端口映射 | docs/README 第四条 |
 | **不冒用项目标识** | 不改官方下载链指向、不删关于页署名 | LICENSE §4.2；商标规范 |
 | **违法内容处置是"有权"不是"义务"** | 若实现黑名单，只做"可远程更新的屏蔽列表 + 提示"，不要写成自动审核 | EULA 5.8 |
+| **法律文档同意必须显式** | 保持 `JavaFXLauncher.start` → `legal/LegalConsentGate`：主界面前完整展示三份文本，主动勾选后才能继续；不得改成"继续即视为同意" | EULA 2.1；免责声明卷首 |
+| **同意记录只落本机** | `legal/LegalConsentStore` 只写 `~/.starlight/legal/`，字段限时间/版本/文档哈希/界面语言/操作系统/随机号；**不得加网络上报、不得加账号或 IP** | 隐私政策 3.1、8.1；安全与合规 8.1 |
 | **与 Mojang 无关联** | 任何界面文案不得暗示官方或"授权" | 免责声明 1.2；LICENSE §7.1 |
 
 **改完代码自检三问：**
@@ -159,6 +163,8 @@ git push gitee HEAD:main
 - `BUNDLE-*.zip` 不入库（见 `.gitignore`）；**`MANIFEST-*.sha256`、`*.tsr`、`*.tsq`、`WITNESS-LOG.md` 必须入库**。
 - 历史清单与令牌**不要删**，它们是链式记录的一部分。
 - 存证之后**不要再改**这批文件；若必须改，重新走一次流程并在台账写明原因。
+- **启动器内的三份文本不是副本**：`pom.xml` 的 `copy-legal-docs` 在 `process-resources` 阶段把 `docs/` 三份正本原样复制到 classpath `/legal/`；不要在 `src/main/resources/` 另存一份，否则会出现两版条款。
+- 法律文本改动会改变其 SHA-256，旧的「同意记录」因此自动失效（用户下次启动重新确认）——这是预期行为，不是 bug。
 
 ---
 
@@ -182,6 +188,8 @@ git push gitee HEAD:main
 | Java | 17（本机 `openjdk 17.0.18`），不要用 21+ 编译 |
 | 编码 | 源码与文档统一 **UTF-8**；PowerShell 脚本（含中文）用 **UTF-8 with BOM** |
 | 数据目录 | 默认 `~/.starlight/`，`--portable` 回落工作目录；见 `config/AppDirs.java` |
+| 设置项落盘 | 新增客户端配置键**必须**登记到 `main/ConfigManager.java` 的 `CLIENT_KEYS`，否则 `saveClientConfig` 读-改-写时会丢弃该键，表现为「设置保存不了、重启即丢」（历史 bug：`FestivalTheme` / 节日主题开关） |
+| 节日壁纸 | `src/main/resources/wallpaper/<节日 id>.jpg`，由 `tools/wallpaper-gen/generate_festival_wallpapers.py` 生成；id 必须与 `newui/festival/FestivalCalendar` 一致 |
 | 密钥 | `endpoints.local.json` 与 `%USERPROFILE%\.starlight\endpoints.local.json` 已忽略，**任何情况下不得提交** |
 | 删除前确认 | 删除目录前先跑 `git ls-files -- <路径>`，确认未被跟踪；`lib/`、`native/` 被 pom 引用，**不可删** |
 | 未跟踪目录 | `references/`（上游源码参考）、`.minecraft/`（测试游戏）、日志与构建产物 |

@@ -14,7 +14,7 @@ import javafx.util.Duration;
  * 启动动画页面 —— Starlight 星轨闪屏
  * （核心动画移植自子项目「启动动画」：FXML 结构 + CSS 样式 + 控制器逐帧 Canvas 绘制）
  */
-public class SplashView implements PageView {
+public class SplashView implements PageView, SplashScreen {
 
     /** 闪屏窗口尺寸（与 StarlightSplash.fxml / 控制器常量保持一致） */
     public static final double SPLASH_WIDTH = 520;
@@ -47,6 +47,18 @@ public class SplashView implements PageView {
     @Override
     public Node getView() {
         return root;
+    }
+
+    @Override
+    public double width() { return SPLASH_WIDTH; }
+
+    @Override
+    public double height() { return SPLASH_HEIGHT; }
+
+    /** 停止逐帧绘制定时器（切换主界面前调用；星轨动画是 Canvas 逐帧绘制，不停会空转） */
+    @Override
+    public void stop() {
+        controller.stop();
     }
 
     /**

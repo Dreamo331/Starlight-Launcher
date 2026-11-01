@@ -24,7 +24,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -34,19 +33,27 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 星光MC社区 API 客户端
  * <p>
- * 对接星光MC社区 auth.php 接口（地址见 {@code /assets/endpoints.json}；星光MC社区 · 第三方 API 调用文档 v1.0），
- * 封装登录、Token 验证、帖子列表/详情、发帖、评论、点赞等全部接口。
+ * 对接星光MC社区 auth.php 接口（地址见 {@code /assets/endpoints.json}），
+ * 封装登录、Token 验证、帖子列表/详情、发帖、评论、点赞等接口。
+ * 接口约定见社区仓库 {@code docs/API.md} 与 {@code docs/API-v2-变化与接入文档.md}。
  * </p>
  *
- * <p><b>认证说明：</b></p>
+ * <p><b>API v2（2026-11-01）：</b>服务端已下线经济系统，共 27 个 action 移除并统一返回
+ * {@code 410}「该功能已下线」。涉及本类的变化：</p>
  * <ul>
- *   <li>用户级接口：登录后携带 {@code Authorization: Bearer <token>}，本类自动附加；</li>
- *   <li>签到接口必须携带站点级 API Key（{@code X-API-Key}），默认使用内置 Key，
- *       可通过系统属性 {@code -Dstarlight.community.apiKey=<key>} 覆盖。</li>
+ *   <li>签到（{@code checkin}）不再存在 —— 本类不再提供签到方法，调用方请勿再请求；</li>
+ *   <li>站点级 {@code X-API-Key} 认证已随经济系统一起删除 —— 本类不再发送该头，
+ *       认证只走用户个人 Bearer 令牌；</li>
+ *   <li>帖子不再有付费内容 —— {@code posts} 表的 {@code secret_content} {@code has_secret}
+ *       {@code price} {@code currency} {@code reward} {@code reward_currency} 六列已删，
+ *       模型里同步去掉，列表项改用 {@code excerpt} 做摘要预览。</li>
  * </ul>
  *
- * <p>登录 Token 与签到日期会以轻量混淆形式持久化到 {@code Starlight-Launcher/.community.dat}，
- * 下次启动自动恢复登录态与今日签到状态。</p>
+ * <p><b>认证：</b>登录后携带 {@code Authorization: Bearer <token>}，本类自动附加。
+ * 令牌可在社区网页「个人中心 → 开发者令牌」生成。</p>
+ *
+ * <p>登录 Token 会以轻量混淆形式持久化到 {@code Starlight-Launcher/.community.dat}，
+ * 下次启动自动恢复登录态。</p>
  */
 public class CommunityApi {
 
@@ -56,12 +63,13 @@ public class CommunityApi {
     private static final String SITE_BASE = Endpoints.communitySiteUrl();
 
     /**
-     * 站点级 API Key（签到接口必须携带，防滥用）。
-     * 文档要求 Key 随客户端请求发送；为避免源码泄露风险，
-     * 可通过系统属性 {@code -Dstarlight.community.apiKey=<key>} 覆盖默认值。
+     * 单次请求超时。
+     *
+     * <p>原来是 30 秒：社区用 PHP 内置服务器跑时是单线程的，一旦被某个慢请求
+     * （外部探测 / Modrinth 拉取）占住，后续请求会排队，UI 就干等半分钟没有任何反馈。
+     * 缩短到 12 秒，超时即进入错误态并给重试入口，比“转圈半天”更容易判断。</p>
      */
-    private static final String API_KEY = System.getProperty("starlight.community.apiKey",
-            Endpoints.communityApiKey());
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(12);
 
     private final HttpClient httpClient;
     private final Gson gson;
@@ -69,8 +77,9 @@ public class CommunityApi {
     // 登录态（内存 + 本地持久化） //
     private volatile String token;
     private volatile CommunityUser currentUser;
-    /** 最近一次成功签到日期（yyyy-MM-dd），用于恢复今日签到状态 */
-    private volatile String checkinDate;
+
+    /** 最近一次响应的 HTTP 状态码：401 用于兜底「未登录」判定（见 failOnAuthError） */
+    private volatile int lastStatus;
 
     /** 头像缓存：uid -> 头像完整 URL（值为 null 表示该用户未设置头像），避免帖子列表重复请求 */
     private final Map<Integer, String> avatarCache = new ConcurrentHashMap<>();
@@ -95,11 +104,6 @@ public class CommunityApi {
         return currentUser;
     }
 
-    /** 今天是否已完成签到（基于本地持久化的签到日期） */
-    public boolean isCheckedInToday() {
-        return checkinDate != null && checkinDate.equals(LocalDate.now().toString());
-    }
-
     /**
      * 用户登录（获取 token）
      *
@@ -122,8 +126,6 @@ public class CommunityApi {
             return ApiResult.success(user, root);
         }
         this.token = user.token;
-        // 换账号登录后重置本地签到记录，避免误显示已签到
-        this.checkinDate = null;
         // 回验 token：服务端 launcher_login 曾出现返回数据库哈希（sha256:...）而非
         // 有效令牌的情况，若不校验会陷入“登录成功但发帖/签到全失败”的假登录态。
         ApiResult<CommunityUser> verify = null;
@@ -161,8 +163,6 @@ public class CommunityApi {
             return ApiResult.failure("it", I18N.get("community.t0002"));
         }
         this.token = trimmed;
-        // 换账号登录后重置本地签到记录，避免误显示已签到
-        this.checkinDate = null;
         try {
             ApiResult<CommunityUser> result = profile();
             if (result.ok) {
@@ -364,10 +364,10 @@ public class CommunityApi {
         }
         String avatar = root.has("avatar") && !root.get("avatar").isJsonNull()
                 ? root.get("avatar").getAsString() : null;
-        // 服务端可能返回相对路径（如 uploads/avatars/6.png），补全为完整地址
-        if (avatar != null && !avatar.startsWith("http://") && !avatar.startsWith("https://")) {
-            avatar = SITE_BASE + "/" + avatar;
-        }
+        // 服务端返回形态有两种：相对路径（uploads/avatars/6.png）与写死域名的绝对地址
+        // （https://slmc.cc.cd/uploads/avatars/6.png）。后者必须按 endpoints.json 里的站点
+        // 地址改写，否则本地调试（127.0.0.1:8123）会去请求线上域名，头像必然加载失败
+        avatar = resolveAvatarUrl(avatar);
         // 未设置头像时缓存空串（ConcurrentHashMap 不允许 null 值）
         avatarCache.put(uid, avatar == null ? "" : avatar);
         return avatar == null
@@ -375,11 +375,56 @@ public class CommunityApi {
                 : ApiResult.success(avatar, root);
     }
 
+    /**
+     * 头像上传目录（服务端 {@code uploads/} 下的子目录，与 avatar_get 返回的路径一致）。
+     * 帖子 / 评论 / 用户对象里只带头像文件名（如 {@code 23.jpg}），拼出可加载地址需要这个前缀。
+     * 服务端若改了目录结构，这里的快拼会 404 —— 图片加载失败会自动退回 emoji 占位，
+     * 也可以改走 {@link #avatarGet(int)} 取服务端给的完整地址。
+     */
+    private static final String AVATAR_DIR = "uploads/avatars/";
+
+    /**
+     * 把帖子 / 评论里带的头像文件名拼成可直接加载的完整 URL；为空或没有头像时返回 null。
+     *
+     * <p>只给文件名时补 {@link #AVATAR_DIR}；已经是相对路径或绝对地址时按
+     * {@link #resolveAvatarUrl(String)} 处理。</p>
+     */
+    public static String resolveAvatarFile(String file) {
+        if (file == null) return null;
+        String f = file.trim();
+        if (f.isEmpty()) return null;
+        if (f.startsWith("http://") || f.startsWith("https://") || f.indexOf('/') >= 0) {
+            return resolveAvatarUrl(f);
+        }
+        return resolveAvatarUrl(AVATAR_DIR + f);
+    }
+
+    /**
+     * 把头像地址（{@code avatar_get} 的返回值，或帖子/评论里带的头像文件名）
+     * 归一化为可直接加载的完整 URL；为空或空白时返回 null。
+     *
+     * <p>绝对地址只保留其路径部分，域名统一换成 {@code endpoints.json} 里配置的社区站点地址
+     * —— 这样站点地址仍然只有一处配置源，本机调试与正式环境都不用改代码。
+     * 相对路径（{@code uploads/avatars/6.png}）按同样规则补全。</p>
+     */
+    public static String resolveAvatarUrl(String avatar) {
+        if (avatar == null) return null;
+        String path = avatar.trim();
+        if (path.isEmpty()) return null;
+        int scheme = path.indexOf("://");
+        if (scheme >= 0) {
+            int slash = path.indexOf('/', scheme + 3);
+            path = slash < 0 ? "" : path.substring(slash + 1);
+        }
+        path = path.replaceFirst("^/+", "");
+        if (path.isEmpty()) return avatar;
+        return SITE_BASE.replaceAll("/+$", "") + "/" + path;
+    }
+
     /** 退出登录：清空内存与本地 Token */
     public void logout() {
         this.token = null;
         this.currentUser = null;
-        this.checkinDate = null;
         try {
             Files.deleteIfExists(Paths.get(TOKEN_FILE));
         } catch (IOException ignored) {
@@ -390,52 +435,17 @@ public class CommunityApi {
     // 内部请求方法 //
 
     /**
-     * 每日签到（需登录 + API Key）
-     * <p>成功时 data 为签到结果（reward 奖励数量、tear 当前恶魂之泪数）。
-     * 服务端对"今天已签到"返回 ok=false + msg，本方法会同步更新本地签到状态。</p>
-     */
-    public ApiResult<CheckinResult> checkin() throws IOException, InterruptedException {
-        if (!hasToken()) {
-            return ApiResult.failure("nl", I18N.get("community.t0007"));
-        }
-        String url = appendParam(BASE_URL, "action", "checkin");
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(30))
-                .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-                .header("X-API-Key", API_KEY)
-                .POST(HttpRequest.BodyPublishers.ofString("action=checkin", StandardCharsets.UTF_8));
-        addAuthHeader(builder);
-        HttpResponse<String> resp = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-        DebugLog.http(true, "POST", url, 0, "action=checkin".length(), "action=checkin", -1);
-        JsonObject root = parseRoot(handleResponse(resp));
-        DebugLog.http(false, null, url, resp.statusCode(), resp.body().length(), resp.body(), -1);
-        if (isOk(root)) {
-            this.checkinDate = LocalDate.now().toString();
-            saveTokenToDisk();
-            CheckinResult result = new CheckinResult();
-            result.reward = root.has("reward") ? root.get("reward").getAsInt() : 0;
-            result.tear = root.has("tear") ? root.get("tear").getAsInt() : 0;
-            result.msg = root.has("msg") && !root.get("msg").isJsonNull() ? root.get("msg").getAsString() : I18N.get("community.t0008");
-            return ApiResult.success(result, root);
-        }
-        // "今天已签到"：服务端以 ok=false + msg 表达，同样视为已完成
-        String msg = root.has("msg") && !root.get("msg").isJsonNull() ? root.get("msg").getAsString() : "";
-        // i18n-lock: 不要翻译此行中文——服务端返回的 msg 文本，翻译即功能失效
-        if (msg.contains("已签到")) {
-            this.checkinDate = LocalDate.now().toString();
-            saveTokenToDisk();
-        }
-        return failOnAuthError(root);
-    }
-
-    /**
      * 失败结果包装：token 失效（未登录 / 令牌无效）时同步清理本地登录态，
      * 避免 UI 停留在“已登录”假象，下次操作仍反复报错。
+     *
+     * <p>v2 起部分写接口（如 post_publish / post_like）未登录时返回 {@code 401} 且
+     * 响应里不带 {@code code} 字段，只有 {@code msg:"未登录"}；这里按「无 code 且 401」
+     * 兜底判定，否则取不到 it/nl 就永远无法退出假登录态。</p>
      */
     private <T> ApiResult<T> failOnAuthError(JsonObject root) {
         ApiResult<T> result = ApiResult.failure(root);
-        if ("it".equals(result.code) || "nl".equals(result.code)) {
+        boolean noCode = result.code == null || result.code.isEmpty() || "unknown".equals(result.code);
+        if ("it".equals(result.code) || "nl".equals(result.code) || (noCode && lastStatus == 401)) {
             logout();
         }
         return result;
@@ -444,7 +454,7 @@ public class CommunityApi {
     private String sendGet(String url) throws IOException, InterruptedException {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(30))
+                .timeout(REQUEST_TIMEOUT)
                 .GET();
         addAuthHeader(builder);
         DebugLog.http(true, "GET", url, 0, 0, null, -1);
@@ -457,7 +467,7 @@ public class CommunityApi {
     private String sendPostForm(String formBody) throws IOException, InterruptedException {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL))
-                .timeout(Duration.ofSeconds(30))
+                .timeout(REQUEST_TIMEOUT)
                 .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
                 .POST(HttpRequest.BodyPublishers.ofString(formBody, StandardCharsets.UTF_8));
         addAuthHeader(builder);
@@ -475,6 +485,8 @@ public class CommunityApi {
      */
     private String handleResponse(HttpResponse<String> resp) throws IOException {
         String body = resp.body();
+        // v2 的「未登录」在部分接口上只表现为 401（响应体不带 code），记录下来供 failOnAuthError 兜底
+        lastStatus = resp.statusCode();
         if (resp.statusCode() == 200) {
             return body;
         }
@@ -532,9 +544,6 @@ public class CommunityApi {
             Path dir = AppDirs.root();
             if (!Files.exists(dir)) Files.createDirectories(dir);
             StringBuilder sb = new StringBuilder("token=").append(token);
-            if (checkinDate != null) {
-                sb.append('|').append("checkin=").append(checkinDate);
-            }
             byte[] obfuscated = xor(sb.toString().getBytes(StandardCharsets.UTF_8));
             String encoded = Base64.getEncoder().encodeToString(obfuscated);
             Files.writeString(Paths.get(TOKEN_FILE), encoded, StandardCharsets.UTF_8,
@@ -558,8 +567,6 @@ public class CommunityApi {
                 String value = pair.substring(eq + 1).trim();
                 if ("token".equals(key) && !value.isEmpty()) {
                     this.token = value;
-                } else if ("checkin".equals(key) && !value.isEmpty()) {
-                    this.checkinDate = value;
                 }
             }
         } catch (Exception ignored) {
@@ -652,10 +659,6 @@ public class CommunityApi {
         public int id;
         public String title;
         public String category;
-        @SerializedName("has_secret")
-        public int hasSecret;
-        public double price;
-        public String currency;
         public int views;
         public int likes;
         @SerializedName("created_at")
@@ -665,6 +668,10 @@ public class CommunityApi {
         public int userId;
         @SerializedName("tag_name")
         public List<String> tagName;
+        /** 列表项摘要（服务端截取正文前若干字）；详情接口不返回，此时为 null */
+        public String excerpt;
+        /** 作者头像文件名（如 23.jpg），未设置头像时为 null；可直接拼出头像地址，省一次 avatar_get */
+        public String avatar;
         /** 仅帖子详情接口返回 */
         public String content;
     }
@@ -678,15 +685,7 @@ public class CommunityApi {
         public String createdAt;
         @SerializedName("user_id")
         public int userId;
-    }
-
-    /** 签到结果 */
-    public static class CheckinResult {
-        /** 本次签到获得的恶魂之泪数量 */
-        public int reward;
-        /** 签到后的恶魂之泪余额 */
-        public int tear;
-        /** 服务端提示文案，如 "签到成功! +5 恶魂之泪" */
-        public String msg;
+        /** 评论者头像文件名，未设置头像时为 null */
+        public String avatar;
     }
 }

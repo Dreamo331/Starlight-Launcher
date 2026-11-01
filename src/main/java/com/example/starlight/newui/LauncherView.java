@@ -58,12 +58,7 @@ import com.example.starlight.version.VersionMatcher;
 import com.example.starlight.plugin.PluginManager;
 import com.example.starlight.plugin.PluginMetadata;
 import com.example.starlight.main.ConfigManager;
-import com.example.starlight.community.CommunityApi;
-import com.example.starlight.community.CommunityApi.ApiResult;
-import com.example.starlight.community.CommunityApi.CheckinResult;
-import com.example.starlight.community.CommunityApi.CommunityComment;
-import com.example.starlight.community.CommunityApi.CommunityPost;
-import com.example.starlight.community.CommunityApi.CommunityUser;
+// 社区实现已整体迁入 newui.page.CommunityPage，这里不再直接引用其 API 类型
 import com.example.starlight.update.UpdateInstaller;
 import com.example.starlight.newui.download.ModHit;
 import com.example.starlight.newui.download.RemoteCacheService;
@@ -242,6 +237,14 @@ public class LauncherView implements PageView, LauncherContext {
     private Map<String, String> configCache;
     /** 当前生效的节日（构造期计算；HomePage 用 FestivalCalendar.current() 独立判定，两者一致） */
     private com.example.starlight.newui.festival.Festival activeFestival;
+
+    // 节日主题挂载的节点：设置页切换开关时要整组摘掉重建，所以必须持有引用
+    /** 节日背景层（壁纸 / 兜底渐变），压在内容之下 */
+    private javafx.scene.Node festivalBackdrop;
+    /** 节日背景的可读性遮罩（浅色提亮 / 深色压暗） */
+    private javafx.scene.layout.Region festivalScrim;
+    /** 顶部灯笼层，浮在内容之上、鼠标穿透 */
+    private javafx.scene.layout.Pane festivalTopLayer;
     /** 通用界面服务：Toast / 遮罩弹窗 / 确认-提示-输入面板（实现见 newui.ui.UiService） */
     private final UiService ui;
 
@@ -329,17 +332,36 @@ public class LauncherView implements PageView, LauncherContext {
     }
 
     /**
-     * 重建标题栏右上角的窗口按钮。
+     * 窗口按钮靠哪一边排放（配置 {@code WindowButtonSide}，默认 {@code right}）。
+     *
+     * <p>{@code right}=靠右（Windows 习惯，也是改动前的样子）；{@code left}=靠左
+     * （macOS 原生习惯，红黄绿在左上角）。
+     */
+    private boolean windowButtonsRight() {
+        if (configCache == null) return true;
+        return !"left".equalsIgnoreCase(configCache.getOrDefault("WindowButtonSide", "right"));
+    }
+
+    /**
+     * 重建标题栏的窗口按钮。
      *
      * <p>仿 macOS 三点式：黄点=最小化 / 绿点=最大化 / 红点=关闭（与改动前一致）；
      * 关闭该开关后：减号=最小化 / 叉号=关闭（不含最大化）。
      * 两种样式只用样式类区分（{@code win-macos} / {@code win-classic}），具体外观见 style.css。
+     *
+     * <p>排放位置同样在这里应用（{@code win-right} / {@code win-left}）：
+     * 内边距由样式表给（{@code -fx-padding} 会覆盖代码设置的值），
+     * 对齐两边都写一份，避免只改一处时另一种样式下对不上。
      */
     private void rebuildWindowControls() {
         boolean macStyle = macStyleWindowButtons();
+        boolean rightSide = windowButtonsRight();
         windowControls.getChildren().clear();
-        windowControls.getStyleClass().removeAll("win-macos", "win-classic");
-        windowControls.getStyleClass().add(macStyle ? "win-macos" : "win-classic");
+        windowControls.getStyleClass().removeAll("win-macos", "win-classic", "win-left", "win-right");
+        windowControls.getStyleClass().addAll(macStyle ? "win-macos" : "win-classic",
+                rightSide ? "win-right" : "win-left");
+        windowControls.setAlignment(rightSide ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+        windowControls.setPadding(new Insets(8, 14, 0, 14));
 
         Button minBtn = createWindowBtn("minimize");
         minBtn.setOnAction(e -> minimizeWindow());
@@ -596,72 +618,145 @@ public class LauncherView implements PageView, LauncherContext {
      * 节日效果入口：计算活动节日 → 按节日加载壁纸（自适应铺满 + 可读性遮罩）
      * → 挂顶部灯笼（按节日配色）。无节日时保持默认背景。
      *
+     * <p>幂等：挂之前先摘掉上一组节点，所以设置页切换开关可以原地重建（见
+     * {@link #applyFestivalTheme()}），不需要重启启动器。
+     *
      * <p>壁纸约定：{@code src/main/resources/wallpaper/<id>.png|jpg|jpeg|webp}；
-     * 未命中时回退用户壁纸 / 主题渐变（不报错）。
+     * 未命中时按节日配色画一层兜底渐变（不再静默保持默认背景 —— 那会让「节日主题」
+     * 看起来只有问候语变了、背景没变）。
      */
     private void installFestivalDecorations() {
-        if (!com.example.starlight.newui.festival.FestivalCalendar.isEnabled(configCache)) {
+        clearFestivalDecorations();
+        if (configCache == null
+                || !com.example.starlight.newui.festival.FestivalCalendar.isEnabled(configCache)) {
+            activeFestival = null;
             return; // 开关关闭：不挂任何节日装饰
         }
         activeFestival = com.example.starlight.newui.festival.FestivalCalendar.current();
         if (activeFestival == null) {
             return; // 无节日：不挂任何节日装饰
         }
-        // 1) 节日壁纸：优先于默认渐变，但用户自定义壁纸（BackgroundImage）优先
-        applyFestivalWallpaper(activeFestival.id);
+        // 1) 节日背景：优先于默认渐变，但用户自定义壁纸 / 背景色优先
+        applyFestivalWallpaper(activeFestival);
         // 2) 顶部灯笼（按节日配色）
-        rootPane.getChildren().add(
-                com.example.starlight.newui.ui.FestivalDecorations.topOverlay(
-                        activeFestival.lanternA, activeFestival.lanternB));
+        festivalTopLayer = com.example.starlight.newui.ui.FestivalDecorations.topOverlay(
+                activeFestival.lanternA, activeFestival.lanternB);
+        rootPane.getChildren().add(festivalTopLayer);
+    }
+
+    /** 摘掉全部节日装饰节点（背景 / 遮罩 / 灯笼），不影响壁纸与自定义色 */
+    private void clearFestivalDecorations() {
+        if (festivalBackdrop != null) {
+            rootPane.getChildren().remove(festivalBackdrop);
+            festivalBackdrop = null;
+        }
+        if (festivalScrim != null) {
+            rootPane.getChildren().remove(festivalScrim);
+            festivalScrim = null;
+        }
+        if (festivalTopLayer != null) {
+            rootPane.getChildren().remove(festivalTopLayer);
+            festivalTopLayer = null;
+        }
     }
 
     /**
-     * 按节日 id 从 classpath 资源加载壁纸并自适应铺满。
+     * 节日主题开关变化后立即生效（设置 → 主题与背景 → 节日主题）。
      *
-     * <p>优先级：用户壁纸（BackgroundImage）> 节日壁纸（wallpaper/）> 主题渐变。
+     * <p>三件事：重建节日装饰、刷新首页缓存（问候语与启动按钮按新开关重新渲染）、
+     * 让下一次进入首页看到的就是切换后的效果。不变更配置本身 —— 配置由开关写入并保存。
+     */
+    @Override
+    public void applyFestivalTheme() {
+        installFestivalDecorations();
+        refreshHomeCache();
+    }
+
+    /**
+     * 按节日加载壁纸并自适应铺满。
+     *
+     * <p>优先级：用户壁纸（BackgroundImage）/ 自定义背景色 > 节日壁纸（wallpaper/）> 主题渐变。
      * 图片用 preserveRatio=false + 绑定窗口宽高做到「自适应页面」（拉伸铺满），
      * 与现有 ThemeManager.applyBackgroundImage 的方式一致；叠一层可读性遮罩保证文字对比度。
+     * 该节日没有壁纸资源时退化为节日配色的渐变底（见 {@link #applyFestivalGradient}）。
      */
-    private void applyFestivalWallpaper(String festivalId) {
-        // 用户已设壁纸时不覆盖
+    private void applyFestivalWallpaper(com.example.starlight.newui.festival.Festival festival) {
+        // 用户已设壁纸 / 自定义背景色时不覆盖
         String userBg = configCache == null ? "" : configCache.getOrDefault("BackgroundImage", "");
-        if (!userBg.isBlank()) return;
+        if (userBg != null && !userBg.isBlank()) return;
+        com.example.starlight.newui.ui.CustomThemeColor color = customThemeColor();
+        if (color != null && color.isEnabled()) return;
 
         String[] exts = {"png", "jpg", "jpeg", "webp"};
         java.io.InputStream in = null;
         for (String ext : exts) {
-            in = getClass().getResourceAsStream("/wallpaper/" + festivalId + "." + ext);
+            in = getClass().getResourceAsStream("/wallpaper/" + festival.id + "." + ext);
             if (in != null) break;
         }
-        if (in == null) return; // 该节日无壁纸，保持默认背景
+        if (in == null) {
+            applyFestivalGradient(festival);
+            return;
+        }
 
         try {
             Image img = new Image(in);
-            if (img.isError()) return;
-            ImageView view = new ImageView(img);
+            if (img.isError()) {
+                applyFestivalGradient(festival);
+                return;
+            }
+            javafx.scene.image.ImageView view = new javafx.scene.image.ImageView(img);
             view.setPreserveRatio(false);
             view.setSmooth(true);
             view.fitWidthProperty().bind(rootPane.widthProperty());
             view.fitHeightProperty().bind(rootPane.heightProperty());
             view.setOpacity(1.0);
+            view.setMouseTransparent(true);
             rootPane.getChildren().add(0, view);
             view.toBack();
+            festivalBackdrop = view;
 
-            // 可读性遮罩（浅色提亮 / 深色压暗），保证节日壁纸上的文字清晰
-            javafx.scene.layout.Region overlay = new javafx.scene.layout.Region();
-            overlay.setMouseTransparent(true);
-            overlay.prefWidthProperty().bind(rootPane.widthProperty());
-            overlay.prefHeightProperty().bind(rootPane.heightProperty());
-            boolean dark = "dark".equals(currentTheme());
-            overlay.setStyle(dark
-                    ? "-fx-background-color: rgba(0,0,0,0.30);"
-                    : "-fx-background-color: rgba(255,255,255,0.18);");
-            rootPane.getChildren().add(1, overlay);
+            addFestivalScrim();
         } catch (Exception ignored) {
-            // 加载失败保持默认背景
+            // 加载失败退化为节日渐变，避免「节日主题开着但背景完全没变化」
+            applyFestivalGradient(festival);
         } finally {
             try { in.close(); } catch (Exception ignored) {}
         }
+    }
+
+    /**
+     * 无壁纸资源时的兜底背景：按节日按钮配色画一层对角渐变。
+     *
+     * <p>不是最终视觉方案，只保证「每个节日都有背景」这件事成立；
+     * 官方发布版会在 {@code resources/wallpaper/} 提供精细壁纸，优先命中上面的加载分支。
+     */
+    private void applyFestivalGradient(com.example.starlight.newui.festival.Festival festival) {
+        javafx.scene.layout.Region bg = new javafx.scene.layout.Region();
+        bg.setMouseTransparent(true);
+        bg.prefWidthProperty().bind(rootPane.widthProperty());
+        bg.prefHeightProperty().bind(rootPane.heightProperty());
+        bg.setStyle("-fx-background-color: linear-gradient(to bottom right, "
+                + festival.gradientA + " 0%, " + festival.gradientB + " 100%);");
+        rootPane.getChildren().add(0, bg);
+        bg.toBack();
+        festivalBackdrop = bg;
+        addFestivalScrim();
+    }
+
+    /** 节日背景上的可读性遮罩（浅色主题提亮、深色主题压暗），保证前景文字对比度 */
+    private void addFestivalScrim() {
+        javafx.scene.layout.Region overlay = new javafx.scene.layout.Region();
+        overlay.setMouseTransparent(true);
+        overlay.prefWidthProperty().bind(rootPane.widthProperty());
+        overlay.prefHeightProperty().bind(rootPane.heightProperty());
+        boolean dark = "dark".equals(currentTheme());
+        // 浅色主题的节日壁纸本身偏暗，只加 18% 白会让深灰正文对比不足；
+        // 0.38 的白膜能把壁纸压成「淡彩背景」，又保留节日意象。
+        overlay.setStyle(dark
+                ? "-fx-background-color: rgba(0,0,0,0.30);"
+                : "-fx-background-color: rgba(255,255,255,0.38);");
+        rootPane.getChildren().add(1, overlay);
+        festivalScrim = overlay;
     }
 
     /**
@@ -1030,6 +1125,10 @@ public class LauncherView implements PageView, LauncherContext {
             }
         }
 
+        // 通透模式：把这一页里所有「卡片」都装上玻璃（见 GlassFeature.CARD_STYLES 说明）。
+        // 必须在挂进 mainContent 之前跑：页面进场景的那一刻玻璃就算好了位置。
+        com.example.starlight.newui.ui.GlassFeature.decoratePage(newPage);
+
         mainContent.getChildren().clear();
 
         // 资源页、下载中心页、联机页、社区页、帖子详情页、版本选择页自带内部滚动区，不包装外层ScrollPane
@@ -1139,6 +1238,7 @@ public class LauncherView implements PageView, LauncherContext {
     public void refreshHomePage() {
         pageCache.put("home", buildHomePage());
         if (currentTab == homeTab) {
+            com.example.starlight.newui.ui.GlassFeature.decoratePage(pageCache.get("home"));
             mainContent.getChildren().clear();
             mainContent.getChildren().add(pageCache.get("home"));
             currentPage = pageCache.get("home");
@@ -1461,6 +1561,10 @@ public class LauncherView implements PageView, LauncherContext {
         AppConfig.DEBUG_MODE = "true".equalsIgnoreCase(configCache.getOrDefault("DebugMode", "false"));
         AppConfig.CHINESE_LOG = !"false".equalsIgnoreCase(configCache.getOrDefault("ChineseLog", "true"));
         DebugLog.applyMode(AppConfig.DEBUG_MODE); // 同步 logback root 级别（DEBUG/INFO）
+        // 通透模式总控：必须在 buildAllPages 之前落定，卡片工厂（PageKit）建卡片时才问得到开关状态。
+        // 所有开关与参数都在 GlassFeature 一个文件里（含编译期开关）。
+        com.example.starlight.newui.ui.GlassFeature.setEnabled(
+                com.example.starlight.newui.ui.GlassFeature.isEnabled(configCache));
     }
 
     /**
@@ -2017,7 +2121,13 @@ public class LauncherView implements PageView, LauncherContext {
         sidebarScroll.setManaged(show && inSettings);
     }
 
-    /** 应用「仿 macOS 三点式窗口按钮」开关：按配置重建标题栏右上角的按钮 */
+    /**
+     * 应用窗口按钮相关开关：按配置重建标题栏按钮。
+     *
+     * <p>覆盖两件事 —— 样式（{@code MacStyleWindowButtons}：仿 macOS 三点式 / 减号+叉号）
+     * 与排放位置（{@code WindowButtonSide}：靠右 / 靠左）。两者都只是重建同一组按钮，
+     * 所以共用一个入口。
+     */
     @Override
     public void applyWindowButtonStyle() {
         rebuildWindowControls();

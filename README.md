@@ -228,7 +228,6 @@ cd starlight-launcher-cn
   "keys": {
     "curseforgeApiKey": "你的 CurseForge API Key",
     "nvidiaNimApiKey": "你的 AI 诊断 Key（可留空，仅影响 AI 诊断功能）",
-    "communityApiKey": "星光社区 Key（可留空）",
     "microsoftClientId": "Azure 应用客户端 ID（微软登录用）",
     "smtp": { "host": "", "port": "", "user": "", "password": "", "to": "" }
   },

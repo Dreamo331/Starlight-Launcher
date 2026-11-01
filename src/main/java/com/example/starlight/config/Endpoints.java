@@ -173,11 +173,6 @@ public final class Endpoints {
         return str("keys.nvidiaNimApiKey");
     }
 
-    /** 星光MC社区站点级 API Key（签到接口 X-API-Key 头），可被 -Dstarlight.community.apiKey 覆盖 */
-    public static String communityApiKey() {
-        return str("keys.communityApiKey");
-    }
-
     /** 微软设备码登录的 Azure 公开客户端 ID */
     public static String microsoftClientId() {
         return str("keys.microsoftClientId");

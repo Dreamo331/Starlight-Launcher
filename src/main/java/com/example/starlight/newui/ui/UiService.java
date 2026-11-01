@@ -20,6 +20,7 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -543,9 +544,30 @@ public final class UiService {
         modal(I18N.get("ui.t0023"), body, 560, 420);
     }
 
+    /**
+     * 显示一份法律文档全文（设置 → 关于 → 法律文档）。
+     *
+     * <p>正文来自构建期从 {@code docs/} 复制进 classpath 的正本（见
+     * {@link com.example.starlight.legal.LegalDocument}），渲染成带样式的只读面板；
+     * 与首次启动的同意页用的是同一份正文与同一套渲染器。
+     */
+    public void legalDocDialog(com.example.starlight.legal.LegalDocument doc) {
+        if (doc == null) return;
+        ScrollPane scroll = new ScrollPane(
+                com.example.starlight.legal.LegalMarkdownView.render(doc.text()));
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scroll.getStyleClass().add("legal-doc-scroll");
+        scroll.setPrefSize(720, 480);
+        VBox body = new VBox(scroll);
+        body.setPadding(new Insets(6, 2, 0, 2));
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+        modal(doc.title(), body, 760, 560);
+    }
+
     /** 显示第三方开源许可列表（读取 /assets/licenses.json） */
-    public void licenseDialog() {
-        List<String> lines = new ArrayList<>();
+    public void licenseDialog() {        List<String> lines = new ArrayList<>();
         try (java.io.InputStream is = UiService.class.getResourceAsStream("/assets/licenses.json")) {
             if (is != null) {
                 JsonArray arr = JsonParser.parseReader(

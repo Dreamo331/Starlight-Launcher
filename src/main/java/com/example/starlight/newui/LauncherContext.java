@@ -138,6 +138,14 @@ public interface LauncherContext {
     void applyBackgroundImage();
 
     /**
+     * 应用节日主题（读取配置后立即生效）。
+     *
+     * <p>开关关闭 → 摘掉背景 / 遮罩 / 灯笼三组节点；开关开启 → 按当前日期重新挂上。
+     * 设置页切换开关后调用，不需要重启启动器。
+     */
+    void applyFestivalTheme();
+
+    /**
      * 自定义背景色管理（设置 → 主题与背景 → 自定义背景色）。
      * <p>与壁纸、默认渐变三级共存：有壁纸时自定义色让位。
      */

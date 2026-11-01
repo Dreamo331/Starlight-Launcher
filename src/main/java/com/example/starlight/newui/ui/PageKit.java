@@ -1,6 +1,7 @@
 package com.example.starlight.newui.ui;
 
 import com.example.starlight.newui.LauncherContext;
+
 import com.example.starlight.util.I18N;
 
 import javafx.animation.PauseTransition;
@@ -253,6 +254,7 @@ public final class PageKit {
         } else {
             card.getChildren().add(info);
         }
+        GlassFeature.install(card);
         return card;
     }
 
@@ -300,6 +302,7 @@ public final class PageKit {
             }
             card.getChildren().add(control);
         }
+        GlassFeature.install(card);
         return card;
     }
 
@@ -363,6 +366,7 @@ public final class PageKit {
         card.getChildren().add(header);
         if (summaryLabel != null) card.getChildren().add(summaryLabel);
         card.getChildren().add(content);
+        GlassFeature.install(card);
         return card;
     }
 
@@ -762,6 +766,7 @@ public static VBox toolbarCard(Node... rows) {
     for (Node row : rows) {
         if (row != null) card.getChildren().add(row);
     }
+    GlassFeature.install(card);
     return card;
 }
 

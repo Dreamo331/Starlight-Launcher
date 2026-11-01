@@ -47,3 +47,10 @@ crash-report-*/
 # ── 法律文档存证：压缩包不入库，哈希清单 / 时间戳令牌 / 台账必须入库 ──
 # BUNDLE-*.zip 可由 witness.ps1 随时重建，且体积较大；证明力来自清单、.tsr 与台账。
 /tools/legal-witness/BUNDLE-*.zip
+
+# finesse build history (local only; the stamp in the page CSS is the shared memory)
+.finesse/
+
+# ── 本地杂项，不入库 ──
+/.workbuddy/
+/.res

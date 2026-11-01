@@ -7,8 +7,10 @@ import com.example.starlight.gui.UIGeneralControlClass;
 import com.example.starlight.listjava.JavaCacheManager;
 import com.example.starlight.main.ConfigManager;
 import com.example.starlight.main.ConsoleMode;
+import com.example.starlight.newui.IconSplashView;
 import com.example.starlight.newui.LauncherView;
 import com.example.starlight.newui.SplashProgress;
+import com.example.starlight.newui.SplashScreen;
 import com.example.starlight.newui.SplashView;
 import com.example.starlight.newui.ui.AppFonts;
 import com.example.starlight.plugin.PluginManager;
@@ -18,15 +20,18 @@ import com.example.starlight.service.SilentLoginManager;
 import com.example.starlight.util.IcoImageLoader;
 import com.example.starlight.util.SystemInfoMonitor;
 import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.geometry.Insets;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
@@ -46,6 +51,19 @@ public class JavaFXLauncher extends Application {
 
     private static final int EXPECTED_JAVA_VERSION = 17;
     private static final String EXPECTED_JAVAFX_VERSION_PREFIX = "17";
+
+    /**
+     * 主窗口外阴影的留白（逻辑像素）。
+     *
+     * <p>本窗口是 {@code StageStyle.TRANSPARENT}，系统不会画阴影，而窗口矩形之外的像素
+     * 根本画不出来 —— 所以内容必须往里缩一圈，用这圈透明留白给阴影当画布。
+     * 留白要明显大于阴影的实际扩散范围（实测半径 20 的 DropShadow 约 15-18px 就衰减完），
+     * 否则阴影在窗口边界处还剩一点 alpha，会被硬切成一条「比内容大一圈」的细线。</p>
+     */
+    private static final double WINDOW_SHADOW_MARGIN = 26;
+    private static final double WINDOW_SHADOW_RADIUS = 22;
+    private static final double WINDOW_SHADOW_OFFSET_Y = 3;
+    private static final Color WINDOW_SHADOW_COLOR = Color.rgb(0, 0, 0, 0.32);
 
     /** 闪屏后台初始化最大等待时间（秒）：超时后强制进入主界面，避免后台任务卡死时动画无限加载 */
     private static final int SPLASH_MAX_WAIT_SECONDS = 15;
@@ -83,7 +101,26 @@ public class JavaFXLauncher extends Application {
         // 必须先设置无边框透明窗口（必须在 show() 之前调用）
         primaryStage.initStyle(StageStyle.TRANSPARENT);
 
-        // 先显示启动动画（Splash），再进入主界面
+        // 语言要在同意页之前应用：同意页本身也要按用户配置的语言显示
+        applyLanguageEarly();
+
+        // 告知—同意门：第一次使用（或法律文档修订后）必须先阅读并主动勾选确认，
+        // 同意之前不进入主界面、也不启动插件 API 等后台服务。
+        if (!com.example.starlight.legal.LegalConsentStore.isAccepted()) {
+            com.example.starlight.legal.LegalConsentGate.show(primaryStage,
+                    () -> continueStartup(primaryStage));
+            return;
+        }
+        continueStartup(primaryStage);
+    }
+
+    /**
+     * 同意之后（或已有有效同意记录时）继续正常的启动流程：闪屏 → 后台初始化 → 主界面。
+     *
+     * <p>单独抽出来是因为同意页会打断 {@link #start(Stage)}：同意是异步的用户动作，
+     * 不能在里面阻塞等待，只能走回调。
+     */
+    private void continueStartup(Stage stage) {
         // 开发者选项可关闭启动画面（ShowSplash=false），此时直接进入主界面
         boolean showSplash = true;
         try {
@@ -92,12 +129,28 @@ public class JavaFXLauncher extends Application {
         } catch (Exception ignored) {}
 
         if (showSplash) {
-            showSplashPage(primaryStage);
+            showSplashPage(stage);
         } else {
             // 跳过闪屏：后台仍执行预热初始化，不阻塞界面进入
             UIGeneralControlClass.ASYNC_POOL.submit(JavaFXLauncher::runBackgroundInit);
-            enterMain(primaryStage);
+            enterMain(stage);
         }
+    }
+
+    /**
+     * 构造函数最早期同样的做法：只读配置里的 {@code Language} 一个键，不触发磁盘扫描等副作用。
+     * 同意页在主界面之前出现，这里必须自己应用一次语言。
+     */
+    private static void applyLanguageEarly() {
+        String lang = "zh_CN";
+        try {
+            lang = ConfigManager.readConfig().getOrDefault("Language", "zh_CN");
+            Map<String, String> clientCfg = ConfigManager.readClientConfig();
+            if (clientCfg.containsKey("Language")) lang = clientCfg.get("Language");
+        } catch (Exception ignored) {
+            // 配置读不出来就用默认语言，绝不因为语言问题阻断启动
+        }
+        I18N.applyConfig(lang);
     }
 
     /**
@@ -210,7 +263,7 @@ public class JavaFXLauncher extends Application {
      * 显示启动动画页面
      */
     private void showSplashPage(Stage stage) {
-        SplashView splash = new SplashView();
+        SplashScreen splash = createSplashScreen();
         Scene scene = new Scene((Parent) splash.getView());
         scene.setFill(Color.TRANSPARENT);
 
@@ -218,10 +271,14 @@ public class JavaFXLauncher extends Application {
         stage.setScene(scene);
         stage.setResizable(false);
         // 开屏动画始终在屏幕中心显示
-        centerStage(stage, SplashView.SPLASH_WIDTH, SplashView.SPLASH_HEIGHT);
+        centerStage(stage, splash.width(), splash.height());
         // 闪屏期间置顶：避免启动过程被其它窗口盖住（进入主界面时会关掉，见 enterMain）
         stage.setAlwaysOnTop(true);
         stage.show();
+        // 场景布局完成后再按窗口的真实尺寸校准一次：
+        // 上面那次用的是「声明的尺寸」，若根节点首选尺寸与它对不上（或系统缩放带来取整差异），
+        // 图片就会偏离屏幕正中，而透明无边框窗口一旦偏了没人看得出来偏在哪。
+        Platform.runLater(() -> centerStage(stage, stage.getWidth(), stage.getHeight()));
 
         // 在闪屏期间异步执行初始化（加载配置、检查环境等）。
         // 注意：初始化任务异常或卡死时也必须能进入主界面（否则动画无限加载且无任何报错），
@@ -250,7 +307,28 @@ public class JavaFXLauncher extends Application {
             Platform.runLater(() -> splash.playAnimation(Duration.millis(remaining)));
         });
 
-        splash.setOnFinished(() -> Platform.runLater(() -> enterMain(stage)));
+        splash.setOnFinished(() -> Platform.runLater(() -> {
+            splash.stop();
+            enterMain(stage);
+        }));
+    }
+
+    /**
+     * 按配置创建开屏动画。
+     *
+     * <p>两套可选（设置 → 主题与背景 →「启动动画」）：
+     * <ul>
+     *   <li>{@code starlight}（默认）：{@link SplashView} 星轨动画，Canvas 逐帧绘制星空；</li>
+     *   <li>{@code icon}：{@link IconSplashView} 静态开屏，屏幕正中只显示一张启动器图标，无动画。</li>
+     * </ul>
+     * 配置读不出来（或值不认识）时一律回落星轨动画，绝不因为一个配置项阻断启动。
+     */
+    private static SplashScreen createSplashScreen() {
+        String style = "starlight";
+        try {
+            style = ConfigManager.readClientConfig().getOrDefault("SplashStyle", "starlight");
+        } catch (Exception ignored) {}
+        return "icon".equalsIgnoreCase(style) ? new IconSplashView() : new SplashView();
     }
 
     /**
@@ -260,7 +338,31 @@ public class JavaFXLauncher extends Application {
         LauncherView launcherView = new LauncherView(stage);
         Region mainRoot = (Region) launcherView.getView();
 
-        Scene scene = new Scene(mainRoot);
+        // 从闪屏切过来时，窗口还是闪屏那个「居中尺寸」（图标开屏只有 128×128）。
+        // 直接 setScene 会有一两帧把主界面画进这个小窗口里 —— 表现就是「动画闪一下、
+        // 然后跳到窗口位置」。所以先把整个窗口置为全透明，等场景 / 尺寸 / 位置都定好再淡入。
+        //
+        // 不能用 stage.hide()：隐藏最后一个窗口会触发 JavaFX 的隐式退出，后面的 show() 起不来，
+        // 表现就是「启动器闪一下就没了」。改透明度不影响 showing 状态，没有这个副作用。
+        boolean switchFromSplash = stage.isShowing();
+        if (switchFromSplash) {
+            stage.setOpacity(0);
+        }
+
+        // 外阴影：内容往里缩 WINDOW_SHADOW_MARGIN，阴影画在这圈透明留白里。
+        //
+        // ⚠ 这里有个坑：JavaFX 会把 "root" 样式类自动挂到「场景根节点」上，而 style.css 里的
+        // .root 带背景色、1px 边框和 dropshadow —— 直接把留白容器当场景根节点，它就会被画成
+        // 第二张「比内容大一圈、带边框和阴影」的卡片，看上去就是窗口外面多了一道框。
+        // 所以留白容器必须用内联样式把 .root 的这几项全部压掉（内联优先级最高）。
+        StackPane shadowHost = new StackPane();
+        shadowHost.setStyle("-fx-background-color: transparent; -fx-border-color: transparent;"
+                + " -fx-border-width: 0; -fx-effect: null;");
+        StackPane shadowBox = new StackPane(mainRoot);
+        shadowBox.setEffect(createWindowShadow());
+        shadowHost.getChildren().add(shadowBox);
+
+        Scene scene = new Scene(shadowHost);
         scene.setFill(Color.TRANSPARENT);
 
         // 加载 NEWUI 样式表
@@ -271,27 +373,36 @@ public class JavaFXLauncher extends Application {
 
         stage.setTitle("Starlight Launcher");
         stage.setScene(scene);
-        stage.setMinWidth(920);
-        stage.setMinHeight(620);
+        // 最小尺寸按「内容」给：窗口本身还要再加两侧的阴影留白
+        stage.setMinWidth(920 + WINDOW_SHADOW_MARGIN * 2);
+        stage.setMinHeight(620 + WINDOW_SHADOW_MARGIN * 2);
 
         // 从配置恢复窗口大小
         double winWidth = 920;
         double winHeight = 620;
+        Rectangle2D visual = Screen.getPrimary().getVisualBounds();
+        // 屏幕放不下的尺寸一律裁掉：窗口比可视区域高时，底边（连同圆角）会跑到屏幕外，
+        // 看起来就是「页面下方没有圆角」；同时页面滚动区会被撑得比内容还高，
+        // 于是明明内容没显示全，却「滚不动」。
+        double maxWinWidth = Math.max(760, visual.getWidth() - 40 - WINDOW_SHADOW_MARGIN * 2);
+        double maxWinHeight = Math.max(560, visual.getHeight() - 60 - WINDOW_SHADOW_MARGIN * 2);
         try {
             String w = ConfigManager.readClientConfig().getOrDefault("WindowWidth", "920");
             String h = ConfigManager.readClientConfig().getOrDefault("WindowHeight", "620");
             int width = Integer.parseInt(w);
             int height = Integer.parseInt(h);
             if (width >= 920 && height >= 620) {
-                stage.setWidth(width);
-                stage.setHeight(height);
-                winWidth = width;
-                winHeight = height;
+                winWidth = Math.min(width, maxWinWidth);
+                winHeight = Math.min(height, maxWinHeight);
+                // 配置里存的是「内容尺寸」，窗口 = 内容 + 两侧留白（这样存取口径不会每重启一次长 48px）
+                stage.setWidth(winWidth + WINDOW_SHADOW_MARGIN * 2);
+                stage.setHeight(winHeight + WINDOW_SHADOW_MARGIN * 2);
             }
         } catch (Exception ignored) {}
 
         // 从配置恢复窗口位置；「沿用上次关闭的窗口位置」关闭时窗口居中显示
-        applyWindowPosition(stage, winWidth, winHeight);
+        applyWindowPosition(stage, winWidth + WINDOW_SHADOW_MARGIN * 2,
+                winHeight + WINDOW_SHADOW_MARGIN * 2);
 
         stage.show();
 
@@ -300,6 +411,11 @@ public class JavaFXLauncher extends Application {
         if ("true".equals(maximized)) {
             stage.setMaximized(true);
         }
+
+        // 没给过尺寸时，Stage 会按「场景首选尺寸」自己定 —— 首页内容的 pref 高度上千，
+        // 于是窗口会自己长到比屏幕还高。这里把尺寸与位置一起夹进可视区；
+        // 最大化时窗口由系统接管，不去动它。
+        clampWindowToScreen(stage);
 
         // 窗口状态防抖保存：拖拽/缩放停止 500ms 后写入文件一次
         final Timeline[] debounceTimers = {null};
@@ -310,8 +426,11 @@ public class JavaFXLauncher extends Application {
             debounceTimers[0] = new Timeline(
                 new KeyFrame(debounceDelay, e -> {
                     Map<String, String> cfg = new java.util.HashMap<>();
-                    cfg.put("WindowWidth", String.valueOf((int) stage.getWidth()));
-                    cfg.put("WindowHeight", String.valueOf((int) stage.getHeight()));
+                    // 存内容尺寸（扣掉阴影留白），这样「窗口尺寸」不会把留白也算进去
+                    cfg.put("WindowWidth",
+                            String.valueOf((int) (stage.getWidth() - WINDOW_SHADOW_MARGIN * 2)));
+                    cfg.put("WindowHeight",
+                            String.valueOf((int) (stage.getHeight() - WINDOW_SHADOW_MARGIN * 2)));
                     cfg.put("WindowX", String.valueOf((int) stage.getX()));
                     cfg.put("WindowY", String.valueOf((int) stage.getY()));
                     cfg.put("WindowMaximized", String.valueOf(stage.isMaximized()));
@@ -331,7 +450,7 @@ public class JavaFXLauncher extends Application {
         stage.yProperty().addListener((obs, o, n) -> saveWindowState.run());
         stage.maximizedProperty().addListener((obs, was, now) -> saveWindowState.run());
 
-        // 圆角裁剪
+        // 圆角裁剪（窗口矩形紧贴内容，圆角只能靠 clip 画）
         Rectangle clip = new Rectangle();
         clip.widthProperty().bind(mainRoot.widthProperty());
         clip.heightProperty().bind(mainRoot.heightProperty());
@@ -339,13 +458,71 @@ public class JavaFXLauncher extends Application {
         clip.setArcHeight(16);
         mainRoot.setClip(clip);
 
-        // 窗口阴影
+        // 最大化时窗口贴满屏幕：再留一圈透明边只会让内容凭空变小，阴影也没地方画 —— 边距归零、阴影摘掉。
+        Runnable syncShadow = () -> {
+            boolean isMax = stage.isMaximized() || stage.isFullScreen();
+            shadowHost.setPadding(isMax ? Insets.EMPTY : new Insets(WINDOW_SHADOW_MARGIN));
+            shadowBox.setEffect(isMax ? null : createWindowShadow());
+        };
+        stage.maximizedProperty().addListener((obs, wasMax, isMax) -> syncShadow.run());
+        stage.fullScreenProperty().addListener((obs, wasFs, isFs) -> syncShadow.run());
+        syncShadow.run();
+
+        // 圆角裁剪装好之后再淡入：窗口是「凭空出现」的（从闪屏切来尤其明显），硬切很突兀。
+        if (switchFromSplash) {
+            fadeInWindow(stage);
+        }
+    }
+
+    /** 主窗口外阴影（画在 {@link #WINDOW_SHADOW_MARGIN} 的透明留白里） */
+    private static DropShadow createWindowShadow() {
         DropShadow shadow = new DropShadow();
-        shadow.setRadius(20);
+        shadow.setRadius(WINDOW_SHADOW_RADIUS);
         shadow.setOffsetX(0);
-        shadow.setOffsetY(4);
-        shadow.setColor(Color.rgb(0, 0, 0, 0.15));
-        mainRoot.setEffect(shadow);
+        shadow.setOffsetY(WINDOW_SHADOW_OFFSET_Y);
+        shadow.setColor(WINDOW_SHADOW_COLOR);
+        return shadow;
+    }
+
+    /** 主窗口淡入（200ms，只改窗口透明度，不碰布局与命中测试） */
+    private static void fadeInWindow(Stage stage) {
+        Timeline fade = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(stage.opacityProperty(), 0)),
+                new KeyFrame(Duration.millis(200), new KeyValue(stage.opacityProperty(), 1)));
+        fade.play();
+    }
+
+    /**
+     * 把窗口夹进屏幕可视区域：尺寸超了就缩，位置越界就挪回来。
+     *
+     * <p>为什么必须夹：这个窗口是无边框透明窗，圆角靠根节点的 clip 画出来。窗口一旦比屏幕可视区
+     * 还高（或者位置让底边出屏），用户看到的就是「页面下方被切平、没有圆角」，同时滚动区的视口
+     * 被撑得比内容还高，明明内容没看全却滚不动。另外 JavaFX 在没显式给尺寸时会按场景首选尺寸
+     * 自动定窗口大小，首页内容的 pref 高度上千，正好会踩到这个坑。</p>
+     */
+    private static void clampWindowToScreen(Stage stage) {
+        try {
+            if (stage.isMaximized() || stage.isFullScreen()) {
+                return;
+            }
+            Rectangle2D vb = Screen.getPrimary().getVisualBounds();
+            double maxW = Math.max(760, vb.getWidth() - 40);
+            double maxH = Math.max(560, vb.getHeight() - 60);
+            if (stage.getWidth() > maxW) {
+                stage.setWidth(maxW);
+            }
+            if (stage.getHeight() > maxH) {
+                stage.setHeight(maxH);
+            }
+            double x = stage.getX();
+            double y = stage.getY();
+            double maxX = vb.getMaxX() - stage.getWidth() - 8;
+            double maxY = vb.getMaxY() - stage.getHeight() - 8;
+            stage.setX(Math.max(vb.getMinX() + 8, Math.min(x, maxX)));
+            stage.setY(Math.max(vb.getMinY() + 8, Math.min(y, maxY)));
+        } catch (Exception ignored) {
+            // 拿不到屏幕信息（无头环境等）就维持原样
+        }
     }
 
     /**

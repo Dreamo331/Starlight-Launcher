@@ -4,7 +4,6 @@ package com.example.starlight.newui.page;
 import com.example.starlight.util.I18N;
 import com.example.starlight.community.CommunityApi;
 import com.example.starlight.community.CommunityApi.ApiResult;
-import com.example.starlight.community.CommunityApi.CheckinResult;
 import com.example.starlight.community.CommunityApi.CommunityComment;
 import com.example.starlight.community.CommunityApi.CommunityPost;
 import com.example.starlight.community.CommunityApi.CommunityUser;
@@ -40,9 +39,11 @@ import javafx.scene.layout.VBox;
 import java.util.List;
 
 /**
- * 社区页：登录 / 签到 / 发帖 / 帖子列表 / 评论 / 点赞，全部对接真实后端接口。
- * 布局：左侧个人信息 + 签到固定，右侧发帖区固定，帖子列表区域独立滚动。
+ * 社区页：登录 / 发帖 / 帖子列表 / 评论 / 点赞，全部对接真实后端接口。
+ * 布局：左侧个人信息固定，右侧帖子列表区域独立滚动。
  * 帖子列表与登录态在页面构建后异步加载，不阻塞 UI 线程。
+ *
+ * <p>v2（2026-11-01）：社区经济系统下线，签到接口返回 410，左侧「每日签到」卡片已移除。</p>
  *
  * <p>从 LauncherView 抽离（方法体逐字搬运，逻辑、样式类与内联样式均未改动）。
  * 页面组件引用（communityUserCard / communityPostList / …）随页面迁入本类，
@@ -59,9 +60,7 @@ public final class CommunityPage {
     // 社区页组件引用（已接入星光MC社区后端） //
     private final CommunityApi communityApi = new CommunityApi(); // 社区 API 客户端
     private VBox communityUserCard;       // 登录卡片：登录成功后刷新为已登录状态
-    private Label communityCheckinStatus; // 签到状态文案："今日未签到" / "已连续签到N天"
     private VBox communityPostList;       // 帖子列表容器：后端拉取后用 createCommunityPostCard 填充
-    private Button communityCheckinBtn;   // 签到按钮：签到成功后禁用并变为"已签到"
     private TextField communityPostTitleField;     // 发帖标题输入框
     private TextArea communityPostContentArea;     // 发帖内容输入框
     private ComboBox<String> communityCategoryBox; // 发帖分类选择
@@ -70,8 +69,8 @@ public final class CommunityPage {
     // 社区页面（已接入星光MC社区后端，接口见 CommunityApi） //
 
     /**
-     * 社区页骨架：登录 / 签到 / 发帖 / 帖子列表 / 评论 / 点赞，全部对接真实后端接口。
-     * 布局：左侧个人信息 + 签到固定，右侧发帖区固定，帖子列表区域独立滚动。
+     * 社区页骨架：登录 / 发帖 / 帖子列表 / 评论 / 点赞，全部对接真实后端接口。
+     * 布局：左侧个人信息固定，右侧帖子列表区域独立滚动。
      * 帖子列表与登录态在页面构建后异步加载，不阻塞 UI 线程。
      */
     public Node buildNews() {
@@ -80,13 +79,12 @@ public final class CommunityPage {
         HBox.setHgrow(layout, Priority.ALWAYS);
         VBox.setVgrow(layout, Priority.ALWAYS);
 
-        // 左侧：登录 + 签到 + 官网提示（固定，不随帖子列表滚动） //
+        // 左侧：登录 + 官网提示（固定，不随帖子列表滚动） //
         VBox left = new VBox(14);
         left.setPrefWidth(280);
         left.setMinWidth(250);
         left.setMaxWidth(280);
         left.getChildren().add(buildCommunityLoginCard());
-        left.getChildren().add(buildCommunityCheckinCard());
         left.getChildren().add(buildCommunityNoticeCard());
 
         // 右侧：帖子列表（含「发布帖子」按钮入口，发帖在独立页面完成） //
@@ -190,7 +188,6 @@ public final class CommunityPage {
             logoutBtn.setOnAction(e -> {
                 communityApi.logout();
                 refreshCommunityUserCard();
-                refreshCommunityCheckinCard();
                 ctx.ui().toast(I18N.get("page.t0007"));
             });
 
@@ -219,45 +216,70 @@ public final class CommunityPage {
      */
     private void loadCommunityAvatar(StackPane avatarBox, Label avatarFallback,
                                      String avatarStyleClass, int uid, double size) {
+        loadCommunityAvatar(avatarBox, avatarFallback, avatarStyleClass, uid, size, null);
+    }
+
+    /**
+     * 异步加载真实头像。
+     *
+     * @param knownAvatar 帖子 / 评论 / 用户对象里已带的头像文件名（如 {@code 23.jpg}）。
+     *                    非空时直接拼地址加载，省掉一次 avatar_get —— 帖子列表一次就 10 张卡，
+     *                    服务器（本机 PHP 内置服务器是单线程的）会被这些小请求拖慢。
+     *                    为空时才回落到 avatar_get 查询。
+     */
+    private void loadCommunityAvatar(StackPane avatarBox, Label avatarFallback,
+                                     String avatarStyleClass, int uid, double size,
+                                     String knownAvatar) {
         if (uid <= 0) return;
+        String knownUrl = CommunityApi.resolveAvatarFile(knownAvatar);
+        if (knownUrl != null) {
+            applyCommunityAvatarImage(avatarBox, avatarFallback, avatarStyleClass, size, knownUrl);
+            return;
+        }
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
                 ApiResult<String> result = communityApi.avatarGet(uid);
                 Platform.runLater(() -> {
                     if (!result.ok || result.data == null || result.data.isEmpty()) return;
-                    final Image image;
-                    try {
-                        // backgroundLoading=true：图片在后台线程加载，不阻塞 FX 线程
-                        image = new Image(result.data, size, size, true, true, true);
-                    } catch (Exception ex) {
-                        return;
-                    }
-                    ImageView view = new ImageView(image);
-                    view.setFitWidth(size);
-                    view.setFitHeight(size);
-                    // 强制正方形显示区域：preserveRatio=true 时非正方形图片实际显示尺寸
-                    // 会小于裁剪圆直径，导致圆形头像被裁掉一部分（显示不全）
-                    view.setPreserveRatio(false);
-                    // 圆形裁剪
-                    javafx.scene.shape.Circle clip = new javafx.scene.shape.Circle(size / 2, size / 2, size / 2);
-                    view.setClip(clip);
-                    avatarBox.getChildren().setAll(view);
-                    avatarBox.getStyleClass().remove(avatarStyleClass);
-                    // 图片加载失败（如 404）时回退到 emoji 占位
-                    image.errorProperty().addListener((obs, o, n) -> {
-                        if (Boolean.TRUE.equals(n)) {
-                            Platform.runLater(() -> {
-                                if (avatarBox.getChildren().size() > 0
-                                        && avatarBox.getChildren().get(0) == view) {
-                                    avatarBox.getChildren().setAll(avatarFallback);
-                                    avatarBox.getStyleClass().add(avatarStyleClass);
-                                }
-                            });
-                        }
-                    });
+                    applyCommunityAvatarImage(avatarBox, avatarFallback, avatarStyleClass, size, result.data);
                 });
             } catch (Exception ignored) {
                 // 网络异常时保留默认头像
+            }
+        });
+    }
+
+    /** 把头像 URL 加载成圆形图片放进头像框；加载失败（404 / 非图片）时退回 emoji 占位 */
+    private void applyCommunityAvatarImage(StackPane avatarBox, Label avatarFallback,
+                                           String avatarStyleClass, double size, String url) {
+        final Image image;
+        try {
+            // backgroundLoading=true：图片在后台线程加载，不阻塞 FX 线程
+            image = new Image(url, size, size, true, true, true);
+        } catch (Exception ex) {
+            return;
+        }
+        ImageView view = new ImageView(image);
+        view.setFitWidth(size);
+        view.setFitHeight(size);
+        // 强制正方形显示区域：preserveRatio=true 时非正方形图片实际显示尺寸
+        // 会小于裁剪圆直径，导致圆形头像被裁掉一部分（显示不全）
+        view.setPreserveRatio(false);
+        // 圆形裁剪
+        javafx.scene.shape.Circle clip = new javafx.scene.shape.Circle(size / 2, size / 2, size / 2);
+        view.setClip(clip);
+        avatarBox.getChildren().setAll(view);
+        avatarBox.getStyleClass().remove(avatarStyleClass);
+        // 图片加载失败（如 404）时回退到 emoji 占位
+        image.errorProperty().addListener((obs, o, n) -> {
+            if (Boolean.TRUE.equals(n)) {
+                Platform.runLater(() -> {
+                    if (avatarBox.getChildren().size() > 0
+                            && avatarBox.getChildren().get(0) == view) {
+                        avatarBox.getChildren().setAll(avatarFallback);
+                        avatarBox.getStyleClass().add(avatarStyleClass);
+                    }
+                });
             }
         });
     }
@@ -378,7 +400,6 @@ public final class CommunityPage {
                         if (result.ok) {
                             ctx.ui().closeModal();
                             refreshCommunityUserCard();
-                            refreshCommunityCheckinCard();
                             ctx.ui().toast(I18N.get("page.p0742", result.data.username));
                         } else {
                             loginBtn.setDisable(false);
@@ -415,7 +436,6 @@ public final class CommunityPage {
                     } else if ("it".equals(result.code) || "nl".equals(result.code)) {
                         // token 已失效（profile 已清理登录态）：同步 UI 并提示重新登录
                         refreshCommunityUserCard();
-                        refreshCommunityCheckinCard();
                         ctx.ui().toast(I18N.get("page.t0026"));
                     }
                 });
@@ -425,89 +445,9 @@ public final class CommunityPage {
         });
     }
 
-    /** 每日签到卡片：调用真实签到接口，成功后更新状态并禁用按钮 */
-    private VBox buildCommunityCheckinCard() {
-        VBox card = new VBox(10);
-        card.getStyleClass().add("community-checkin-card");
-
-        Label title = new Label(I18N.get("page.t0027"));
-        title.getStyleClass().add("community-checkin-title");
-
-        communityCheckinStatus = new Label(I18N.get("page.t0028"));
-        communityCheckinStatus.getStyleClass().add("community-checkin-status");
-
-        communityCheckinBtn = AppIcons.button("hand", I18N.get("page.t0029"));
-        communityCheckinBtn.getStyleClass().add("community-checkin-btn");
-        communityCheckinBtn.setMaxWidth(Double.MAX_VALUE);
-        communityCheckinBtn.setOnAction(e -> doCommunityCheckin());
-
-        card.getChildren().addAll(title, communityCheckinStatus, communityCheckinBtn);
-        refreshCommunityCheckinCard();
-        return card;
-    }
-
-    /** 刷新签到卡片状态（根据本地记录 / 登录态），登录退出后调用 */
-    private void refreshCommunityCheckinCard() {
-        if (communityCheckinStatus == null || communityCheckinBtn == null) return;
-        if (communityApi.isCheckedInToday()) {
-            communityCheckinStatus.setText(I18N.get("page.t0030"));
-            communityCheckinBtn.setText(I18N.get("page.t0031"));
-            communityCheckinBtn.setDisable(true);
-            communityCheckinBtn.setStyle("-fx-background-color: #10b981;");
-        } else {
-            communityCheckinStatus.setText(communityApi.hasToken() ? I18N.get("page.t0558") : I18N.get("page.t0559"));
-            AppIcons.setText(communityCheckinBtn, "hand", I18N.get("page.t0032"));
-            communityCheckinBtn.setDisable(false);
-            communityCheckinBtn.setStyle("");
-        }
-    }
-
-    /** 每日签到：校验登录后异步调用签到接口，"今天已签到"同样更新为已完成 */
-    private void doCommunityCheckin() {
-        if (!communityApi.hasToken()) {
-            ctx.ui().toast(I18N.get("page.t0033"));
-            return;
-        }
-        communityCheckinBtn.setDisable(true);
-        communityCheckinBtn.setText(I18N.get("page.t0034"));
-        UIGeneralControlClass.ASYNC_POOL.submit(() -> {
-            try {
-                ApiResult<CheckinResult> result = communityApi.checkin();
-                Platform.runLater(() -> {
-                    if (result.ok) {
-                        communityCheckinStatus.setText(I18N.get("page.t0035"));
-                        communityCheckinBtn.setText(I18N.get("page.t0036"));
-                        communityCheckinBtn.setStyle("-fx-background-color: #10b981;");
-                        String tip = result.data != null && result.data.msg != null
-                                ? result.data.msg : I18N.get("page.t0037");
-                        // 服务端返回签到后余额时一并展示，便于核对到账
-                        if (result.data != null && result.data.tear > 0) {
-                            tip += I18N.get("cp.r0001", result.data.tear);
-                        }
-                        ctx.ui().toast(tip);
-                    // i18n-lock: 不要翻译此行中文——与 CommunityApi 同一服务端响应，翻译即功能失效
-                    } else if (result.msg != null && result.msg.contains("已签到")) {
-                        // 服务端对"今天已签到"返回 ok=false + msg，同样标记为已完成
-                        communityCheckinStatus.setText(I18N.get("page.t0038"));
-                        communityCheckinBtn.setText(I18N.get("page.t0039"));
-                        communityCheckinBtn.setStyle("-fx-background-color: #10b981;");
-                        ctx.ui().toast(I18N.get("page.t0040"));
-                    } else {
-                        communityCheckinBtn.setDisable(false);
-                        AppIcons.setText(communityCheckinBtn, "hand", I18N.get("page.t0041"));
-                        ctx.ui().toast(I18N.get("page.p0746", result.msg));
-                    }
-                });
-            } catch (Exception ex) {
-                Platform.runLater(() -> {
-                    communityCheckinBtn.setDisable(false);
-                    AppIcons.setText(communityCheckinBtn, "hand", I18N.get("page.t0042"));
-                    ctx.ui().toast(I18N.get("page.p0747", ex.getMessage()));
-                });
-            }
-        });
-    }
-
+    /* （API v2）社区经济系统已下线，签到接口返回 410「该功能已下线」，
+     * 每日签到卡片连同 CommunityApi.checkin() 一并移除。若服务端日后回归该功能，
+     * 这里恢复卡片即可，不要再发起已被永久下线的请求。 */
     /** 发帖页面：独立的标题 / 分类 / 内容编辑区，发布成功后自动返回社区页 */
     public VBox buildPostPublish() {
         VBox root = new VBox(16);
@@ -601,7 +541,6 @@ public final class CommunityPage {
                         // token 失效时（failOnAuthError 已清理登录态）同步刷新社区卡片
                         if ("it".equals(result.code) || "nl".equals(result.code)) {
                             refreshCommunityUserCard();
-                            refreshCommunityCheckinCard();
                         }
                     }
                 });
@@ -708,7 +647,9 @@ public final class CommunityPage {
             openCommunityPostDetail(post);
         });
 
-        Label contentLabel = new Label(I18N.get("page.t0063"));
+        // 列表项不再返回正文，用服务端摘要预览；没有摘要时退回引导文案
+        boolean hasExcerpt = post.excerpt != null && !post.excerpt.trim().isEmpty();
+        Label contentLabel = new Label(hasExcerpt ? post.excerpt.trim() : I18N.get("page.t0063"));
         contentLabel.getStyleClass().add("community-post-content");
         contentLabel.setWrapText(true);
 
@@ -738,7 +679,7 @@ public final class CommunityPage {
         body.getChildren().addAll(meta, titleLabel, contentLabel, actions, commentsArea);
         card.getChildren().addAll(avatarBox, body);
         // 异步加载作者真实头像（未设置或失败时保留 emoji 占位）
-        loadCommunityAvatar(avatarBox, avatarFallback, "community-avatar-sm", post.userId, 36);
+        loadCommunityAvatar(avatarBox, avatarFallback, "community-avatar-sm", post.userId, 36, post.avatar);
 
         // 整卡点击跳转到详情页（按钮已 consume 事件，不会误触）
         card.setOnMouseClicked(e -> openCommunityPostDetail(post));
@@ -763,6 +704,14 @@ public final class CommunityPage {
                 Platform.runLater(() -> {
                     likeBtn.setDisable(false);
                     if (!result.ok) {
+                        /* 服务端用 409 表示状态不符：al=已经点过赞、nla=本来就没点赞。
+                           多数是点赞状态查询还没回来就点了按钮，这里以服务端为准纠正高亮，
+                           否则按钮会一直停在错误状态上。 */
+                        if ("al".equals(result.code)) {
+                            likeBtn.getStyleClass().add("liked");
+                        } else if ("nla".equals(result.code)) {
+                            likeBtn.getStyleClass().remove("liked");
+                        }
                         ctx.ui().toast(result.msg);
                         return;
                     }
@@ -841,8 +790,6 @@ public final class CommunityPage {
 
         VBox content = new VBox(14);
         content.setPadding(new Insets(4, 10, 14, 10));
-        // 加载期间用骨架屏微光占位
-        content.getChildren().add(SkeletonFactory.buildListSkeleton(4));
 
         ScrollPane scroll = new ScrollPane(content);
         scroll.setFitToWidth(true);
@@ -860,91 +807,98 @@ public final class CommunityPage {
 
         root.getChildren().addAll(header, body);
 
-        // 异步加载完整详情 //
+        /* 首屏：列表项里已有标题 / 作者 / 时间 / 分类 / 浏览 / 点赞 / 摘要，先用它们渲染出来，
+           正文与评论再异步补齐 —— 详情接口在被别的慢请求挡住时要等好几秒，
+           一直转骨架屏会让人以为详情页“打不开”。 */
+        HBox authorRow = new HBox(10);
+        authorRow.setAlignment(Pos.CENTER_LEFT);
+        StackPane avatarBox = new StackPane();
+        avatarBox.getStyleClass().add("community-avatar-sm");
+        Label avatarFallback = new Label();
+        AppIcons.apply(avatarFallback, "avatar", 16, null);
+        avatarBox.getChildren().add(avatarFallback);
+
+        VBox authorInfo = new VBox(2);
+        Label authorName = new Label(post.username == null ? I18N.get("page.t0068") : post.username);
+        authorName.getStyleClass().add("community-dialog-author");
+        Label timeLabel = new Label(post.createdAt == null ? "" : post.createdAt);
+        timeLabel.getStyleClass().add("community-post-time");
+        authorInfo.getChildren().addAll(authorName, timeLabel);
+
+        Region authorSpacer = new Region();
+        HBox.setHgrow(authorSpacer, Priority.ALWAYS);
+        Label viewsLabel = new Label("" + post.views);
+        viewsLabel.getStyleClass().add("community-dialog-stat");
+        authorRow.getChildren().addAll(avatarBox, authorInfo, authorSpacer);
+        if (post.category != null && !post.category.isEmpty()) {
+            Label catLabel = new Label(post.category);
+            catLabel.getStyleClass().add("community-tag");
+            authorRow.getChildren().add(catLabel);
+        }
+        authorRow.getChildren().add(viewsLabel);
+        // 真实头像（未设置或失败时保留 emoji 占位）
+        loadCommunityAvatar(avatarBox, avatarFallback, "community-avatar-sm", post.userId, 36, post.avatar);
+
+        Label titleLabel = new Label(post.title == null ? I18N.get("page.t0069") : post.title);
+        titleLabel.getStyleClass().add("community-dialog-title");
+        titleLabel.setWrapText(true);
+
+        // 正文：先用摘要占位，详情返回后替换为完整正文
+        boolean hasExcerpt = post.excerpt != null && !post.excerpt.trim().isEmpty();
+        Label bodyLabel = new Label(hasExcerpt ? post.excerpt.trim()
+                : (post.content != null && !post.content.isEmpty() ? post.content : I18N.get("page.t0063")));
+        bodyLabel.getStyleClass().add("community-dialog-body");
+        bodyLabel.setWrapText(true);
+
+        HBox actionRow = new HBox(10);
+        actionRow.setAlignment(Pos.CENTER_LEFT);
+        Button likeBtn = new Button("" + post.likes);
+        likeBtn.getStyleClass().add("community-action-btn");
+        likeBtn.setOnAction(e -> toggleCommunityLike(post, likeBtn));
+        Label statLabel = new Label(I18N.get("cp.r0002", post.views));
+        statLabel.getStyleClass().add("community-dialog-stat");
+        actionRow.getChildren().addAll(likeBtn, statLabel);
+        applyPostLikedState(post, likeBtn);
+
+        Region divider = new Region();
+        divider.getStyleClass().add("community-dialog-divider");
+        Label commentTitle = new Label(I18N.get("page.t0071"));
+        commentTitle.getStyleClass().add("community-dialog-title");
+        commentTitle.setStyle("-fx-font-size: 13px; -fx-font-weight: 600;");
+
+        content.getChildren().addAll(authorRow, titleLabel, bodyLabel, actionRow,
+                divider, commentTitle, commentsArea);
+        // 评论列表与详情互不依赖，同时发起，不必等详情回来
+        loadCommunityComments(post.id, commentsArea, false);
+
+        // 异步补齐完整正文 / 浏览量 / 点赞数 //
         UIGeneralControlClass.ASYNC_POOL.submit(() -> {
             try {
                 ApiResult<CommunityPost> result = communityApi.postView(post.id);
                 Platform.runLater(() -> {
-                    content.getChildren().clear();
                     if (!result.ok || result.data == null) {
-                        content.getChildren().add(PageKit.buildErrorState(
-                                result.ok ? I18N.get("page.t0566") : I18N.get("page.t0567"), result.msg,
-                                result.ok ? null : () -> ctx.switchToPage("postDetail")));
+                        // 首屏已经渲染出来，这里只提示一次失败，不把整页换成错误态
+                        ctx.ui().toast(result.msg != null && !result.msg.isEmpty()
+                                ? result.msg : I18N.get("page.t0567"));
                         return;
                     }
                     CommunityPost detail = result.data;
-
-                    // 作者信息行：真实头像 + 作者 + 时间 + 分类 + 浏览量 //
-                    HBox authorRow = new HBox(10);
-                    authorRow.setAlignment(Pos.CENTER_LEFT);
-                    StackPane avatarBox = new StackPane();
-                    avatarBox.getStyleClass().add("community-avatar-sm");
-                    Label avatarFallback = new Label();
-                    AppIcons.apply(avatarFallback, "avatar", 16, null);
-                    avatarBox.getChildren().add(avatarFallback);
-
-                    VBox authorInfo = new VBox(2);
-                    Label authorName = new Label(detail.username == null ? I18N.get("page.t0068") : detail.username);
-                    authorName.getStyleClass().add("community-dialog-author");
-                    Label timeLabel = new Label(detail.createdAt == null ? "" : detail.createdAt);
-                    timeLabel.getStyleClass().add("community-post-time");
-                    authorInfo.getChildren().addAll(authorName, timeLabel);
-
-                    Region authorSpacer = new Region();
-                    HBox.setHgrow(authorSpacer, Priority.ALWAYS);
-                    Label viewsLabel = new Label("" + detail.views);
-                    viewsLabel.getStyleClass().add("community-dialog-stat");
-                    authorRow.getChildren().addAll(avatarBox, authorInfo, authorSpacer);
-                    if (detail.category != null && !detail.category.isEmpty()) {
-                        Label catLabel = new Label(detail.category);
-                        catLabel.getStyleClass().add("community-tag");
-                        authorRow.getChildren().add(catLabel);
-                    }
-                    authorRow.getChildren().add(viewsLabel);
-                    // 真实头像（未设置或失败时保留 emoji 占位）
-                    loadCommunityAvatar(avatarBox, avatarFallback, "community-avatar-sm", detail.userId, 36);
-
-                    // 标题 //
-                    Label titleLabel = new Label(detail.title == null ? I18N.get("page.t0069") : detail.title);
-                    titleLabel.getStyleClass().add("community-dialog-title");
-                    titleLabel.setWrapText(true);
-
-                    // 正文卡片 //
-                    Label bodyLabel = new Label(detail.content == null || detail.content.isEmpty()
+                    post.likes = detail.likes;
+                    post.views = detail.views;
+                    post.content = detail.content;
+                    authorName.setText(detail.username == null ? I18N.get("page.t0068") : detail.username);
+                    timeLabel.setText(detail.createdAt == null ? "" : detail.createdAt);
+                    viewsLabel.setText("" + detail.views);
+                    titleLabel.setText(detail.title == null ? I18N.get("page.t0069") : detail.title);
+                    bodyLabel.setText(detail.content == null || detail.content.isEmpty()
                             ? I18N.get("page.t0070") : detail.content);
-                    bodyLabel.getStyleClass().add("community-dialog-body");
-                    bodyLabel.setWrapText(true);
-
-                    // 操作行：点赞 + 统计 //
-                    HBox actionRow = new HBox(10);
-                    actionRow.setAlignment(Pos.CENTER_LEFT);
-                    Button likeBtn = new Button("" + detail.likes);
-                    likeBtn.getStyleClass().add("community-action-btn");
-                    likeBtn.setOnAction(e -> toggleCommunityLike(detail, likeBtn));
-                    Label statLabel = new Label(I18N.get("cp.r0002", detail.views));
-                    statLabel.getStyleClass().add("community-dialog-stat");
-                    actionRow.getChildren().addAll(likeBtn, statLabel);
-                    applyPostLikedState(detail, likeBtn);
-
-                    // 分隔线 + 评论区 //
-                    Region divider = new Region();
-                    divider.getStyleClass().add("community-dialog-divider");
-                    Label commentTitle = new Label(I18N.get("page.t0071"));
-                    commentTitle.getStyleClass().add("community-dialog-title");
-                    commentTitle.setStyle("-fx-font-size: 13px; -fx-font-weight: 600;");
-
-                    content.getChildren().addAll(authorRow, titleLabel, bodyLabel, actionRow,
-                            divider, commentTitle, commentsArea);
-                    // 页面底部输入框已固定，不再向列表末尾追加输入行
-                    loadCommunityComments(post.id, commentsArea, false);
+                    likeBtn.setText("" + detail.likes);
+                    statLabel.setText(I18N.get("cp.r0002", detail.views));
+                    // 详情接口带回头像文件名，直接用（列表项没有时才需要查）
+                    loadCommunityAvatar(avatarBox, avatarFallback, "community-avatar-sm", detail.userId, 36, detail.avatar);
                 });
             } catch (Exception e) {
-                Platform.runLater(() -> {
-                    content.getChildren().clear();
-                    content.getChildren().add(PageKit.buildErrorState(
-                            I18N.get("page.t0072"), String.valueOf(e.getMessage()),
-                            () -> ctx.switchToPage("postDetail")));
-                });
+                Platform.runLater(() -> ctx.ui().toast(I18N.get("page.p0747", String.valueOf(e.getMessage()))));
             }
         });
         return root;
@@ -1031,7 +985,7 @@ public final class CommunityPage {
         body.getChildren().addAll(meta, content);
         item.getChildren().addAll(avatarBox, body);
         // 真实头像（服务端未返回 user_id 时跳过，显示默认占位）
-        loadCommunityAvatar(avatarBox, avatarFallback, "community-avatar-xs", comment.userId, 24);
+        loadCommunityAvatar(avatarBox, avatarFallback, "community-avatar-xs", comment.userId, 24, comment.avatar);
         return item;
     }
 
